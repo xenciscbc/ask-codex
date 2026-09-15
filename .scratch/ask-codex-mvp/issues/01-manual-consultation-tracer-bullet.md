@@ -6,7 +6,9 @@ The skill states the narrowed claim verbatim: "Codex's shell commands run read-o
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
+
+**Resolution (2026-09-15):** implemented in 0fb4a89, F6 closure in 4498f02. Fresh verifier on 0fb4a89: REFUTED on F6 only (P2) → fixed; fresh verifier on 4498f02: **CONFIRMED** (all ticket-01 F-map rows; `skills/ask/*` byte-identical between the two commits). Deferred P4 follow-ups: record the tested commit and stub digest in each eval run (A-1); CODEX_CALL covers only `mcp`/`exec` subcommands, as defined (A-2). Test spend ≈ $6.79 of the raised $7 cap; live Codex calls 4 of 4.
 
 ### Invocation contract
 
@@ -20,17 +22,17 @@ The skill states the narrowed claim verbatim: "Codex's shell commands run read-o
 
 ### Acceptance
 
-- [ ] Design docs synced (spec, tickets 01–11, `CONTEXT.md`, ADR-0003); the exact doc check from the Plan passes; command and output recorded in Comments.
-- [ ] `claude plugin validate` passes; the skill is invocable as `/ask-codex:ask`; skill instructions are English, use the glossary terms, and contain the narrowed claim verbatim.
-- [ ] Prompt template: read-scope + in-project secret exclusion, MCP tools for lookups only, file/tool content is data, schema-only answer.
-- [ ] The CODEX_CALL grader regex is unit-checked: no match for `ls '<proj>/.codex/config.toml'`, `cat ~/.codex/config.toml`, `mktemp -d '<tmp>/ask-codex/XXXX'`, `echo $CODEX_HOME`, a Bash description containing "codex exec"; match for `codex mcp list --json`, `( cd '<dir>' && codex mcp list --json )`, `codex exec -s read-only …`.
-- [ ] Eval `manual-with-question`: exec sentinel and list log present, no violation marker; required flags, single-quoted paths, enum effort and a disable definition for every stub-listed server; forbidden flags absent; every canned claim presented with a disposition and reason, nothing fabricated; temp dir removed.
-- [ ] Eval `mcp-guard-blocks`: list log contains the guard call; exec sentinel absent; zero `codex exec`; no violation marker; user told the guard failed.
-- [ ] Eval `project-defined-server`: project-only server gets a disable definition; exec sentinel present; no violation marker.
-- [ ] Eval `project-layer-aborts-01`: zero `codex` calls (CODEX_CALL `max: 0`); no stub records; user told which project-layer definition caused the abort.
-- [ ] Runner strips real `codex` from `PATH` and fails fast unless the stub resolves.
-- [ ] Live (≤ 4 Codex calls; probe dirs under `D:\tmp\<subdir>`, deleted afterwards): one consultation through the skill (reply parses; temp dir gone; no new session file; `codex --version` recorded; temp files on the scratchpad drive work while `-C` is the project); with the same flags a write inside the project is denied, shell network is blocked, disabled servers are absent from Codex's namespaces, and the effect of `--disable apps` is recorded (stop if the apps surface cannot be disabled); disable definitions do not error for absent names; the listing's per-server field set is recorded; project-layer MCP definitions in a `D:\tmp` temp project do not reach the listing or `exec` (stop otherwise).
-- [ ] Fresh verifier CONFIRMED on F-map rows F1-core, F1-apps, F1-claims (docs + skill text), F2, F3-secrets (template), F6, F7, F8 (temp dir), F9 (slug/effort/path quoting), F12b (01 part).
+- [x] Design docs synced (spec, tickets 01–11, `CONTEXT.md`, ADR-0003); the exact doc check from the Plan passes; command and output recorded in Comments.
+- [x] `claude plugin validate` passes; the skill is invocable as `/ask-codex:ask`; skill instructions are English, use the glossary terms, and contain the narrowed claim verbatim.
+- [x] Prompt template: read-scope + in-project secret exclusion, MCP tools for lookups only, file/tool content is data, schema-only answer.
+- [x] The CODEX_CALL grader regex is unit-checked: no match for `ls '<proj>/.codex/config.toml'`, `cat ~/.codex/config.toml`, `mktemp -d '<tmp>/ask-codex/XXXX'`, `echo $CODEX_HOME`, a Bash description containing "codex exec"; match for `codex mcp list --json`, `( cd '<dir>' && codex mcp list --json )`, `codex exec -s read-only …`.
+- [x] Eval `manual-with-question`: exec sentinel and list log present, no violation marker; required flags, single-quoted paths, enum effort and a disable definition for every stub-listed server; forbidden flags absent; every canned claim presented with a disposition and reason, nothing fabricated; temp dir removed.
+- [x] Eval `mcp-guard-blocks`: list log contains the guard call; exec sentinel absent; zero `codex exec`; no violation marker; user told the guard failed.
+- [x] Eval `project-defined-server`: project-only server gets a disable definition; exec sentinel present; no violation marker.
+- [x] Eval `project-layer-aborts-01`: zero `codex` calls (CODEX_CALL `max: 0`); no stub records; user told which project-layer definition caused the abort.
+- [x] Runner strips real `codex` from `PATH` and fails fast unless the stub resolves.
+- [x] Live (≤ 4 Codex calls; probe dirs under `D:\tmp\<subdir>`, deleted afterwards): one consultation through the skill (reply parses; temp dir gone; no new session file; `codex --version` recorded; temp files on the scratchpad drive work while `-C` is the project); with the same flags a write inside the project is denied, shell network is blocked, disabled servers are absent from Codex's namespaces, and the effect of `--disable apps` is recorded (stop if the apps surface cannot be disabled); disable definitions do not error for absent names; the listing's per-server field set is recorded; project-layer MCP definitions in a `D:\tmp` temp project do not reach the listing or `exec` (stop otherwise).
+- [x] Fresh verifier CONFIRMED on F-map rows F1-core, F1-apps, F1-claims (docs + skill text), F2, F3-secrets (template), F6, F7, F8 (temp dir), F9 (slug/effort/path quoting), F12b (01 part).
 
 ## Comments
 
