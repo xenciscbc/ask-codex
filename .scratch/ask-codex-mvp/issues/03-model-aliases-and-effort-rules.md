@@ -4,16 +4,16 @@
 
 **Blocked by:** 01 — Manual consultation tracer bullet.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] First, determine whether an eval scaffold can seed a model cache into the throwaway Codex home; if not, record the fallback (stub-supplied equivalent or live-only coverage) in the ticket comments before building cases.
-- [ ] Alias resolution uses only publicly listed models and never a hardcoded alias table.
-- [ ] Ambiguous alias → `AskUserQuestion` with candidates; no match → error listing available models; no Codex call in either case until resolved.
-- [ ] Effort is always passed explicitly; the configured Codex effort never reaches a consultation.
-- [ ] `low` is raised to `medium` with a note; unsupported levels clamp to the model's maximum with a note; `ultra` is never chosen implicitly.
-- [ ] Override scope prompt appears only when the override differs from the session setting; a session-scoped override persists for later consultations in the same conversation.
-- [ ] Eval cases pass: `sol` → `-m gpt-5.6-sol` with effort `high`; `astra` → `gpt-6-astra` with `medium`; `sol:low` → `medium` with a note; ambiguous `5.6` prompts and makes no Codex call; unknown alias errors with no Codex call.
-- [ ] Eval `alias-metachar` (F9): an alias containing shell metacharacters is rejected with no `codex exec` (CODEX_CALL `max: 0`); resolved slugs always match `^[A-Za-z0-9._-]+$`.
+- [x] First, determine whether an eval scaffold can seed a model cache into the throwaway Codex home; if not, record the fallback (stub-supplied equivalent or live-only coverage) in the ticket comments before building cases.
+- [x] Alias resolution uses only publicly listed models and never a hardcoded alias table.
+- [x] Ambiguous alias → `AskUserQuestion` with candidates; no match → error listing available models; no Codex call in either case until resolved.
+- [x] Effort is always passed explicitly; the configured Codex effort never reaches a consultation.
+- [x] `low` is raised to `medium` with a note; unsupported levels clamp to the model's maximum with a note; `ultra` is never chosen implicitly.
+- [x] Override scope prompt appears only when the override differs from the session setting; a session-scoped override persists for later consultations in the same conversation.
+- [x] Eval cases pass: `sol` → `-m gpt-5.6-sol` with effort `high`; `astra` → `gpt-6-astra` with `medium`; `sol:low` → `medium` with a note; ambiguous `5.6` prompts and makes no Codex call; unknown alias errors with no Codex call.
+- [x] Eval `alias-metachar` (F9): an alias containing shell metacharacters is rejected with no `codex exec` (CODEX_CALL `max: 0`); resolved slugs always match `^[A-Za-z0-9._-]+$`.
 
 ## Comments
 
@@ -24,3 +24,9 @@
 **2026-09-15 — red on the ticket-02 skill ($1.34).** alias-sol 0.75: `model-sol` and `effort-high` FAIL (no alias handling — the configured terra/no alias reached argv). alias-ambiguous 0.25: 4 `codex` calls and an exec despite the ambiguous alias; no candidate question. alias-metachar 0.40: 4 `codex` calls and an exec; the token was not rejected (the `pwned` file was not created). Every red case fails on the new behaviour. Offline check before red: 63 passed.
 
 **2026-09-15 — green ($3.81): all eleven cases 1.0 on the first pass.** alias-sol, alias-astra (scope note judged present), alias-sol-low (raised-to-medium note), effort-unsupported (max → xhigh with a note), default-model-config (terra + medium; the config's `low` absent from argv), session-override-persists, override-restated-no-prompt (no scope question or note), and the ticket-01 regression manual-with-question (no Codex home: effort medium, no `-m`) ran the full consultation; alias-ambiguous, alias-unknown and alias-metachar stopped in step 0 with zero `codex` calls (1–8 turns, $0.10–0.18). No skill edit after the green runs started. Offline check 63/0 and `claude plugin validate` pass. Ticket-03 spend ≈ $5.20 of $6; no live Codex calls.
+
+**2026-09-15 — outcome verifier (commit 8e540a2): CONFIRMED.** All five claims pass with no P0–P2 findings (model resolution before any `codex` command with no alias table; effort rules; F9 with zero codex calls; the eval-provable override-scope behaviours; evidence validity and safety — the verifier re-ran all eleven ticket-03 scaffolds under a HOME without `claude-eval` and each refused with no writes, and confirmed the green runs used the committed SKILL.md bytes). Advisory dispositions (P4, candidate unchanged):
+- One sample per case (contract: runs 1) — accepted; the final suite reruns them.
+- `D:\codex\models_cache.json` changed after the runs — the Windows Codex app refreshed its own cache (real etag, no fixture marker); evals ran in WSL with a throwaway home. No action.
+- Rule gap: "higher of `default_reasoning_level` and `medium`" could pick `ultra` implicitly for a model whose default is `ultra` (none today). Deferred to the `/code-review` fix pass: cap implicit defaults below `ultra`.
+- Note: the committed token regex allows one space-separated second word (for `5.6 sol`); metacharacters stay excluded.
