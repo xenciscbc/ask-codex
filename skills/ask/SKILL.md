@@ -58,6 +58,27 @@ A request in the user's own words ("ask Codex about this", "get Codex's opinion"
 
 Blind packaging exists so Codex's answer is independent: leave the hypothesis or leaning out of every part of the prompt (question, context, file excerpts), even when the user stated it in the same message.
 
+**Model and effort.** Settle them now, before any `codex` command:
+
+1. **Codex home and model list.** Run `printenv CODEX_HOME`; if it prints nothing, the Codex home is `<home>/.codex`, where `<home>` comes from `command -v cygpath >/dev/null && cygpath -m "$HOME" || printf '%s\n' "$HOME"`. With the **Read tool**, read `<Codex home>/models_cache.json` (the **listed models** are its `models` entries with `"visibility": "list"`; each has `slug`, `priority`, `default_reasoning_level`, and `supported_reasoning_levels`) and `<Codex home>/config.toml` (only its top-level `model`; never use its `model_reasoning_effort`). A missing file just means that source is unavailable.
+2. **Did the user name a model?** Only the start of the request can name one. Let T be its first word:
+   - If the request starts with `model <x>` or `use <x>` (optionally followed by `effort <level>`), `<x>` is the model token.
+   - Otherwise T is the model token if it contains `:` (`<alias>:<effort>`, e.g. `sol:low`), or if its head — T up to its first character outside `A-Z a-z 0-9 . _ -` — equals a listed slug or a contiguous run of the `-`/`.`-separated parts of a listed slug (for example `sol`, `5.6`, `5.6-sol`, `gpt-5.5`, `astra`). A next word that is also such a run joins the token (`5.6 sol`).
+   - Anything else — `Why …`, `nova …`, `src/user.js …` — is question text: no model was named.
+   The rest of the request is the question.
+3. **Validate.** A model token must match `^[A-Za-z0-9._:-]+( [A-Za-z0-9._-]+)?$` and an effort `^[a-z]+$`. If not (for example `sol;touch${IFS}pwned`), stop: tell the user the model name is invalid and run no `codex` command.
+4. **Resolve a named model.** Compare case-insensitively with the listed slugs only (never hidden ones, never a list of your own): an exact slug wins; otherwise take every listed slug that contains each word of the alias as a contiguous run of its parts. One match → that slug. Several → ask the user to choose, naming every candidate (`AskUserQuestion`; without it, ask in plain text) and stop until they answer. None → tell the user no model matches and list the listed slugs; stop. Do not run any `codex` command in these cases.
+5. **No model named.** Use the session setting (a model the user chose earlier in this conversation for the rest of the session), else the `model` from `config.toml`, else the listed model with the lowest `priority` number, else no model (omit `-m`).
+6. **Effort.** Never below `medium`, always passed explicitly:
+   - Requested `low` (or `minimal`/`none`) → `medium`, with a note.
+   - Requested level not in the model's `supported_reasoning_levels` → the model's highest supported level other than `ultra`, with a note.
+   - `ultra` only when the user explicitly asked for it and the model supports it.
+   - Nothing requested → the session setting if any, else `gpt-5.6-sol` → `high`, `gpt-6-astra` → `medium`, any other listed model → the higher of its `default_reasoning_level` and `medium`; unknown model or no model list → `medium`.
+7. **Scope of a choice.** If the user named a model or effort that differs from the session setting (or, without one, from what items 5 and 6 would pick), ask whether it applies to this consultation only or to the rest of the session (`AskUserQuestion`). Without `AskUserQuestion`, apply it to this consultation only and say so in the result. If what they named equals the setting already in force, ask nothing and add no note.
+8. The final slug must match `^[A-Za-z0-9._-]+$`.
+
+Consultations you start on your own never choose a model or effort by your judgment of difficulty — they use the session setting or the defaults above.
+
 ### 1. Temporary directory
 
 Every path you create here must mean the same place to Bash and to your file tools (Read, Write).
@@ -142,9 +163,7 @@ Keep the **MCP statement** for step 10, exactly one of:
 
 ### 6. Model and consultation effort
 
-- Model: find the Codex home — run `printenv CODEX_HOME`; if it prints nothing, the Codex home is `<home>/.codex`. Then use the **Read tool** (not `cat` or any other Bash command) on `<Codex home>/config.toml` and take its top-level `model`. If there is none, Read `<Codex home>/models_cache.json` and take the model with the highest priority whose `visibility` is `list`. If neither file exists, do not pass a model.
-- The model slug must match `^[A-Za-z0-9._-]+$`.
-- Consultation effort is never below `medium`: `gpt-5.6-sol` → `high`; `gpt-6-astra` → `medium`; any other model → the higher of its default reasoning level (from the model cache) and `medium`; unknown model → `medium`. Allowed values: `medium`, `high`, `xhigh`, `max` (`ultra` only if the user explicitly asks). Always pass it explicitly; never rely on Codex's configured effort.
+Use the model and effort settled in step 0 (omit `-m` only when step 0 found no model). Allowed effort values: `medium`, `high`, `xhigh`, `max`, and `ultra` only when the user explicitly asked for it. Always pass the effort explicitly; never rely on Codex's configured effort.
 
 ### 7. Prompt
 
@@ -180,7 +199,7 @@ When the command finishes, read `<tmp>/last-message.json`. It must be JSON with 
 
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
-1. One line: what was asked, the consultation type, and which model and effort answered.
+1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium`, an unsupported level clamped, or a model/effort choice that applies to this consultation only).
    Then, on its own line, the MCP statement from step 5 **copied exactly** — it must start with `MCP:` and use the exact wording listed there (for example `MCP: allowed — comfyui; all other servers disabled.`). Do not paraphrase or translate it.
 2. Codex's `summary`.
 3. Every claim, in order, each with: its statement, kind and confidence, evidence, and **your disposition** — **adopt**, **reject**, or **investigate** — with a one-sentence reason. Check a claim against the code yourself when that is cheap; say when you have not verified it.

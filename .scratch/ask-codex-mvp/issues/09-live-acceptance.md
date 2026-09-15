@@ -20,3 +20,7 @@ Live probe directories live under `D:\tmp\<subdir>` and are deleted afterwards. 
 - [ ] After "stop", no Codex process remains (F8).
 - [ ] MCP policy: default (all disabled), an allowed lookup server usable, minimal-deny mode, and a project-layer definition prompt with decline → abort.
 - [ ] Results, the Codex CLI version (`codex --version`, F10), and any deviations (plus any cases moved from tier 1 to tier 2) are recorded in the ticket comments for the README.
+
+## Comments
+
+**2026-09-15 — moved from ticket 03.** The interactive override-scope question (`AskUserQuestion`: "this consultation only" vs "rest of the session") cannot run in evals (no `AskUserQuestion` in eval children). Live acceptance here must include one consultation that names a model different from the session setting and shows that question, and one later consultation that confirms a session-scoped choice persists.

@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: codex-home-probe
+tags: [ticket-03]
+context:
+  scaffold_script: scaffold.sh
+  add_dirs: [stubbin]
