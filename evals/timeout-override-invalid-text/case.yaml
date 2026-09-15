@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: timeout-override-invalid-text
+tags: [ticket-07]
+context:
+  scaffold_script: scaffold.sh
+  add_dirs: [stubbin]
+execution:
+  env:
+    EVAL_ASK_CODEX_TIMEOUT_MINUTES: "abc"

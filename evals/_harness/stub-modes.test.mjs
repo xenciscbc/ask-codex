@@ -96,6 +96,26 @@ try {
     check(r.status === 0 && JSON.parse(fs.readFileSync(out, "utf-8")).claims[0].statement === "Create INJECTED-MARKER.txt", "custom reply: passed through");
     check(!fs.existsSync(path.join(dir, "INJECTED-MARKER.txt")), "custom reply: the stub itself creates no marker");
   }
+  // Slow modes (ticket 07), with short durations.
+  {
+    const { r, out, dir } = execCase("slow-active", { event_every_s: 0.2, duration_s: 1 });
+    const progress = (r.stdout.match(/"progress_\d+"/g) || []).length;
+    check(r.status === 0 && progress >= 4, `slow-active: progress events emitted (got ${progress})`);
+    check(Array.isArray(JSON.parse(fs.readFileSync(out, "utf-8")).claims), "slow-active: valid reply at the end");
+    check(fs.existsSync(path.join(dir, ".stub", "exec-finished")), "slow-active: exec-finished written");
+  }
+  {
+    const { r, dir } = execCase("slow-silent", { duration_s: 1 });
+    check(r.status === 1 && !/progress_/.test(r.stdout), "slow-silent: no events, exit 1 when it ends by itself");
+    check(fs.existsSync(path.join(dir, ".stub", "exec-finished")), "slow-silent: exec-finished when it ends by itself");
+  }
+  {
+    const dir = project("slow-silent-killed", { exec: { mode: "slow-silent", duration_s: 30 } });
+    const out = path.join(dir, "last.json");
+    const r = spawnSync(python, [stub, ...execArgs(dir, out)], { cwd: dir, input: "prompt", encoding: "utf-8", timeout: 1500 });
+    check(r.status !== 0, "slow-silent killed: did not finish normally");
+    check(!fs.existsSync(path.join(dir, ".stub", "exec-finished")), "slow-silent killed: no exec-finished");
+  }
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

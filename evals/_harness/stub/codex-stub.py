@@ -15,7 +15,10 @@ Records written next to the scenario file:
 
 `exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
 unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
-unreadable (exit 0, no agent message, empty -o file). `exec.reply` replaces the default reply.
+unreadable (exit 0, no agent message, empty -o file), slow-active (a progress event every
+`event_every_s` seconds for `duration_s` seconds, then the valid reply; writes .stub/exec-finished),
+slow-silent (no events for `duration_s` seconds, then exit 1; writes .stub/exec-finished only when
+it ends by itself — a killed run leaves none). `exec.reply` replaces the default reply.
 
 Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
 CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
@@ -27,6 +30,7 @@ import json
 import os
 import re
 import sys
+import time
 
 
 def server(name, command, args, env):
@@ -241,6 +245,24 @@ def exec_(args):
     emit({"type": "thread.started", "thread_id": "stub-thread"})
     emit({"type": "turn.started"})
 
+    if mode == "slow-active":
+        cfg = data.get("exec") or {}
+        every = float(cfg.get("event_every_s", 5))
+        duration = float(cfg.get("duration_s", 100))
+        start = time.monotonic()
+        n = 0
+        while time.monotonic() - start < duration:
+            time.sleep(every)
+            n += 1
+            emit({"type": "item.completed", "item": {"id": f"progress_{n}", "type": "reasoning", "text": f"step {n}"}})
+        mode = "valid"
+    if mode == "slow-silent":
+        cfg = data.get("exec") or {}
+        time.sleep(float(cfg.get("duration_s", 600)))
+        with open(os.path.join(records, "exec-finished"), "w", encoding="utf-8") as f:
+            f.write("ended by itself\n")
+        sys.stderr.write("Error: stub silent run ended\n")
+        sys.exit(1)
     if mode == "not-logged-in":
         sys.stderr.write("Error: Not logged in. Run `codex login` to authenticate.\n")
         sys.exit(1)
@@ -271,6 +293,9 @@ def exec_(args):
     if opts.get("out"):
         with open(opts["out"], "w", encoding="utf-8") as f:
             f.write(reply)
+    if (data.get("exec") or {}).get("mode") == "slow-active":
+        with open(os.path.join(records, "exec-finished"), "w", encoding="utf-8") as f:
+            f.write("ended by itself\n")
 
 
 def main():

@@ -210,7 +210,33 @@ codex exec -s read-only --ephemeral --skip-git-repo-check --json -C '<project di
 
 Omit `-m <model>` only when step 6 found no model. Never add other flags or `-c` keys (no `--dangerously-*`, `--full-auto`, `--yolo`, `--profile`, `--add-dir`, `--ignore-user-config`, other sandbox modes, `resume`, or `fork`).
 
-Then wait for it to finish. **Do not end your turn while the consultation is still running** — in a non-interactive session nothing would bring you back, and the result would be lost. If a `TaskOutput` tool is available (load it with ToolSearch if it is deferred), call it on the background task with blocking enabled; otherwise wait for the task's completion notification. Do not start work that depends on the answer before it arrives.
+Then watch it until it finishes. **Do not end your turn while the consultation is still running** — in a non-interactive session nothing would bring you back, and the run would be orphaned. Do not start work that depends on the answer before it arrives.
+
+**Check interval.** Run `printenv EVAL_ASK_CODEX_TIMEOUT_MINUTES`.
+- Prints nothing → the interval **T** is 30 minutes.
+- A positive whole number (`^[1-9][0-9]*$`) → T is that many minutes.
+- Anything else (`0`, negative, decimal, text) → ignore it; T is 30 minutes.
+The **staleness threshold S** is T/6 (5 minutes by default).
+
+**Waiting.** Wait until the consultation finishes or T has passed, whichever comes first:
+- If a `TaskOutput` tool is available (load it with ToolSearch if it is deferred): call it on the consultation's background task with `block: true` and a timeout of the remaining time, at most 600000 ms per call, and repeat until T has passed.
+- Otherwise start a timer — `sleep <T in seconds>` with Bash `run_in_background: true` — and wait for whichever completion notification arrives first: the consultation's or the timer's.
+When the consultation finishes, go to step 9.
+
+**Check when T has passed.** Judge liveness only from the tracked task's state and the last event in `<tmp>/events.jsonl` — never from CPU use or process listings:
+- Age of the last event, in seconds (one line, literal path): `echo $(( $(date +%s) - $(stat -c %Y '<tmp>/events.jsonl') ))`. The last event: `tail -n 1 '<tmp>/events.jsonl'` (name its `type`, or say "no events" if nothing arrived after the run started).
+- **Still running and the last event is at most S old** → tell the user in one line (fixed wording below), then wait another T. No question.
+- **Still running but the last event is older than S** → ask with `AskUserQuestion`, showing the elapsed time and the last event with its age, with the options "wait another T minutes" and "stop this consultation". Recommend "wait" if the last event is at most T/2 old, otherwise "stop". "Wait" starts another interval — there is no limit on how often the user may wait. "Stop" → stop path.
+- **No `AskUserQuestion`** (non-interactive session): state the same question and recommendation in text, then take "stop" — you cannot wait for an answer without ending your turn.
+
+**Stop path.** End the consultation's background task with `TaskStop`. Then handle it as a failure (see Failures): attribute nothing to Codex, clean up (step 11), and give a **final stop report** that states the interval in force (default or override), the elapsed time, the last event and its age (or "no events"), the two options that were offered with the recommended one, and that the consultation was stopped; then carry on.
+
+**Fixed wording.** Start each of these lines with the words shown, word for word (in any conversation language):
+- valid override: `Timeout override active: <T> minutes (staleness <S>).`
+- ignored override: `Timeout override ignored: "<value>" is not a positive whole number; using 30 minutes.`
+- confirmed-alive notice: `Codex still running — <elapsed> elapsed, last event <type> <age> ago; waiting another <T> minutes.`
+- final stop report: `Consultation stopped: ` followed by the required fields above.
+Show the override line (if any) as soon as you have read the variable, and the notices when they happen; step 10 restates them.
 
 ### 9. Read the reply
 
@@ -224,13 +250,17 @@ When the command finishes, read `<tmp>/last-message.json`. A valid reply is JSON
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
 1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium`, an unsupported level clamped, or a model/effort choice that applies to this consultation only).
+   Then restate the timer outcome from step 8, each on **its own line that begins exactly with the fixed wording** — never folded into another sentence: the override line if the variable was set, and one line per liveness check that ran. For example:
+   `Timeout override ignored: "0" is not a positive whole number; using 30 minutes.`
+   `Codex still running — 1 min elapsed, last event reasoning 4 s ago; waiting another 1 minutes.`
+   Say nothing about the timer when no override was set and no check ran.
    Then, on its own line, the MCP statement from step 5 **copied exactly** — it must start with `MCP:` and use the exact wording listed there (for example `MCP: allowed — comfyui; all other servers disabled.`). Do not paraphrase or translate it.
 2. Codex's `summary`.
 3. Every claim, in order, each with: its statement, kind and confidence, evidence, and **your disposition** — **adopt**, **reject**, or **investigate** — with a one-sentence reason. Check a claim against the code yourself when that is cheap; say when you have not verified it.
 4. Codex's open questions, if any.
 5. What you will do next, if anything — but do not apply any change just because Codex suggested it.
 
-Only present claims that are actually in the reply.
+Only present claims that are actually in the reply. Before you send this answer, run step 11 (cleanup) — it is never optional.
 
 **Unstructured reply.** Keep item 1, then — instead of items 2–4 — under a heading such as "Unstructured reply from Codex (did not follow the expected format)", quote Codex's text (or summarise it faithfully if it is long). For each point it actually makes, give your disposition — adopt, reject, or investigate — with a reason; if it makes no substantive point, still give the reply as a whole one explicit disposition (usually reject) with a reason. Do not invent claim IDs, evidence, or points it did not make.
 
