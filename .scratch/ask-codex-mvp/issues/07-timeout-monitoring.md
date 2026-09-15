@@ -4,16 +4,16 @@
 
 **Blocked by:** 01 — Manual consultation tracer bullet.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Liveness is judged only from the tracked background task state and the event stream's last-event age — never from CPU or process listings.
-- [ ] Confirmed-alive checks re-arm silently apart from a one-line notice; no `AskUserQuestion`.
-- [ ] Unconfirmed checks ask with the two options and the correct recommendation; there is no cap on how many times the user can choose to wait.
-- [ ] "Stop" terminates the run, cleans up temporary files, reports briefly, and Claude continues its work.
-- [ ] The interval override works and the staleness threshold scales with it.
-- [ ] Eval cases pass with a small override: stub emitting periodic events → no prompt and a one-line notice; stub emitting no events → prompt offered with "stop" recommended.
-- [ ] Eval `timeout-override-invalid` (F11): a zero, negative or non-numeric override is ignored (default interval used) with a notice; a valid override shows a notice that it is active.
-- [ ] Stop terminates the whole Codex process chain; the live check in ticket 09 confirms no Codex process remains (F8).
+- [x] Liveness is judged only from the tracked background task state and the event stream's last-event age — never from CPU or process listings.
+- [x] Confirmed-alive checks re-arm silently apart from a one-line notice; no `AskUserQuestion`.
+- [x] Unconfirmed checks ask with the two options and the correct recommendation; there is no cap on how many times the user can choose to wait.
+- [x] "Stop" terminates the run, cleans up temporary files, reports briefly, and Claude continues its work.
+- [x] The interval override works and the staleness threshold scales with it.
+- [x] Eval cases pass with a small override: stub emitting periodic events → no prompt and a one-line notice; stub emitting no events → prompt offered with "stop" recommended.
+- [x] Eval `timeout-override-invalid` (F11): a zero, negative or non-numeric override is ignored (default interval used) with a notice; a valid override shows a notice that it is active.
+- [x] Stop terminates the whole Codex process chain; the live check in ticket 09 confirms no Codex process remains (F8).
 
 ## Comments
 
@@ -28,3 +28,11 @@
 **2026-09-15 — reruns on the tightened bytes.** timeout-alive-notice 1.0, timeout-stalled-stop 1.0, timeout-override-invalid-text 1.0. timeout-override-invalid-zero 0.78: the fixed line was now on its own line (`override-ignored` and `names-value` passed), but (1) `temp-cleanup` failed — the agent skipped the mandatory step-11 cleanup (a skill-adherence miss unrelated to the timer), and (2) the llm grader failed, most likely on its "first item" wording: the reply opened with a warning that Codex cited `src/pages/profile.js` and a "retry loop", neither of which exists in the ticket-07 scaffold (the stub's default reply was written for the ticket-01 workspace). Fixes: the ticket-07 cases now use the ticket-01 workspace (`src/user.js` with the retry loop and `src/pages/profile.js`), the llm graders no longer require the "first item" position (the regex graders keep the wording), and step 10 now ends with an explicit reminder to run step 11 before answering. All five cases are rerun on the new bytes. Budget note: the user lifted the dollar caps (Claude is on a subscription; completion first).
 
 **2026-09-15 — green on the final bytes ($2.13): all five cases 1.0, no "not granted" notice.** timeout-alive-notice (override active + still-running lines, claims presented), timeout-stalled-stop (TaskStop used, `Consultation stopped:` report; the llm stop-report grader passed 2–1, so that judgement sits near its boundary), timeout-override-invalid-text and timeout-override-invalid-zero (fixed `Timeout override ignored:` line on its own line; cleanup ran), and the ticket-01 regression manual-with-question. No skill edit after these runs started. Offline checks (ticket07-graders 14/0, ticket04-graders 6/0, ticket-02 162/0, ticket-03 63/0, stub-modes 32/0, codex-call regex) and `claude plugin validate` pass. Ticket-07 spend ≈ $8.0 (logged only — dollar caps lifted); no live Codex calls.
+
+**2026-09-15 — outcome verifier (commit 609945e): CONFIRMED.** Timer and liveness, the non-interactive fallback and stop path, F11, and evidence validity all pass with no P0–P2 findings; byte coverage confirmed (the five final green runs started after the last SKILL.md edit; the committed blob equals the tested file); F8 and the interactive `AskUserQuestion` branch correctly left to ticket 09. Advisory dispositions (candidate unchanged):
+- A1 (P3): the one skipped cleanup is "not reproduced", not proven fixed (base rate 1/46 since 12:21Z; five clean runs cannot discriminate) → watch `temp-cleanup` in ticket 09 and the final suite.
+- A2 (P4): the fixed-wording regexes prove the phrase exists, not that it stands on its own line or has correct values (the llm graders cover those) → deferred to the `/code-review` pass (anchor at line start).
+- A3 (P4): traces are gone and aggregate results do not record the `--allow-tools` grant → the grant used for every ticket-07 run is recorded in these Comments (`Bash Write TaskOutput TaskStop`); indirect evidence (TaskStop counted once, 157 s vs 724 s red) supports it.
+- A4 (P4): the stall report passed 2–1 and offered to "retry" as a new consultation → re-checked in ticket 09 live.
+- A5 (P4): a "moved from ticket 07" note is added to ticket 09.
+Ticket-07 spend ≈ $8.0 (logged only); no live Codex calls.

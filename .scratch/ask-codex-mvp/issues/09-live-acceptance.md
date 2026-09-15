@@ -24,3 +24,5 @@ Live probe directories live under `D:\tmp\<subdir>` and are deleted afterwards. 
 ## Comments
 
 **2026-09-15 — moved from ticket 03.** The interactive override-scope question (`AskUserQuestion`: "this consultation only" vs "rest of the session") cannot run in evals (no `AskUserQuestion` in eval children). Live acceptance here must include one consultation that names a model different from the session setting and shows that question, and one later consultation that confirms a session-scoped choice persists.
+
+**2026-09-15 — moved from ticket 07.** Live acceptance here must cover what evals could not: (1) the interactive stall question via `AskUserQuestion` (options "wait another T minutes" / "stop this consultation", elapsed time, last event and age, recommendation by the T/2 rule), including choosing "wait" at least once; (2) F8 — after "stop", no Codex process remains (the whole process chain ends); (3) the stop report's wording, which passed an eval judge only 2–1 (and offered to "retry" as a new consultation). Also watch `temp-cleanup` (one skipped cleanup was seen in ticket-07 evals and not reproduced after the fix).
