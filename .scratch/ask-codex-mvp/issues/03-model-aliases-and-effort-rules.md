@@ -13,3 +13,4 @@
 - [ ] `low` is raised to `medium` with a note; unsupported levels clamp to the model's maximum with a note; `ultra` is never chosen implicitly.
 - [ ] Override scope prompt appears only when the override differs from the session setting; a session-scoped override persists for later consultations in the same conversation.
 - [ ] Eval cases pass: `sol` → `-m gpt-5.6-sol` with effort `high`; `astra` → `gpt-6-astra` with `medium`; `sol:low` → `medium` with a note; ambiguous `5.6` prompts and makes no Codex call; unknown alias errors with no Codex call.
+- [ ] Eval `alias-metachar` (F9): an alias containing shell metacharacters is rejected with no `codex exec` (CODEX_CALL `max: 0`); resolved slugs always match `^[A-Za-z0-9._-]+$`.

@@ -51,6 +51,29 @@ _Avoid_: 固定對照表。
 諮詢實際使用的推理強度，永遠不低於 medium；未指定時由 ask-codex 依模型決定，不沿用 Codex 設定中的 effort。
 _Avoid_: 讓諮詢以 low 執行。
 
+### MCP 政策
+
+**MCP 政策**（MCP policy）：
+決定一次諮詢中 Codex 可使用哪些 MCP server 的規則；Codex 的 shell 指令唯讀，但 MCP server 在 sandbox 外執行，所以另行控制。
+_Avoid_: 把 sandbox 唯讀當成涵蓋 MCP。
+
+**白名單模式**（allowlist mode）：
+預設的 MCP 政策：除了使用者明確開放的 server 以外全部停用；沒有任何設定時等於全部停用。
+
+**最小停用模式**（minimal-deny mode）：
+使用者選用的 MCP 政策：只停用 `node_repl` 與 `cua_repl`，其餘 server 保留。
+_Avoid_: A+（討論時的暫稱）。
+
+**ask-codex 設定檔**（ask-codex config）：
+記錄 MCP 政策與開放清單的設定，分使用者層與專案層，專案層覆蓋使用者層；由 `/ask-codex:setup` 協助建立。
+_Avoid_: 與 Codex 自己的 `config.toml` 混稱。
+
+**專案定義的 server**（project-defined server）：
+由專案自己的 Codex 設定新增或改寫的 MCP server；未經使用者在本 session 確認前不得使用。
+
+**MCP 事前檢查**（MCP guard）：
+每次送出諮詢前，確認實際生效的 MCP server 與政策預期完全一致的檢查；不一致就中止，不送出。
+
 ### 並行諮詢
 
 **並行諮詢**（parallel consultation）：

@@ -12,3 +12,5 @@
 - [ ] "Stop" terminates the run, cleans up temporary files, reports briefly, and Claude continues its work.
 - [ ] The interval override works and the staleness threshold scales with it.
 - [ ] Eval cases pass with a small override: stub emitting periodic events → no prompt and a one-line notice; stub emitting no events → prompt offered with "stop" recommended.
+- [ ] Eval `timeout-override-invalid` (F11): a zero, negative or non-numeric override is ignored (default interval used) with a notice; a valid override shows a notice that it is active.
+- [ ] Stop terminates the whole Codex process chain; the live check in ticket 09 confirms no Codex process remains (F8).
