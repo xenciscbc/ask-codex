@@ -82,13 +82,13 @@ const base = (extra) => ({ "skill-fired": G.skillFired, "one-codex-exec": G.oneE
 export const CASES = [
   { name: "followup-carries-claims", reply: REPLIES.resolved, graders: base({
       "not-carried-c1": onFile(".stub/exec-stdin.txt", "C1 \\[adopt\\]", "not_contains"), "not-carried-c3": onFile(".stub/exec-stdin.txt", "C3 \\[reject\\]", "not_contains"),
-      "c2-resolved": rx("C2 \\[resolved\\]"), "c2-updated": rx("C2[^\\n]*Updated disposition"), "status-shown": llm(`
+      "c2-resolved": rx("C2[`*\\s]*\\[resolved\\]"), "c2-updated": rx("C2[^\\n]*Updated disposition"), "status-shown": llm(`
 Earlier Claude marked Codex's claim C2 ("renderProfile treats an empty object as 'user not found'") as investigate; in this follow-up Codex reported C2 as resolved.
 PASS if the final response shows C2 with its follow-up status (resolved) and Claude's updated disposition for it with a reason.
 FAIL if C2's status or the updated disposition is missing, or the response presents the follow-up as a brand-new consultation with fresh claim numbering.`) }) },
   { name: "followup-new-blocking", reply: REPLIES.newBlocking, graders: base({
-      "c2-unresolved": rx("C2 \\[unresolved\\]"), "c2-updated": rx("C2[^\\n]*Updated disposition"),
-      "heading": rx("New blocking claim from Codex"), "c4-shown": rx("AbortError"), "c5-omitted": rx("loadUser", "not_contains"), "presentation": llm(`
+      "c2-unresolved": rx("C2[`*\\s]*\\[unresolved\\]"), "c2-updated": rx("C2[^\\n]*Updated disposition"),
+      "heading": rx("New blocking claim from Codex"), "c4-shown": rx("AbortError"), "c5-omitted": rx("loadUser", "not_contains"), "c5-not-mentioned": rx("\\bC5\\b", "not_contains"), "presentation": llm(`
 In this follow-up Codex reported C2 as unresolved, added C4 as a new blocking claim (fetchUser also swallows AbortError), and added C5 (rename fetchUser to loadUser) without marking it blocking.
 PASS if the final response shows C2 as unresolved with Claude's updated disposition, lists C4 separately as a new blocking claim with a disposition, and does not present C5 as a claim.
 FAIL if C4 is mixed in with the carried claims without being flagged as new and blocking, C5 is presented as a claim, or C2's status is missing.`) }) },
@@ -103,7 +103,7 @@ FAIL if C4 is mixed in with the carried claims without being flagged as new and 
       "stdin-c1-line": onFile(".stub/exec-stdin.txt", "C1 \\[investigate\\][^\\n]*fallback"),
       "stdin-c2-line": onFile(".stub/exec-stdin.txt", "C2 \\[adopt\\][^\\n]*monitoring"),
       "stdin-revision": onFile(".stub/exec-stdin.txt", "P-BETA v2"),
-      "c1-resolved": rx("C1 \\[resolved\\]"), "c1-updated": rx("C1[^\\n]*Updated disposition") } },
+      "c1-resolved": rx("C1[`*\\s]*\\[resolved\\]"), "c1-updated": rx("C1[^\\n]*Updated disposition") } },
 ];
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {

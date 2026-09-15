@@ -14,3 +14,7 @@
 - [ ] Shared timer behaviour as described; no half-result is shown and later revised.
 - [ ] Proactive consultations run in parallel only when the session override names two models.
 - [ ] Eval cases pass: `astra, sol` → two `codex` calls with `gpt-6-astra`/`medium` and `gpt-5.6-sol`/`high`; divergent stub replies → `llm` grader checks grouping and rationale; three models → zero `codex` calls; one stub run failing → surviving result plus failure note.
+
+## Comments
+
+**2026-09-16 — slice-08 readiness.** Round 1 REVISE (2 blockers) led to: per-model argv graders on `exec-argv.<slug>.json` (full disable set `count:5`, `-s read-only`, `--disable apps`) plus `no-violations`, because two runs in one project would otherwise leave only the last call's argv; and a fixed `Parallel check: done — …; still running — …` line with regex graders and an offline paraphrase test, plus a `--keep-temp` transcript excerpt for case 5 so the verifier can check that no claim is shown before the check. Advisories taken: "one `codex exec` per consultation" becomes "per model"; stdin files must not contain the other model's reply; two temp dirs and two background runs counted; fixed refusal line; a two-model metachar example in the reference token rule. Round 2: READY. Narrowing: proactive two-model parallel (session override naming two models) is written in the skill but not claimed as verified while ticket 05 is paused. Execution starts once ticket 06 is confirmed.
