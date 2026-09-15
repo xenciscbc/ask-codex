@@ -1,3 +1,5 @@
 evals/results/
 .eval-stub/
 evals/*/stubbin/
+# Resumed eval runs (context.history_file) write the child session transcript next to the history file.
+evals/*/[0-9a-f]*-*-*-*-*.jsonl

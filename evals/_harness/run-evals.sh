@@ -2,7 +2,10 @@
 # Run the ask-codex eval suite against the stub `codex`.
 #
 # Usage: evals/_harness/run-evals.sh [claude plugin eval options...]
-#   e.g. evals/_harness/run-evals.sh --case manual-with-question --runs 1 --model claude-sonnet-5 --max-cost-usd 3
+#   e.g. evals/_harness/run-evals.sh --case manual-with-question --runs 1 --model claude-sonnet-5 --max-cost-usd 3 --allow-tools Bash Write
+#
+# Pass `--allow-tools Bash Write` (last, since it takes a list): without the operator grant
+# the harness withholds Bash and Write from the agent, so the skill cannot run at all.
 #
 # Must run where `claude plugin eval` can sandbox Bash (Linux/macOS/WSL; the Windows
 # harness refuses shell grants). Guarantees the agent under test can only reach the

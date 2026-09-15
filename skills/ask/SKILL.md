@@ -1,6 +1,6 @@
 ---
 name: ask
-description: Consult OpenAI Codex (through the local Codex CLI) for an independent opinion — a second opinion, a diagnosis, a targeted check, or a technical answer — and then judge every claim it makes yourself. Use when the user runs /ask-codex:ask or explicitly asks you to ask or consult Codex. This is a consultation, not a delegation — Codex never edits anything and you decide what to adopt.
+description: Consult OpenAI Codex (through the local Codex CLI) for an independent opinion — a second opinion, a diagnosis, a targeted check, or a technical answer — and then judge every claim it makes yourself. Use when the user runs /ask-codex:ask (with or without a question) or asks in their own words to ask or consult Codex, for example "ask Codex about this" or "get Codex's opinion" — that request is itself the go-ahead, no further consent is needed. This is a consultation, not a delegation — Codex never edits anything and you decide what to adopt.
 ---
 
 # ask-codex: consult Codex
@@ -22,7 +22,7 @@ What the user can rely on (state it exactly like this when you describe the safe
 - **Write every path out literally, in single quotes, inside each command.** Do not use shell variables (`$TMP`, `$PROJ`, …) or multi-line scripts for the `codex` commands — each `codex` command is one line that someone can read and audit on its own.
 - **Never use `cd`.** Your shell keeps its working directory between commands, so `cd` silently moves you out of the project. To run a command in another directory, use `env -C '<dir>' <command>` exactly as shown in the steps below; for git, use `git -C '<dir>' …`.
 - The **project directory** is your current working directory. Use forward slashes in paths.
-- The **skill directory** is the base directory shown when this skill loaded; `consultation.schema.json` and `prompts/consultation.md` live there.
+- The **skill directory** is the base directory shown when this skill loaded; `consultation.schema.json`, `prompts/consultation.md`, and the framing files in `prompts/framing/` live there.
 
 ## Confirmations
 
@@ -40,6 +40,23 @@ Some steps need the user's **confirmation** before Codex may use something the p
 - Confirmations last for the rest of this conversation.
 
 ## Procedure
+
+### 0. Question and consultation type (before anything else)
+
+**The question.** If the user's request contains a question, use it (without any confirmation sentences). If it does not — for example a bare `/ask-codex:ask` — infer the question from the conversation: the problem, decision, or code the user and you are currently working on. If nothing sensible can be inferred, ask the user what they want to consult Codex about (with `AskUserQuestion` when available, otherwise in plain text) and **stop here** — no temporary directory, no `codex` command, nothing to clean up. When you inferred the question, tell the user in one line what you are asking Codex (for example `Asking Codex: why does fetchUser return an empty object when the API times out?`) and continue without waiting.
+
+A request in the user's own words ("ask Codex about this", "get Codex's opinion") is a manual consultation, exactly like `/ask-codex:ask`: do not ask for consent to consult Codex.
+
+**The consultation type.** Pick exactly one from the conversation; it decides what Codex receives in step 7:
+
+| Type | When | Packaging | Codex receives | Never included |
+|---|---|---|---|---|
+| **second opinion** | there is a Plan, decision, or implementation to be checked | with stance | the Plan / decision / implementation text (or where it lives) | secrets |
+| **targeted check** | there is one specific concern about specific code or a change | with stance | the code or diff location and the concern, **quoted verbatim** as the user (or you) stated it — do not rephrase it | secrets; any request for a general review |
+| **diagnosis** | something does not work and the cause is unknown | blind | symptoms, evidence (errors, logs, file paths), and **every attempt that already failed, with its result** | **any root-cause hypothesis** — yours or the user's — also not as a leading question; secrets |
+| **technical question** | a question of how or why, not tied to a failure | blind | the question and relevant evidence | **any stated leaning or expected answer** — yours or the user's; secrets |
+
+Blind packaging exists so Codex's answer is independent: leave the hypothesis or leaning out of every part of the prompt (question, context, file excerpts), even when the user stated it in the same message.
 
 ### 1. Temporary directory
 
@@ -131,11 +148,17 @@ Keep the **MCP statement** for step 10, exactly one of:
 
 ### 7. Prompt
 
-Read `prompts/consultation.md` from the skill directory, fill its slots, and write the result with the Write tool to `<tmp>/prompt.md`:
+From the skill directory, read `prompts/consultation.md` and the framing file for the type chosen in step 0 — `prompts/framing/second-opinion.md`, `prompts/framing/targeted-check.md`, `prompts/framing/diagnosis.md`, or `prompts/framing/technical-question.md`. Fill the slots and write the result with the Write tool to `<tmp>/prompt.md`:
 
-- `{{question}}` — the user's question (without any confirmation sentences).
-- `{{context}}` — what Codex needs to answer it: relevant file paths, symptoms, error text. Leave out secrets.
+- `{{framing}}` — the full text of that one framing file, copied verbatim (it starts with its `Consultation type:` line). Never include a second framing file.
+- `{{question}}` — the question from step 0 (without any confirmation sentences). For a blind type, word it without any hypothesis or leaning.
+- `{{context}}` — what Codex receives for this type (step 0 table): the Plan / decision / implementation text for a second opinion; the code or diff location and the concern for a targeted check; the symptoms, evidence, and every failed attempt with its result for a diagnosis; relevant evidence for a technical question. Name relevant file paths rather than pasting whole files.
 - `{{extra_paths_or_none}}` — `none` unless the question needs specific paths outside the project.
+
+Before writing, check every slot:
+
+- **Secrets.** Remove anything that looks like a credential — API keys, tokens, passwords, private keys, credentials inside URLs, values from `.env` files — wherever it came from (the conversation, files, command output). If the value matters, say that it was withheld (for example `API_KEY=<withheld>`).
+- **Blind types.** For a diagnosis or a technical question, make sure no root-cause hypothesis or stated leaning is left anywhere in the prompt.
 
 ### 8. Run Codex (background)
 
@@ -157,7 +180,7 @@ When the command finishes, read `<tmp>/last-message.json`. It must be JSON with 
 
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
-1. One line: what was asked and which model and effort answered.
+1. One line: what was asked, the consultation type, and which model and effort answered.
    Then, on its own line, the MCP statement from step 5 **copied exactly** — it must start with `MCP:` and use the exact wording listed there (for example `MCP: allowed — comfyui; all other servers disabled.`). Do not paraphrase or translate it.
 2. Codex's `summary`.
 3. Every claim, in order, each with: its statement, kind and confidence, evidence, and **your disposition** — **adopt**, **reject**, or **investigate** — with a one-sentence reason. Check a claim against the code yourself when that is cheap; say when you have not verified it.
