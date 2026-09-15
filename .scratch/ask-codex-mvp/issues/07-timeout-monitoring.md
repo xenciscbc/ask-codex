@@ -1,0 +1,14 @@
+# 07 — Timeout monitoring
+
+**What to build:** A long-running consultation is checked every 30 minutes. If liveness is confirmed — the background task is alive and the event stream received a new event within the staleness threshold (5 minutes) — Claude re-arms the timer and tells the user in one line (including the last step). Otherwise Claude asks via `AskUserQuestion`, showing elapsed time and the last event with its age, with the options "wait another 30 minutes" (recommended when the run looks active) and "stop this consultation" (recommended when it looks stalled). Stopping ends the Codex run and is handled like any other failure (ticket 04 behaviour). `EVAL_ASK_CODEX_TIMEOUT_MINUTES` overrides the check interval; the staleness threshold stays at one sixth of the interval. See spec: user stories 59–63, 67.
+
+**Blocked by:** 01 — Manual consultation tracer bullet.
+
+**Status:** ready-for-agent
+
+- [ ] Liveness is judged only from the tracked background task state and the event stream's last-event age — never from CPU or process listings.
+- [ ] Confirmed-alive checks re-arm silently apart from a one-line notice; no `AskUserQuestion`.
+- [ ] Unconfirmed checks ask with the two options and the correct recommendation; there is no cap on how many times the user can choose to wait.
+- [ ] "Stop" terminates the run, cleans up temporary files, reports briefly, and Claude continues its work.
+- [ ] The interval override works and the staleness threshold scales with it.
+- [ ] Eval cases pass with a small override: stub emitting periodic events → no prompt and a one-line notice; stub emitting no events → prompt offered with "stop" recommended.
