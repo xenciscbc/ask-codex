@@ -51,6 +51,8 @@ A consultation that cannot produce a valid opinion ends with a short, specific r
 | Any other non-zero exit | The Codex run failed: quote the most useful line of `<tmp>/stderr.log`, or, if that is empty, the last line of `<tmp>/events.jsonl`. |
 | `last-message.json` is missing, empty, or not readable text | Codex returned no usable reply. |
 
+Say the reason with the right-hand column's wording, word for word (translate the rest of your answer if the conversation is in another language, but keep these sentences and anything in backticks as written). For a login failure the command must appear exactly as `! codex login` — with the `!`, which runs it in this session.
+
 For every failure:
 
 - Run `codex exec` at most once per consultation (see Ground rules); never retry.
@@ -230,7 +232,7 @@ Answer in the language of the conversation; keep code, paths, and quotes verbati
 
 Only present claims that are actually in the reply.
 
-**Unstructured reply.** Keep item 1, then — instead of items 2–4 — under a heading such as "Unstructured reply from Codex (did not follow the expected format)", quote Codex's text (or summarise it faithfully if it is long). For each point it actually makes, give your disposition — adopt, reject, or investigate — with a reason. Do not invent claim IDs, evidence, or points it did not make.
+**Unstructured reply.** Keep item 1, then — instead of items 2–4 — under a heading such as "Unstructured reply from Codex (did not follow the expected format)", quote Codex's text (or summarise it faithfully if it is long). For each point it actually makes, give your disposition — adopt, reject, or investigate — with a reason; if it makes no substantive point, still give the reply as a whole one explicit disposition (usually reject) with a reason. Do not invent claim IDs, evidence, or points it did not make.
 
 ### 11. Clean up (mandatory, before your final answer)
 
