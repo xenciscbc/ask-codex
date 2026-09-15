@@ -23,3 +23,5 @@
 ## Comments
 
 **2026-09-15 — eval fact (from the ticket-01 harness spike).** `AskUserQuestion` is unavailable inside `claude plugin eval` children. Evals that expect "AskUserQuestion before the first `exec`" assert instead: zero `codex exec` before confirmation plus an `llm` grader that the reply asks for the confirmation (naming the servers/commands); confirmed paths are seeded via `context.history_file`. The setup skill's multi-select flow is exercised in live acceptance; its eval (`setup-writes-config`) seeds the user's answers in history.
+
+**2026-09-15 — deferred from the ticket-01 verifier (advisory A3, P3).** Rule (c) wording in `skills/ask/SKILL.md` step 2 names `[mcp_servers.<name>…]` table headers and keys starting with `mcp_servers`, but does not spell out a bare `[mcp_servers]` table with sub-keys or quoted keys (e.g. `mcp_servers."name"`). When this ticket adds the confirmation path, widen the wording to "any table or key whose path starts with `mcp_servers`, quoted or not" and add a scaffold variant using `[mcp_servers]` + `name.command = …`.

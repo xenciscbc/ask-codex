@@ -73,7 +73,8 @@ DEFAULT_REPLY = {
 
 # -c mcp_servers.<name>={command="ask-codex-disabled",enabled=false}
 DISABLE_RE = re.compile(r'^mcp_servers\.([A-Za-z0-9_.-]+)=\{\s*command\s*=\s*"ask-codex-disabled"\s*,\s*enabled\s*=\s*false\s*\}$')
-EFFORT_RE = re.compile(r'^model_reasoning_effort="(low|medium|high|xhigh|max|ultra)"$')
+# Consultation effort is never below medium; `ultra` only when the user asks for it.
+EFFORT_RE = re.compile(r'^model_reasoning_effort="(medium|high|xhigh|max|ultra)"$')
 SLUG_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 
 
@@ -149,13 +150,15 @@ def mcp_list(args):
 
 
 def parse_exec(args):
-    opts = {"flags": [], "c": [], "unknown": [], "stdin": False}
+    opts = {"flags": [], "c": [], "unknown": [], "stdin": False, "repeated": []}
     i = 0
     while i < len(args):
         a = args[i]
         value = args[i + 1] if i + 1 < len(args) else None
         if a in ("-s", "-o", "--output-schema", "-C", "-m", "--disable"):
             key = {"-s": "sandbox", "-o": "out", "--output-schema": "schema", "-C": "cwd", "-m": "model", "--disable": "disable"}[a]
+            if key in opts:
+                opts["repeated"].append(a)
             opts[key] = value
             i += 2
             continue
@@ -198,8 +201,10 @@ def exec_(args):
         problems.append("prompt not read from stdin (-)")
     if opts.get("model") is not None and not SLUG_RE.match(opts["model"]):
         problems.append(f"bad model {opts['model']}")
-    if opts.get("disable") is not None and opts["disable"] != "apps":
-        problems.append(f"--disable {opts['disable']}")
+    if opts.get("disable") != "apps":
+        problems.append(f"missing --disable apps (got {opts.get('disable')})")
+    for flag in opts["repeated"]:
+        problems.append(f"repeated {flag}")
     effort_seen = False
     for kv in opts["c"]:
         if EFFORT_RE.match(kv):
