@@ -1,0 +1,7 @@
+# Notes for slice 07 (timeout monitoring)
+
+- Ticket 07: 30-minute checks; liveness = tracked background task alive + last event within interval/6 (5 min); confirmed → re-arm + one-line notice; unconfirmed → AskUserQuestion (wait 30 more / stop) with elapsed time + last event and its age; stop = failure path (ticket 04) incl. killing the whole Codex process chain (F8, live-checked in 09); `EVAL_ASK_CODEX_TIMEOUT_MINUTES` overrides the interval (F11: zero/negative/non-numeric ignored with a notice; valid → notice that it is active).
+- `EVAL_*` keys are allowed in case.yaml `execution.env`; whether they reach the agent's Bash is being probed in slice 04 (`stub-env-probe`) — reuse that result.
+- Tool facts (2026-09-15): `TaskOutput` blocks at most 600000 ms (10 min) per call (`timeout` param, default 30 s) and is marked deprecated but available; a 30-minute check therefore needs repeated blocking waits (3 × 10 min) or a loop. `Monitor` watches expire after at most 30 min and must be re-armed. In evals, an override of 1 minute fits one `TaskOutput` wait.
+- Eval children lack AskUserQuestion → the unconfirmed-liveness prompt must fall back to text-and-stop (like other confirmations) or to a documented default; the ticket asks for "prompt offered with stop recommended" — an llm grader on the text ask.
+- Stub needs slow modes: periodic events (e.g. one event every N seconds for M seconds, then a valid reply) and silent (no events, long sleep) — and killability (the stub process must exit when the run is stopped).
