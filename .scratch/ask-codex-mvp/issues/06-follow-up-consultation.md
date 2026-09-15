@@ -4,13 +4,13 @@
 
 **Blocked by:** 02 — Consultation types and packaging.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A dedicated English follow-up prompt template carries prior claims + dispositions and states the scope lock and the new-blocking exception.
-- [ ] Follow-ups never use `resume` or `fork`; each is a new ephemeral run.
-- [ ] Every carried claim comes back with a `followup_status`; non-blocking new points are not presented as new claims.
-- [ ] Presentation shows each carried claim's status and Claude's updated disposition, and flags any new-blocking claim separately.
-- [ ] Eval cases pass: history holds a prior consultation → the new Bash call has no `resume`, recorded stdin contains the carried claims; stub reply with a `new-blocking` claim is flagged separately by an `llm` grader.
+- [x] A dedicated English follow-up prompt template carries prior claims + dispositions and states the scope lock and the new-blocking exception.
+- [x] Follow-ups never use `resume` or `fork`; each is a new ephemeral run.
+- [x] Every carried claim comes back with a `followup_status`; non-blocking new points are not presented as new claims.
+- [x] Presentation shows each carried claim's status and Claude's updated disposition, and flags any new-blocking claim separately.
+- [x] Eval cases pass: history holds a prior consultation → the new Bash call has no `resume`, recorded stdin contains the carried claims; stub reply with a `new-blocking` claim is flagged separately by an `llm` grader.
 
 ## Comments
 
@@ -21,3 +21,10 @@
 **2026-09-16 — first green pass.** Offline after implementation: `ticket06-graders.test.mjs` 23 passed, 0 failed (prompt assembly: the follow-up prompt has no unconditional `null` rule; the four initial types keep it). 1.0 for followup-carries-claims, followup-revised-plan (follow-up, not second opinion; C1/C2 carried), review-loop-blockers (still a second opinion) and manual-with-question. followup-new-blocking 0.94: the reply was right in substance (C2 unresolved with an updated disposition, C4 under `New blocking claim from Codex`, `loadUser` absent), but wrote the status as C2 `` `[unresolved]` `` (backticks), so the strict regex missed it, and it added "(C5 … was omitted per the follow-up rules)" — the contract says non-blocking new claims are not mentioned at all. Fixes: the skill says the line starts with the id and the bracketed status without backticks or bold, and that an omitted claim is not mentioned at all; the status regexes tolerate markdown around the id/status (not a different status); case 2 gains a `\bC5\b` not_contains grader; offline samples added. All five cases are rerun.
 
 **2026-09-16 — green on the final bytes: all five cases 1.0, no "not granted" notice.** followup-carries-claims, followup-new-blocking (C2 `[unresolved]` line, `New blocking claim from Codex` with C4, no C5 or `loadUser`; llm presentation grader 2–1), followup-revised-plan (follow-up marker, C1/C2 carried, revised Plan text, no second-opinion marker), and the regressions review-loop-blockers (still a second opinion) and manual-with-question. No skill edit after these runs started. Offline checks (ticket06-graders 28/0 incl. prompt assembly, ticket05-graders 43/0, ticket07 14/0, ticket04 6/0, ticket02 162/0, ticket03 64/0, stub-modes 32/0, codex-call regex) and `claude plugin validate` pass. No live Codex calls.
+
+**2026-09-16 — outcome verifier (commit 7c3a599): CONFIRMED.** All four claims pass with no P0–P2 findings: who starts a follow-up and the single step-0 type rule (consistent with the Proactive section; review-loop-blockers still a second opinion); fresh run and packaging (no resume/fork, follow-up framing, only the right claims carried, conditional rule 4 — the verifier showed the offline check fails on the old core); presentation (fixed status lines, heading, C5 absent); evidence validity (red failed on the new behaviour; final runs on the committed bytes; graders discriminate). Advisory dispositions (P4, candidate unchanged):
+- A1: the `[no status returned]` and `invalid` paths have static evidence only → deferred to the `/code-review` pass (add a case whose stub reply omits a carried claim).
+- A2: the llm presentation grader passed 2–1 (regex graders all passed) → watched in the final suite.
+- A3: byte coverage inferred from mtimes and a clean tree → covered by deferred A-1 (record a skill digest in results).
+- A4: the frontmatter description lists four types but not follow-up, and "Keep item 1" does not say whether summary/open questions stay → deferred to the `/code-review` pass (wording only).
+No live Codex calls.
