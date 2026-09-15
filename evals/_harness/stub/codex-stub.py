@@ -11,6 +11,15 @@ Records written next to the scenario file:
   .stub/exec-argv.json   argv of the last `exec` call
   .stub/exec-stdin.txt   stdin (the prompt) of the last `exec` call
   .stub/violations.log   created on every call; one line per argv that breaks the invocation allowlist
+  .stub/missing-calls.log  one line per call while EVAL_CODEX_STUB_MODE=missing (scenario dirs only)
+
+`exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
+unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
+unreadable (exit 0, no agent message, empty -o file). `exec.reply` replaces the default reply.
+
+Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
+CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
+`execution.env`, because the first call runs from a neutral dir without a scenario.
 """
 import copy
 import datetime
@@ -238,6 +247,17 @@ def exec_(args):
     if mode == "fail":
         sys.stderr.write("Error: stub failure requested by scenario\n")
         sys.exit(1)
+    if mode == "os-error":
+        # The real failure observed on a drive where the Windows sandbox cannot run (stdout, exit 1).
+        sys.stdout.flush()
+        sys.stdout.buffer.write("Error: 功能錯誤。 (os error 1)\n".encode("utf-8"))
+        sys.stdout.buffer.flush()
+        sys.exit(1)
+    if mode == "unreadable":
+        emit({"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 0}})
+        if opts.get("out"):
+            open(opts["out"], "w", encoding="utf-8").close()
+        return
 
     if mode == "schema-violation":
         reply = json.dumps({"verdict": "looks fine", "notes": "no claims array"})
@@ -255,6 +275,12 @@ def exec_(args):
 
 def main():
     argv = sys.argv[1:]
+    if os.environ.get("EVAL_CODEX_STUB_MODE") == "missing":
+        scenario = load_scenario(os.getcwd())
+        if scenario:
+            append(os.path.join(stub_dir(scenario), "missing-calls.log"), " ".join(argv) + "\n")
+        sys.stderr.write("codex: command not found\n")
+        sys.exit(127)
     cmd = argv[0] if argv else ""
     sub = argv[1] if len(argv) > 1 else ""
     if cmd == "--version":

@@ -39,6 +39,25 @@ Some steps need the user's **confirmation** before Codex may use something the p
 - **No `AskUserQuestion` available** (for example a non-interactive session): ask the same thing in plain text, clean up (step 11), and stop. Do not run `codex exec`.
 - Confirmations last for the rest of this conversation.
 
+## Failures
+
+A consultation that cannot produce a valid opinion ends with a short, specific reason, and then you carry on. Use this table from any step:
+
+| What you see | Tell the user |
+|---|---|
+| The first `codex` command fails with `command not found` / `No such file or directory`, or exit code 127 | The Codex CLI is not installed or not on PATH, so the consultation was not sent. |
+| `codex exec` fails and its output mentions logging in (`Not logged in`, `codex login`, `401`, `Unauthorized`) | Codex is not logged in: run `! codex login`, then ask again. |
+| The output (`stderr.log` or `events.jsonl`) contains `os error 1` | Codex cannot run in this project's location — its Windows sandbox fails on this drive (`os error 1`). |
+| Any other non-zero exit | The Codex run failed: quote the most useful line of `<tmp>/stderr.log`, or, if that is empty, the last line of `<tmp>/events.jsonl`. |
+| `last-message.json` is missing, empty, or not readable text | Codex returned no usable reply. |
+
+For every failure:
+
+- Run `codex exec` at most once per consultation (see Ground rules); never retry.
+- Attribute nothing to Codex — no summary, claim, or opinion.
+- Clean up (step 11).
+- Then carry on with the work that led to the consultation. If the consultation was the whole request, answer the question yourself and label it clearly as your own view, not Codex's.
+
 ## Procedure
 
 ### 0. Question and consultation type (before anything else)
@@ -125,7 +144,7 @@ If any server is defined there, it needs the user's confirmation of *the project
 
 ### 4. MCP listings and project-defined servers
 
-Run both, each as its own command, exactly in this form:
+Run both, each as its own command, exactly in this form — the neutral one first. If the first one fails (for example `command not found`), stop at once and follow **Failures**; do not run the second:
 
 ```bash
 env -C '<tmp>/neutral' codex mcp list --json
@@ -193,7 +212,10 @@ Then wait for it to finish. **Do not end your turn while the consultation is sti
 
 ### 9. Read the reply
 
-When the command finishes, read `<tmp>/last-message.json`. It must be JSON with `summary`, `claims` (each with `id`, `statement`, `kind`, `confidence`, `evidence`, `followup_status`), and `open_questions`. If the command failed or the file is missing or unreadable, stop: tell the user briefly what failed (quote the most useful line of `<tmp>/stderr.log`) and do not present any opinion as Codex's.
+When the command finishes, read `<tmp>/last-message.json`. A valid reply is JSON with `summary`, `claims` (each with `id`, `statement`, `kind`, `confidence`, `evidence`, `followup_status`), and `open_questions`.
+
+- If the command failed, or the file is missing, empty, or not readable text: this is a failure — follow **Failures** (the table names the reason to give).
+- If the file is readable but is not JSON matching the schema — JSON of another shape, or plain text — it is an **unstructured reply**: not a failure, and not to be turned into claims. Present it in step 10 as an unstructured reply.
 
 ### 10. Present with dispositions
 
@@ -207,6 +229,8 @@ Answer in the language of the conversation; keep code, paths, and quotes verbati
 5. What you will do next, if anything — but do not apply any change just because Codex suggested it.
 
 Only present claims that are actually in the reply.
+
+**Unstructured reply.** Keep item 1, then — instead of items 2–4 — under a heading such as "Unstructured reply from Codex (did not follow the expected format)", quote Codex's text (or summarise it faithfully if it is long). For each point it actually makes, give your disposition — adopt, reject, or investigate — with a reason. Do not invent claim IDs, evidence, or points it did not make.
 
 ### 11. Clean up (mandatory, before your final answer)
 
