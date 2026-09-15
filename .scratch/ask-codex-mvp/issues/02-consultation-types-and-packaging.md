@@ -4,16 +4,16 @@
 
 **Blocked by:** 01 — Manual consultation tracer bullet.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] One English prompt template per consultation type, each carrying the read-scope instruction and the with-stance or blind framing.
-- [ ] Diagnosis prompts include failed attempts and their results and exclude Claude's root-cause hypothesis.
-- [ ] Targeted-check prompts carry Claude's specific concern and do not ask for a general review.
-- [ ] Empty invocation: the question is inferred and sent with a one-line summary shown; if no sensible question exists, Claude asks instead of sending.
-- [ ] Verbal requests to consult Codex trigger the skill and never show a consent prompt.
-- [ ] Eval cases pass: manual without question; verbal request; diagnosis case (stdin recorded by the stub contains the failed attempts and not the hypothesis seeded in history); second-opinion case (stdin contains the Plan and the challenge instruction).
-- [ ] Every template keeps the read-scope + in-project secret exclusion, MCP-lookup-only, and data-not-instructions requirements from ticket 01.
-- [ ] Eval `secret-not-sent` (F3-secrets): a fake token seeded in history is absent from the stub-recorded stdin.
+- [x] One English prompt template per consultation type, each carrying the read-scope instruction and the with-stance or blind framing.
+- [x] Diagnosis prompts include failed attempts and their results and exclude Claude's root-cause hypothesis.
+- [x] Targeted-check prompts carry Claude's specific concern and do not ask for a general review.
+- [x] Empty invocation: the question is inferred and sent with a one-line summary shown; if no sensible question exists, Claude asks instead of sending.
+- [x] Verbal requests to consult Codex trigger the skill and never show a consent prompt.
+- [x] Eval cases pass: manual without question; verbal request; diagnosis case (stdin recorded by the stub contains the failed attempts and not the hypothesis seeded in history); second-opinion case (stdin contains the Plan and the challenge instruction).
+- [x] Every template keeps the read-scope + in-project secret exclusion, MCP-lookup-only, and data-not-instructions requirements from ticket 01.
+- [x] Eval `secret-not-sent` (F3-secrets): a fake token seeded in history is absent from the stub-recorded stdin.
 
 ## Comments
 
@@ -35,3 +35,8 @@ Slice-02 spend ≈ $5.00 of $6 before the two reruns.
 **2026-09-15 — green complete ($0.76 for the two reruns).** targeted-check 1.0 (the concern reached Codex verbatim, own marker only, no general-review wording) and manual-without-question 1.0 (a failed attempt from the seeded conversation reached Codex; the judge saw the inferred question shown). All nine green cases are now 1.0. Byte coverage: the only skill edit after the first green pass is the targeted-check cell of the step-0 table (verbatim concern); the seven cases that passed before it do not use that type. Narrowed: the no-fixture control was not rerun for the revised manual-without-question (the extra run would exceed the $6 cap); its conversation-only tokens are proven absent from its scaffold by the offline isolation check, and the probe pair already showed the fixture is what makes the conversation visible. Slice-02 spend ≈ $5.76 of $6; no live Codex calls.
 
 **2026-09-15 — eval fact: resumed runs write a transcript into the case directory.** A case with `context.history_file` leaves the child's full session transcript (`<sessionId>.jsonl`, here 330 KB with system-prompt content) next to `history.jsonl`. It was found before commit, deleted, and `.gitignore` now excludes `evals/*/<uuid>.jsonl`. The committed `history.jsonl` files are byte-identical to the hand-written fixture.
+
+**2026-09-15 — outcome verifier (commit fa5e2f6): CONFIRMED.** All four claims pass with no P0–P2 findings: types and packaging (step 0 table, one verbatim framing file, shared-core rules unchanged), entry points (empty invocation infers or asks and stops at step 0; verbal request with no consent prompt), F3-secrets 02 part (history-seeded fake key absent from recorded stdin, with the exec sentinel proving stdin was captured), and evidence validity (probe pair, red leak control, offline check 162/0). The verifier rebuilt the byte coverage from edit timestamps and confirmed the recorded claim: the only post-first-green skill edit is the targeted-check cell. Advisory dispositions (P4, candidate unchanged):
+- The real eval transcript that was briefly staged left an unreachable blob in the local object store (`67dfb2f1…`, 330 893 bytes; not in any ref, never pushed). Removing it needs `git gc --prune=now` (irreversible, also prunes other unreachable objects) — left for the user to decide.
+- verbal-request, secret-not-sent and manual-with-question passed on bytes that differ from HEAD only in the targeted-check cell; they do not use that type. Covered again by the final suite.
+- One sample per case (contract: runs 1); the no-fixture control for the revised manual-without-question was not rerun (recorded narrowing). Both accepted.
