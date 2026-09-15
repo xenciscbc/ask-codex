@@ -1,0 +1,19 @@
+{
+  "name": "ask-codex",
+  "version": "0.1.0",
+  "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself — Codex runs read-only for shell commands, with MCP servers disabled by default.",
+  "author": {
+    "name": "xenciscbc"
+  },
+  "repository": "https://github.com/xenciscbc/ask-codex",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "second-opinion",
+    "consultation",
+    "review"
+  ],
+  "skills": [
+    "./skills/ask"
+  ]
+}

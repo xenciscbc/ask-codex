@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ask-codex consultation reply",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "claims", "open_questions"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One or two sentences: Codex's overall answer."
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement", "kind", "confidence", "evidence", "followup_status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable identifier such as C1, C2. In a follow-up consultation, reuse the carried claim's id."
+          },
+          "statement": {
+            "type": "string",
+            "description": "One single assertion."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["fact", "inference"],
+            "description": "fact = directly observed (file content, command output); inference = reasoned from observations."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "file:line references or command/output excerpts supporting the claim; empty only when none exist."
+          },
+          "followup_status": {
+            "type": ["string", "null"],
+            "enum": ["resolved", "unresolved", "invalid", "new-blocking", null],
+            "description": "Follow-up consultations only: status of a carried claim, or new-blocking for a new blocking claim. null in an initial consultation."
+          }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Questions Codex could not resolve and that would change its answer."
+    }
+  }
+}

@@ -19,3 +19,7 @@
 - [ ] No acceptance step reads or writes the real `~/.claude/ask-codex.json`.
 - [ ] Live (≤ 3 Codex calls): setup with project scope in a temp project under `D:\tmp\<subdir>` (file deleted afterwards) + one consultation allowing only `comfyui` with a question answerable solely by `comfyui.server_info`.
 - [ ] Fresh verifier CONFIRMED on F-map rows F1-config, F1-claims (mode wording), F12, F12b (11 part).
+
+## Comments
+
+**2026-09-15 — eval fact (from the ticket-01 harness spike).** `AskUserQuestion` is unavailable inside `claude plugin eval` children. Evals that expect "AskUserQuestion before the first `exec`" assert instead: zero `codex exec` before confirmation plus an `llm` grader that the reply asks for the confirmation (naming the servers/commands); confirmed paths are seeded via `context.history_file`. The setup skill's multi-select flow is exercised in live acceptance; its eval (`setup-writes-config`) seeds the user's answers in history.

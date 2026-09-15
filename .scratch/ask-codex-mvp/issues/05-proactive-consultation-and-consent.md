@@ -19,3 +19,9 @@
 - [ ] Eval `consent-line-scope` (F3-scope): the consent text states Codex can read any file the user's account can read and is instructed to stay in the project.
 - [ ] Eval `consent-line-mcp` (F1-claims): the consent text states MCP servers run outside the sandbox and that by default all are disabled.
 - [ ] Fresh verifier CONFIRMED on F-map rows F1-claims (consent line), F3-scope, F4.
+
+## Comments
+
+**2026-09-15 — eval fact (from the ticket-01 harness spike, Claude Code 2.1.272 in WSL).** `AskUserQuestion` does not exist inside a `claude plugin eval` child (ToolSearch finds no such tool). Consequences, per Plan stop condition (5):
+- Skill behaviour: when `AskUserQuestion` is unavailable (headless), any step that needs consent or confirmation asks in plain text and ends the turn without calling `codex`; it never proceeds on its own.
+- Tier-1 graders for consent cases cannot use `tool_order` on `AskUserQuestion`. They assert instead: zero `codex` calls (CODEX_CALL `max: 0`) before consent, and an `llm` grader that the reply asks for consent with the required summary. Post-consent behaviour is tested by seeding the consent in `context.history_file`. The real `AskUserQuestion` flow (three options) is covered in ticket 09 live acceptance.

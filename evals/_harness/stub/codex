@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub `codex` for the ask-codex eval suite. Never contacts OpenAI.
+here="$(dirname "$0")"
+if command -v python3 >/dev/null 2>&1; then exec python3 "$here/codex-stub.py" "$@"; fi
+exec python "$here/codex-stub.py" "$@"

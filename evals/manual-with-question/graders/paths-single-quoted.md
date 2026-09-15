@@ -1,0 +1,6 @@
+---
+type: tool_used
+tool: Bash
+input_match: '"command"\s*:\s*"(?:(?:[^"\\]|\\.)*?(?:[\s(;&|]|\\n))?codex\s+exec\b(?=(?:[^"\\]|\\.)*\s-C\s+'')(?=(?:[^"\\]|\\.)*\s-o\s+'')(?=(?:[^"\\]|\\.)*--output-schema\s+'')'
+min: 1
+---

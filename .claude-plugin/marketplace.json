@@ -1,0 +1,20 @@
+{
+  "name": "ask-codex",
+  "owner": {
+    "name": "xenciscbc"
+  },
+  "description": "ask-codex: Claude consults OpenAI Codex for independent opinions, as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "ask-codex",
+      "source": "./",
+      "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself.",
+      "category": "engineering",
+      "keywords": [
+        "codex",
+        "second-opinion",
+        "consultation"
+      ]
+    }
+  ]
+}
