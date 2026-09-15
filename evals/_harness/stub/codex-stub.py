@@ -19,6 +19,9 @@ unreadable (exit 0, no agent message, empty -o file), slow-active (a progress ev
 `event_every_s` seconds for `duration_s` seconds, then the valid reply; writes .stub/exec-finished),
 slow-silent (no events for `duration_s` seconds, then exit 1; writes .stub/exec-finished only when
 it ends by itself — a killed run leaves none). `exec.reply` replaces the default reply.
+`exec.by_model` = {"<model slug>": {mode, reply, …}} overrides those settings for calls with that
+`-m` (parallel consultations); such calls also write .stub/exec-argv.<slug>.json and
+.stub/exec-stdin.<slug>.txt, and exec.sentinel gains one line per call.
 
 Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
 CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
@@ -199,6 +202,13 @@ def exec_(args):
     directory = opts.get("cwd") or os.getcwd()
     scenario = load_scenario(directory) or {"dir": directory, "data": {}}
     data = scenario["data"]
+    # Parallel consultations (ticket 08): exec.by_model["<slug>"] overrides exec settings for that -m.
+    slug = opts.get("model")
+    exec_cfg = dict(data.get("exec") or {})
+    by_model = exec_cfg.pop("by_model", None) or {}
+    if slug in by_model:
+        exec_cfg.update(by_model[slug])
+    data = {**data, "exec": exec_cfg}
     records = stub_dir(scenario)
 
     problems = []
@@ -234,12 +244,16 @@ def exec_(args):
     # Read raw bytes: the platform's default stdin encoding (e.g. a Windows code page)
     # can turn UTF-8 prompts into surrogates that cannot be written back out.
     prompt = sys.stdin.buffer.read().decode("utf-8", "replace") if opts["stdin"] else ""
-    with open(os.path.join(records, "exec.sentinel"), "w", encoding="utf-8") as f:
+    # One sentinel line per call; the single-run files hold the last call, and each -m also gets its own copy.
+    with open(os.path.join(records, "exec.sentinel"), "a", encoding="utf-8") as f:
         f.write(datetime.datetime.now(datetime.timezone.utc).isoformat() + "\n")
-    with open(os.path.join(records, "exec-argv.json"), "w", encoding="utf-8") as f:
-        json.dump(args, f, indent=2)
-    with open(os.path.join(records, "exec-stdin.txt"), "w", encoding="utf-8") as f:
-        f.write(prompt)
+    argv_text = json.dumps(args, indent=2)
+    targets = [("exec-argv.json", argv_text), ("exec-stdin.txt", prompt)]
+    if slug:
+        targets += [(f"exec-argv.{slug}.json", argv_text), (f"exec-stdin.{slug}.txt", prompt)]
+    for name, payload in targets:
+        with open(os.path.join(records, name), "w", encoding="utf-8") as f:
+            f.write(payload)
 
     mode = (data.get("exec") or {}).get("mode", "valid")
     emit({"type": "thread.started", "thread_id": "stub-thread"})

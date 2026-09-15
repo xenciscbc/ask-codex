@@ -38,6 +38,23 @@ export function readRequest(text, listedSlugs) {
   return { kind: "model", token, effort, invalid: false, matches, rest: words.slice(rest).join(" ") };
 }
 
+// Two-model list (slice 08): "astra, sol …" or "astra:high, sol …" at the start of the request.
+// Every item must read as a model token on its own, so a question like "Why, exactly, …" stays a question.
+// readModels(text, listed) -> { kind: "single", reading } | { kind: "parallel", readings, rest }
+//                           | { kind: "refused", reason: "too-many" | "duplicate" } | { kind: "invalid" }
+export function readModels(text, listedSlugs) {
+  const m = text.trim().match(/^((?:[^\s,]+\s*,\s*)+[^\s,]+)(?:\s+([\s\S]*))?$/);
+  if (!m) return { kind: "single", reading: readRequest(text, listedSlugs) };
+  const items = m[1].split(/\s*,\s*/);
+  const readings = items.map((it) => readRequest(`${it} x`, listedSlugs));
+  if (readings.some((r) => r.kind !== "model")) return { kind: "single", reading: readRequest(text, listedSlugs) };
+  if (items.length > 2) return { kind: "refused", reason: "too-many" };
+  if (readings.some((r) => r.invalid)) return { kind: "invalid" };
+  const slugs = readings.map((r) => (r.matches.length === 1 ? r.matches[0] : null));
+  if (slugs.every(Boolean) && slugs[0] === slugs[1]) return { kind: "refused", reason: "duplicate" };
+  return { kind: "parallel", readings, rest: m[2] || "" };
+}
+
 // Self-check against the slice-03 token readings.
 const LISTED = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"];
 const Q = "Why does fetchUser in src/user.js return an empty object when the API times out?";
@@ -54,12 +71,25 @@ const cases = [
   [`5.6 sol ${Q}`, (r) => r.matches?.join() === "gpt-5.6-sol"],
   [`reserve ${Q}`, (r) => r.kind === "none"],
 ];
+const listCases = [
+  [`astra, sol ${Q}`, (r) => r.kind === "parallel" && r.readings.map((x) => x.matches.join()).join("|") === "gpt-6-astra|gpt-5.6-sol" && r.rest.startsWith("Why")],
+  [`astra:high, sol ${Q}`, (r) => r.kind === "parallel" && r.readings[0].effort === "high" && r.readings[1].effort === undefined],
+  [`astra, sol, terra ${Q}`, (r) => r.kind === "refused" && r.reason === "too-many"],
+  [`sol, 5.6-sol ${Q}`, (r) => r.kind === "refused" && r.reason === "duplicate"],
+  [`astra, sol;touch ${Q}`, (r) => r.kind === "invalid"],
+  [`sol ${Q}`, (r) => r.kind === "single" && r.reading.matches?.join() === "gpt-5.6-sol"],
+  ["Why, exactly, does fetchUser fail?", (r) => r.kind === "single" && r.reading.kind === "none"],
+];
 if (import.meta.url.endsWith("model-token-rule.mjs") && process.argv[1]?.endsWith("model-token-rule.mjs")) {
   let fail = 0;
   for (const [text, ok] of cases) {
     const r = readRequest(text, LISTED);
     if (!ok(r)) { fail++; console.log("FAIL", JSON.stringify(text.slice(0, 40)), JSON.stringify(r)); }
   }
-  console.log(`${cases.length - fail} passed, ${fail} failed`);
+  for (const [text, ok] of listCases) {
+    const r = readModels(text, LISTED);
+    if (!ok(r)) { fail++; console.log("FAIL list", JSON.stringify(text.slice(0, 40)), JSON.stringify(r)); }
+  }
+  console.log(`${cases.length + listCases.length - fail} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }

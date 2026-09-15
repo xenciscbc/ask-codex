@@ -89,7 +89,7 @@ FAIL if a group is wrong or missing, a claim is attributed to the wrong model, o
   { name: "parallel-duplicate-refused", prompt: `/ask-codex:ask sol, 5.6-sol ${Q}`, scenario: {},
     graders: { "no-bare-cd": G.noBareCd, "no-codex-call": G.noCodexAny, "no-exec-sentinel": G.noExecSentinel, "refusal": rx(REFUSE) } },
   { name: "parallel-one-fails", prompt: `/ask-codex:ask astra, sol ${Q}`, scenario: { exec: { by_model: { [SLUGS.astra]: { reply: REPLIES.astra }, [SLUGS.sol]: { mode: "fail" } } } },
-    graders: { ...base([SLUGS.astra, SLUGS.sol]), "exec-twice": G.twoExec, "failed-line": rx(String.raw`Failed model: gpt-5\.6-sol`),
+    graders: { ...base([SLUGS.astra, SLUGS.sol]), "exec-twice": G.twoExec, "failed-line": rx(String.raw`Failed model:[*` + "`" + String.raw`\s]*gpt-5\.6-sol`),
       "no-grouping": rx("Divergences", "not_contains"), "survivor-llm": llm(`
 Two models were consulted; gpt-5.6-sol failed and gpt-6-astra answered with three claims (empty object on timeout; a circuit breaker; raising the timeout would fix it).
 PASS if the final response presents gpt-6-astra's claims with dispositions, notes that gpt-5.6-sol failed and why, and attributes nothing to gpt-5.6-sol.
@@ -97,8 +97,9 @@ FAIL if any point is attributed to gpt-5.6-sol, the failure is not mentioned, or
   { name: "parallel-shared-timer", prompt: `/ask-codex:ask astra, sol ${Q}`, env: { EVAL_ASK_CODEX_TIMEOUT_MINUTES: "1" }, taskTools: true,
     scenario: { exec: { by_model: { [SLUGS.sol]: { reply: REPLIES.sol }, [SLUGS.astra]: { mode: "slow-silent", duration_s: 600 } } } },
     graders: { ...base([SLUGS.astra, SLUGS.sol]), "exec-twice": G.twoExec, "used-taskstop": toolUsed("TaskStop", null, 1),
-      "check-line": rx(String.raw`Parallel check: done [—-] gpt-5\.6-sol; still running [—-] gpt-6-astra`),
-      "stopped-line": rx(String.raw`Failed model: gpt-6-astra [—-] stopped`), "sol-present": rx("AbortController"), "timer-llm": llm(`
+      // Markdown around the fixed words (bold, backticks) is tolerated; the models and their order are not.
+      "check-line": rx(String.raw`Parallel check:[*\s]*done [—-] [*` + "`" + String.raw`]*gpt-5\.6-sol[*` + "`" + String.raw`]*; still running [—-] [*` + "`" + String.raw`]*gpt-6-astra`),
+      "stopped-line": rx(String.raw`Failed model:[*` + "`" + String.raw`\s]*gpt-6-astra[*` + "`" + String.raw`\s]*[—-] stopped`), "sol-present": rx("AbortController"), "timer-llm": llm(`
 Two models were consulted with a 1-minute check interval; gpt-5.6-sol finished quickly, gpt-6-astra produced no events and could not be asked about in this session.
 PASS if the final response says gpt-5.6-sol finished and gpt-6-astra was stopped, presents gpt-5.6-sol's claims with dispositions, and attributes nothing to gpt-6-astra.
 FAIL if it attributes any claim to gpt-6-astra, says it kept waiting, or omits gpt-5.6-sol's result.`) } },

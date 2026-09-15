@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readRequest } from "./model-token-rule.mjs";
+import { readRequest, readModels } from "./model-token-rule.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const evals = path.join(repo, "evals");
@@ -91,6 +91,15 @@ for (const f of walk(path.join(repo, "skills"))) {
   const hit = t.match(/\b(sol|astra|terra|luna)\b[`'"]?\s*(→|->|=>|=|:)\s*[`'"]?gpt-/i);
   check(!hit, `no alias table in ${path.relative(repo, f)}${hit ? ` (${hit[0]})` : ""}`);
 }
+
+// 5. Two-model lists (slice 08) through the same reference rule.
+const LISTED_ALL = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"];
+const Qx = "Why does fetchUser in src/user.js return an empty object when the API times out?";
+check(readModels(`astra, sol ${Qx}`, LISTED_ALL).kind === "parallel", "two models → parallel");
+check(readModels(`astra, sol, terra ${Qx}`, LISTED_ALL).reason === "too-many", "three models → refused");
+check(readModels(`sol, 5.6-sol ${Qx}`, LISTED_ALL).reason === "duplicate", "same model twice → refused");
+check(readModels(`astra, sol;touch ${Qx}`, LISTED_ALL).kind === "invalid", "metacharacter in a listed token → invalid");
+check(readModels(Qx, LISTED_ALL).reading.kind === "none", "a plain question stays a question");
 
 console.log(`${pass} passed, ${fail} failed (${cases.length} ticket-03 cases)`);
 process.exit(fail ? 1 : 0);
