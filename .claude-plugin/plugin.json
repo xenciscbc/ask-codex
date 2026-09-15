@@ -14,6 +14,7 @@
     "review"
   ],
   "skills": [
-    "./skills/ask"
+    "./skills/ask",
+    "./skills/setup"
   ]
 }

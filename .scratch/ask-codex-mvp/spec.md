@@ -201,6 +201,8 @@ A Claude Code plugin named `ask-codex` providing two skills: `ask` (invoked as `
 - A declined topic is not re-proposed in the same session unless there is material change (e.g. another failed attempt or new evidence).
 - Consent prompts, model-scope prompts, MCP confirmations and project-widening confirmations use `AskUserQuestion`.
 - Manual invocation (slash or verbal, from the user's own messages) is consent; only proactive consultations ask for consultation consent.
+- Confirmation scope (MCP policy, user decision 2026-09-15): a confirmation written in a user message — including the invoking message — counts only for the items it explicitly names and only for its own kind: the project ask-codex config widening (must name the config and the widened mode or servers), a project-defined server (must name the server and say it is project-defined or differs), or a project Codex MCP definition (must name `.codex/config.toml` and each server). A confirmation of one kind never covers another kind; a generic "I confirm" confirms nothing; a decline always wins. Anything not confirmed this way is asked about.
+- Every consultation's result header states the effective MCP policy with one of three fixed statements (default / allowlist with servers / minimal-deny); the proactive consent line (ticket 05) reuses the same statement.
 - Maximum two models per parallel consultation, distinct; parallel is manual-only unless the session override names two models.
 
 ## Testing Decisions
