@@ -29,7 +29,7 @@ claude -p --plugin-dir /path/to/ask-codex \
 
 A headless run needs its tool permissions spelled out; those are the flags the live acceptance runs used.
 
-Installing from GitHub as a marketplace plugin is not available yet; it arrives when the branch is published.
+Installing from GitHub as a marketplace plugin is untested — the branch is published, but that flow has never been exercised, so only the command above is known to work.
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ Installing from GitHub as a marketplace plugin is not available yet; it arrives 
 
 No `codex` command runs before you consent, including the MCP listings.
 
-**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, Claude asks whether it applies to this consultation only or to the rest of the session.
+**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session; a headless run has no way to ask, so the choice applies to that consultation only and the reply should say so — though in testing it says so only about one run in three.
 
 **Parallel consultation.** Name two different models (`astra, sol`) to ask both the same question and get independent opinions, merged into consensus, solo claims and divergences, each tagged with the model that made it, and each divergence resolved with a stated reason. At most two models, never the same one twice.
 

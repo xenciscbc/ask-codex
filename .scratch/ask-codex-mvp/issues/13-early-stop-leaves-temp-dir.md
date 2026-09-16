@@ -8,7 +8,7 @@
 
 ## Evidence (final suite at `f5cfb07`, 2026-09-16)
 
-Five cases failed **only** `temp-cleanup` ("Bash called 0x, expected 1..∞"):
+Five cases failed `temp-cleanup` ("Bash called 0x, expected 1..∞") — four of them failing that grader alone, while `project-layer-aborts-01` also failed the `user-told-which-definition` judge (FAIL/FAIL/PASS), which the fixed bytes later cleared:
 
 - `diagnosis-leak-control` (0.92) — a normal consultation that *did* run `codex exec`, so a run directory certainly existed.
 - `project-config-table` (0.83), `project-layer-aborts-01` (0.67), `project-layer-decline-aborts` (0.83), `project-widening-confirm` (0.83) — all abort before any `codex exec`.
