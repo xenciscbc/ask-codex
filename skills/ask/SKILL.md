@@ -178,18 +178,18 @@ Each may contain `mcp_policy` (`"allowlist"` or `"minimal-deny"`) and `mcp_allow
 
 Find the repository root with `git -C '<project directory>' rev-parse --show-toplevel`; if it fails, there is no repository. Then, using Glob and Read only (not Bash), look for `.codex/config.toml` in the project directory and in every parent directory up to and including the repository root (or in the project directory only when there is no repository). A file defines MCP servers if it contains **any table or key whose path starts with `mcp_servers`**, quoted or not — for example `[mcp_servers.<name>]`, `[mcp_servers]` followed by `<name>.command = …`, `mcp_servers.<name>.command = …`, or `[mcp_servers."<name>"]`.
 
-If any server is defined there, it needs the user's confirmation of *the project Codex MCP definition* for each server (see Confirmations), naming each file, server, and command. **Do not run any `codex` command until this is settled.** On decline, stop: tell the user the consultation was not sent because of the project's own Codex MCP definitions, name them, clean up, and stop. Confirmed servers count as allowed servers for this consultation.
+If any server is defined there, it needs the user's confirmation of *the project Codex MCP definition* for each server (see Confirmations), naming each file, server, and command. **Do not run any `codex` command until this is settled.** On decline, stop: clean up (step 11), then tell the user the consultation was not sent because of the project's own Codex MCP definitions and name them. Confirmed servers count as allowed servers for this consultation.
 
 ### 4. MCP listings and project-defined servers
 
-Run both, each as its own command, exactly in this form — the neutral one first. If the first one fails (for example `command not found`), stop at once and follow **Failures**; do not run the second:
+Run both, each as its own command, exactly in this form — the neutral one first. If the first one fails (for example `command not found`), stop at once, clean up (step 11), and follow **Failures**; do not run the second:
 
 ```bash
 env -C '<tmp>/neutral' codex mcp list --json
 env -C '<project directory>' codex mcp list --json
 ```
 
-Each prints a JSON array of servers (`name`, `enabled`, `transport`, …). Every server name must match `^[A-Za-z0-9_.-]+$`; if one does not, stop and tell the user.
+Each prints a JSON array of servers (`name`, `enabled`, `transport`, …). Every server name must match `^[A-Za-z0-9_.-]+$`; if one does not, stop, clean up (step 11), and tell the user.
 
 A server is **project-defined** if it appears only in the project listing, or if any field of its definition in the project listing differs from the neutral listing (compare the whole object: command, args, env, env_vars, cwd, timeouts, …). If a project-defined server would stay enabled under the policy (it is allowed, or the mode is `minimal-deny` and it is not `node_repl`/`cua_repl`), it needs the user's confirmation of *that project-defined server* (see Confirmations), naming the server and what differs. On decline, add it to the disable set and continue. Project-defined servers that the policy disables anyway need nothing.
 
@@ -210,7 +210,7 @@ Then run the **MCP guard** in the project directory with all the overrides, on o
 env -C '<project directory>' codex mcp list --json -c 'mcp_servers.<name1>={command="ask-codex-disabled",enabled=false}' -c '…'
 ```
 
-Every server in the disable set must show `"enabled": false`, and every other listed server must show the same `enabled` value it had in the project listing. If not, **stop**: do not run `codex exec`; tell the user the consultation was aborted because the MCP guard found a server in the wrong state, and name it.
+Every server in the disable set must show `"enabled": false`, and every other listed server must show the same `enabled` value it had in the project listing. If not, **stop**: do not run `codex exec`; clean up (step 11), then tell the user the consultation was aborted because the MCP guard found a server in the wrong state, and name it.
 
 Keep the **MCP statement** for step 10, exactly one of:
 
@@ -289,6 +289,8 @@ Then **clean up now** — run step 11 immediately, before you present anything. 
 
 ### 10. Present with dispositions
 
+**Before you write this answer, the run directories must already be gone.** If step 11 has not run yet — on the normal path or after any stop — run it now; a presented answer with a surviving run directory is a defect, not a tidiness question.
+
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
 1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium`, an unsupported level clamped, or a model/effort choice that applies to this consultation only).
@@ -314,7 +316,7 @@ A carried claim missing from the reply, or with a `null` status, is shown as `<i
 
 ### 11. Clean up (mandatory, before your final answer)
 
-Run this right after step 9 — and on every early stop after step 1 — never leave it for after your final answer. Delete each run directory (both of them in a parallel consultation) with its literal path, only if that path contains `/ask-codex/`:
+**Every stop is a cleanup.** Run this right after step 9, and before the message in which you tell the user about *any* stop after step 1 — a declined confirmation, a failed listing, an invalid server name, a guard mismatch, a stopped or timed-out run, or any path in **Failures**. Never leave it for after your final answer. Delete each run directory (both of them in a parallel consultation) with its literal path, only if that path contains `/ask-codex/`:
 
 ```bash
 rm -rf -- '<tmp>'
