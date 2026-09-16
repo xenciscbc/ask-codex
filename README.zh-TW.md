@@ -2,7 +2,7 @@
 
 *[English version](./README.md)*
 
-ask-codex 是 Claude Code 外掛，讓 Claude 透過本機 Codex CLI 向 OpenAI Codex 進行**諮詢**，取得獨立意見後由 Claude 自己逐點判斷。Codex 只回答，不會修改任何東西；決策與所有改動都留在 Claude 與你身上——這是諮詢，不是**委派**。
+ask-codex 是 Claude Code 外掛，讓 Claude 透過本機 Codex CLI 向 OpenAI Codex 進行**諮詢**，取得獨立意見後由 Claude 自己逐點判斷。Codex 只回答，本身不會修改任何東西，但有一個例外值得先看下面的說明：MCP server 在 Codex 的唯讀 sandbox 之外執行。決策與所有改動都留在 Claude 與你身上——這是諮詢，不是**委派**。
 
 Codex 以結構化的**論點**回覆，Claude 對每個論點給出**處置**——採納、不採納或待查——並附理由。
 
@@ -25,8 +25,13 @@ claude --plugin-dir /path/to/ask-codex
 headless 執行使用同一個旗標：
 
 ```bash
-claude -p --plugin-dir /path/to/ask-codex "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
+claude -p --plugin-dir /path/to/ask-codex \
+  --permission-mode acceptEdits \
+  --allowedTools Bash Read Glob Grep Skill Write TaskOutput TaskStop \
+  "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
 ```
+
+headless 執行必須明確給出工具權限；上面這組旗標就是實機驗收時使用的。
 
 目前尚不支援從 GitHub 以 marketplace 外掛安裝，待分支發布後提供。
 
@@ -49,13 +54,13 @@ claude -p --plugin-dir /path/to/ask-codex "/ask-codex:ask Why does fetchUser ret
 
 在你同意之前，不會執行任何 `codex` 指令，包含 MCP 列表查詢。
 
-**模型與 effort。** 可用**模型簡稱**指定（`sol`、`astra`、`5.6 sol`），或連同 effort 一起指定（`sol:high`）；簡稱有歧義時 Claude 會列出候選並詢問。未指定時沿用 Codex 設定中的模型。**諮詢 effort** 永遠不低於 `medium` 且一律明確傳入，不會沿用 Codex 設定裡的 effort。當你的**模型指定**與目前設定不同時，Claude 會問這次指定只限這一次，還是延續本 session 其餘。
+**模型與 effort。** 可用**模型簡稱**指定（`sol`、`astra`、`5.6 sol`），或連同 effort 一起指定（`sol:high`）；簡稱有歧義時 Claude 會列出候選並詢問。未指定模型時，Claude 會先用本 session 先前選定的模型，其次是 Codex 設定中的 `model`，再其次是 Codex 列出的模型中優先序最高的那一個。**諮詢 effort** 永遠不低於 `medium` 且一律明確傳入，不會沿用 Codex 設定裡的 effort。當你的**模型指定**與目前設定不同時，Claude 會問這次指定只限這一次，還是延續本 session 其餘。
 
 **並行諮詢。** 指定兩個不同模型（`astra, sol`）可讓兩者回答同一個問題並各自給出**獨立意見**，再合併為**共識**、**單獨提出**與**分歧**三類，每個論點標註來源模型，每個分歧都說明採納哪一方及理由。最多兩個模型，且不可重複。
 
 **接續諮詢。** 接續諮詢在全新的 Codex session 進行，附上前一次的論點與 Claude 的處置，並要求 Codex 逐項回報狀態；不會 resume 先前的 Codex session。
 
-**長時間執行。** Claude 會定期檢查進行中的諮詢。Codex 仍存活且持續產生事件時，Claude 會自行繼續等待並以一行告知。看起來停滯時，Claude 會顯示已經過時間與最後事件及其存在時間，詢問要再等一輪還是停止。停止後比照其他失敗處理：不會有任何內容被歸給 Codex。
+**長時間執行。** Claude 預設每 30 分鐘檢查一次進行中的諮詢。Codex 仍存活且持續產生事件時，Claude 會自行繼續等待並以一行告知。看起來停滯時，互動 session 會顯示已經過時間與最後事件及其存在時間，詢問要再等一輪還是停止；headless 執行無法詢問，因此會把同樣的資訊寫出來後直接停止。停止後比照其他失敗處理：不會有任何內容被歸給 Codex。
 
 **MCP 政策。** 預設每次諮詢停用所有 MCP server（**白名單模式**、空清單）。你可以開放特定 server，或改用**最小停用模式**，只停用 `node_repl` 與 `cua_repl`。設定記錄在使用者層與專案層的 **ask-codex 設定檔**，專案層覆蓋使用者層；`/ask-codex:setup` 會協助建立。每次諮詢送出前，Claude 會重新列出 server 做 **MCP 事前檢查**，實際生效狀態與政策不符就中止。**專案定義的 server** 未經你具名確認一律不使用。
 

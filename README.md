@@ -2,7 +2,7 @@
 
 *[繁體中文版本](./README.zh-TW.md)*
 
-A Claude Code plugin that lets Claude **consult** OpenAI Codex through the local Codex CLI for an independent opinion, and then judge every claim itself. Codex answers; it never edits anything. Every decision and every change stays with Claude and you — this is a consultation, not a delegation.
+A Claude Code plugin that lets Claude **consult** OpenAI Codex through the local Codex CLI for an independent opinion, and then judge every claim itself. Codex answers and never edits anything itself, with one caveat worth reading below: MCP servers run outside Codex's read-only sandbox. Every decision and every change stays with Claude and you — this is a consultation, not a delegation.
 
 Codex returns its opinion as structured **claims**, and Claude gives each one a **disposition** — adopt, reject or investigate — with a reason.
 
@@ -21,8 +21,13 @@ claude --plugin-dir /path/to/ask-codex
 The same flag works for a headless run:
 
 ```bash
-claude -p --plugin-dir /path/to/ask-codex "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
+claude -p --plugin-dir /path/to/ask-codex \
+  --permission-mode acceptEdits \
+  --allowedTools Bash Read Glob Grep Skill Write TaskOutput TaskStop \
+  "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
 ```
+
+A headless run needs its tool permissions spelled out; those are the flags the live acceptance runs used.
 
 Installing from GitHub as a marketplace plugin is not available yet; it arrives when the branch is published.
 
@@ -45,13 +50,13 @@ Installing from GitHub as a marketplace plugin is not available yet; it arrives 
 
 No `codex` command runs before you consent, including the MCP listings.
 
-**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, the one in your Codex config is used. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, Claude asks whether it applies to this consultation only or to the rest of the session.
+**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, Claude asks whether it applies to this consultation only or to the rest of the session.
 
 **Parallel consultation.** Name two different models (`astra, sol`) to ask both the same question and get independent opinions, merged into consensus, solo claims and divergences, each tagged with the model that made it, and each divergence resolved with a stated reason. At most two models, never the same one twice.
 
 **Follow-up consultation.** A follow-up runs in a fresh Codex session carrying the previous claims and Claude's dispositions, and asks Codex to report a status for each. It never resumes the earlier Codex session.
 
-**Long runs.** Claude checks a running consultation periodically. While Codex is alive and producing events, it keeps waiting and says so in one line. If the run looks stalled, Claude asks whether to wait another interval or stop, showing the elapsed time and the last event with its age. Stopping is handled like any other failure: nothing is attributed to Codex.
+**Long runs.** Claude checks a running consultation every 30 minutes by default. While Codex is alive and producing events, it keeps waiting and says so in one line. If the run looks stalled, an interactive session asks whether to wait another interval or stop, showing the elapsed time and the last event with its age; a headless run has no way to ask, so it states the same information and stops. Stopping is handled like any other failure: nothing is attributed to Codex.
 
 **MCP policy.** By default every MCP server is disabled for each consultation (allowlist mode with an empty list). You can allow specific servers, or switch to minimal-deny mode where only `node_repl` and `cua_repl` are disabled. Settings live in an ask-codex config at the user level and optionally in the project, where the project's values override the user's; `/ask-codex:setup` helps you create them. Before every consultation Claude re-lists the servers as an MCP guard and aborts if what is actually enabled differs from the policy. A server defined by the project's own Codex config is never used without your explicit confirmation naming it.
 
