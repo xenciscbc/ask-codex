@@ -1,6 +1,8 @@
-# 12 — Stopping a consultation leaves Codex running
+# 12 — Stopping a consultation leaves Codex running (headless sessions)
 
-**What to build:** when a consultation is stopped — by the stall question, by the non-interactive stop rule, or by the user — the Codex process chain it started actually ends. Today the skill calls `TaskStop` and reports `Consultation stopped:`, but on Windows the `codex.exe` it spawned keeps running: it continues reading files, keeps writing `events.jsonl`, and keeps spending API quota, while the user has been told the consultation is over.
+**What to build:** when a consultation is stopped — by the stall question, by the non-interactive stop rule, or by the user — the Codex process chain it started actually ends **in every kind of session**. Today the skill calls `TaskStop` and reports `Consultation stopped:`, and that is enough in an interactive session, but in a headless (`claude -p`) session on Windows the `codex.exe` it spawned keeps running: it continues reading files, keeps writing `events.jsonl`, and keeps spending API quota, while the user has been told the consultation is over.
+
+**Scope (measured, ticket 09):** the leak is specific to the headless path. In the interactive scenario I3 the user chose "stop" at the stall question and the snapshot taken inside the still-open session listed exactly the six baseline PIDs and nothing else — the chain ended. In the headless A8 and in the direct A8b probe, driven by `TaskStop` on a background task, the chain survived. So the fix targets how a background-task stop propagates, not the stop logic itself.
 
 **Blocked by:** None — can start immediately (found during ticket 09 live acceptance; ticket 09 records F8 as failing because of it).
 
