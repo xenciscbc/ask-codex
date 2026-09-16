@@ -1,4 +1,4 @@
 ---
 type: regex
-pattern: 'Codex still running'
+pattern: '(^|\n)[*_`> ]*Codex still running'
 ---

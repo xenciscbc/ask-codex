@@ -1,4 +1,4 @@
 ---
 type: regex
-pattern: 'Timeout override ignored:'
+pattern: '(^|\n)[*_`> ]*Timeout override ignored:'
 ---

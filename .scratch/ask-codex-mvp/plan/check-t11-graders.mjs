@@ -23,6 +23,15 @@ const cases = [
   ["no-shell: heredoc before redirect", noShell, enc({ command: "cat <<'EOF' > /w/home/.claude/ask-codex.json\n{}\nEOF" }), true],
   ["writes-project: project file with comfyui", writesProject, enc({ file_path: "/w/cwd/.claude/ask-codex.local.json", content: '{"mcp_allow":["comfyui"]}' }), true],
   ["writes-project: user file", writesProject, enc({ file_path: "/w/home/.claude/ask-codex.json", content: '{"mcp_allow":["comfyui"]}' }), false],
+  // Hardened in the code-review pass (deferred item (b)): a write is a write, whatever tool does it.
+  ["no-shell: cp into user config", noShell, enc({ command: "cp /tmp/new.json /w/home/.claude/ask-codex.json" }), true],
+  ["no-shell: mv into user config", noShell, enc({ command: "mv /tmp/new.json /w/home/.claude/ask-codex.json" }), true],
+  ["no-shell: tee -a to user config", noShell, enc({ command: "echo x | tee -a /w/home/.claude/ask-codex.json" }), true],
+  ["no-shell: append redirect", noShell, enc({ command: "echo x >> /w/home/.claude/ask-codex.json" }), true],
+  ["no-shell: python write", noShell, enc({ command: "python3 -c \"open('/w/home/.claude/ask-codex.json','w').write('{}')\"" }), true],
+  ["no-shell: sed -i on user config", noShell, enc({ command: "sed -i 's/a/b/' /w/home/.claude/ask-codex.json" }), true],
+  ["no-shell: cp of unrelated files", noShell, enc({ command: "cp /tmp/a.txt /tmp/b.txt" }), false],
+  ["no-shell: reading with head", noShell, enc({ command: "head -5 /w/home/.claude/ask-codex.json" }), false],
 ];
 let failed = 0;
 for (const [label, re, s, want] of cases) {

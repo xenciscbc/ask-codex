@@ -36,5 +36,20 @@ for (const [c, value, sample] of [["timeout-override-invalid-text", "abc", 'Time
 // The zero case must not be satisfied by any other digit string.
 expect(pattern("timeout-override-invalid-zero", "names-value"), 'Timeout override ignored: "10" is not valid', false, "zero case does not match \"10\"");
 
+// Line anchoring (code-review pass, deferred item (f)): each fixed line must open its own line,
+// so wording folded into a sentence no longer satisfies the grader, while leading markdown does.
+expect(active, "As noted, Timeout override active: 1 minutes (staleness 10 s).", false, "override line folded into a sentence");
+expect(active, "Result below.\nTimeout override active: 1 minutes (staleness 10 s).", true, "override line opening its own line");
+expect(active, "Result below.\n**Timeout override active:** 1 minutes (staleness 10 s).", true, "leading bold markers tolerated");
+expect(running, "I checked and Codex still running — 1 min elapsed.", false, "alive notice folded into a sentence");
+expect(running, "Status:\nCodex still running — 1 min elapsed, last event reasoning 4 s ago; waiting another 1 minutes.", true, "alive notice opening its own line");
+expect(stopped, "In the end Consultation stopped: no events arrived.", false, "stop report folded into a sentence");
+expect(stopped, "Summary.\nConsultation stopped: 1-minute override, 1 min elapsed, no events.", true, "stop report opening its own line");
+for (const c of ["timeout-override-invalid-text", "timeout-override-invalid-zero"]) {
+  const ignored = pattern(c, "override-ignored");
+  expect(ignored, 'Note that Timeout override ignored: "x" is not a positive whole number; using 30 minutes.', false, `${c}: ignored line folded into a sentence`);
+  expect(ignored, 'Header\nTimeout override ignored: "x" is not a positive whole number; using 30 minutes.', true, `${c}: ignored line opening its own line`);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -9,6 +9,10 @@ const samples = [
   ["windows user path", enc("C:\\Users\\x\\.claude\\ask-codex.json", '{"mcp_allow":["comfyui"]}'), true],
   ["project file", enc("/tmp/proj/.claude/ask-codex.local.json", '{"mcp_allow":["comfyui"]}'), false],
   ["user path without comfyui", enc("/tmp/home/.claude/ask-codex.json", '{"mcp_allow":["pencil"]}'), false],
+  // Hardened in the code-review pass (deferred item (b)): the sandbox puts the project under
+  // .../home/cwd/, so a file written there is NOT the user-level config even with the right name.
+  ["project-scoped file with the user-config name", enc("/tmp/claude-eval-x/home/cwd/.claude/ask-codex.json", '{"mcp_allow":["comfyui"]}'), false],
+  ["windows project-scoped path", enc("C:\\eval\\home\\cwd\\.claude\\ask-codex.json", '{"mcp_allow":["comfyui"]}'), false],
 ];
 let failed = 0;
 for (const [label, s, want] of samples) {

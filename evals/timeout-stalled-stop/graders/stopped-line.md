@@ -1,4 +1,4 @@
 ---
 type: regex
-pattern: 'Consultation stopped:'
+pattern: '(^|\n)[*_`> ]*Consultation stopped:'
 ---
