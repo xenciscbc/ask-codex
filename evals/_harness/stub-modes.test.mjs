@@ -134,6 +134,16 @@ try {
     check(fs.readFileSync(path.join(dir, ".stub", "exec.sentinel"), "utf-8").trim().split("\n").length === 2, "by_model: sentinel has one line per call");
   }
   {
+    // A repeated disable definition is an allowlist violation (so count:5 means five distinct servers).
+    const dir = project("dup-disable", {});
+    const out = path.join(dir, "last.json");
+    const dup = 'mcp_servers.blender={command="ask-codex-disabled",enabled=false}';
+    const args = execArgs(dir, out);
+    args.splice(args.indexOf("--disable"), 0, "-c", dup, "-c", dup);
+    run(args, dir);
+    check(/repeated disable definition for blender/.test(fs.readFileSync(path.join(dir, ".stub", "violations.log"), "utf-8")), "repeated disable definition is a violation");
+  }
+  {
     const { r, dir } = execCase("valid");
     const files = fs.readdirSync(path.join(dir, ".stub"));
     check(r.status === 0 && files.includes("exec-argv.gpt-5.6-sol.json") && files.includes("exec-argv.json"), "single run: -m copy plus the single-run file");

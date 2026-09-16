@@ -229,11 +229,19 @@ def exec_(args):
     for flag in opts["repeated"]:
         problems.append(f"repeated {flag}")
     effort_seen = False
+    disabled_seen = set()
     for kv in opts["c"]:
         if EFFORT_RE.match(kv):
             effort_seen = True
-        elif not DISABLE_RE.match(kv):
+            continue
+        m = DISABLE_RE.match(kv)
+        if not m:
             problems.append(f"unexpected -c {kv}")
+        elif m.group(1) in disabled_seen:
+            # With a count of disable definitions, this proves they name distinct servers.
+            problems.append(f"repeated disable definition for {m.group(1)}")
+        else:
+            disabled_seen.add(m.group(1))
     if not effort_seen:
         problems.append("missing effort override")
     for u in opts["unknown"]:

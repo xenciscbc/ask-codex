@@ -61,6 +61,9 @@ if (fs.existsSync(EXCERPT)) {
   // Split at the first line that starts with the check line (the header must not satisfy this).
   const at = text.search(/^Parallel check:/m);
   check(at > 0, "the excerpt contains a line starting with 'Parallel check:'");
+  // It must be written at the check itself — in an assistant text before the final reply, not only restated there.
+  const lastSection = text.lastIndexOf("--- assistant text ");
+  check(at > 0 && at < lastSection, "the check line appears in a message before the final reply");
   const before = at > 0 ? text.slice(0, at) : text;
   check(!/\bC[1-9]\b|Codex's summary|Consensus|Solo claims/.test(before), "no claim shown before the parallel check");
 } else {
