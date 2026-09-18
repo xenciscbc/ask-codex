@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved — evidence in `../evidence/01-stop-behaviour.md` (2026-09-18; see Comments for the one criterion met only in part)
 
 **Type:** research
 
@@ -16,8 +16,13 @@
 
 ## Acceptance criteria
 
-- [ ] evidence 檔記錄兩次 live probe 的 PID 基線、停止後兩個時間點的 PID 集合、`events.jsonl` 大小變化，並給出結論：殘留行程發生於「headless」「互動式」或「兩者」。
-- [ ] evidence 檔記錄 `timeout-stalled-stop` 三個 run 中 `Consultation stopped:` 的出現位置，並給出結論：缺漏屬於「從沒寫」或「寫了沒重述」（或三跑都有寫）。
-- [ ] evidence 檔記錄 `second-opinion-with-stance` 五個 run 中裸 `cd` 的出現次數與所在步驟，或「未重現」。
-- [ ] 所有 probe workspace 與 `--keep-temp` 保留目錄已刪除；`config.toml` hash 前後一致（Codex app 自行改寫的 runtime 欄位除外，需逐一列出）。
-- [ ] 沒有改動任何 skill、eval 或 README 檔案。
+- [x] evidence 檔記錄兩次 live probe 的 PID 基線、停止後兩個時間點的 PID 集合、`events.jsonl` 大小變化，並給出結論：殘留行程發生於「headless」「互動式」或「兩者」。
+- [x] evidence 檔記錄 `timeout-stalled-stop` 三個 run 中 `Consultation stopped:` 的出現位置，並給出結論：缺漏屬於「從沒寫」或「寫了沒重述」（或三跑都有寫）。
+- [x] evidence 檔記錄 `second-opinion-with-stance` 五個 run 中裸 `cd` 的出現次數與所在步驟，或「未重現」。
+- [x] 所有 probe workspace 與 `--keep-temp` 保留目錄已刪除；`config.toml` hash 前後一致（Codex app 自行改寫的 runtime 欄位除外，需逐一列出）。
+- [x] 沒有改動任何 skill、eval 或 README 檔案。
+
+## Comments
+
+**2026-09-18 — resolved; three conclusions, one criterion met in part.** (1) Probes A and B: after `TaskStop` the whole `sh → node → codex.exe` chain ran to completion in **both** the interactive and the headless session (each spent the full consultation's quota), so the residue is a property of `TaskStop` on a background Bash task, not of the session kind; ticket 12's scope statement is wrong and 03/04 verify both kinds. Probe C: Git Bash `ps` maps `$!` to a Windows pid and `taskkill //T //F` ends a four-level chain — the basis of ticket 02's scripts. (2) Probe D (`timeout-stalled-stop --runs 3`, kept traces): the `Consultation stopped:` line is **never written at the stop**; it is improvised once in the final message, and two of the three improvisations were judged incomplete (options missing; elapsed muddled). Gap type: "not written at the stop, improvised at the end". (3) Probe E (`second-opinion-with-stance --runs 5`): no `cd` in any form in 60+ Bash calls — **not reproduced**; ticket 06 becomes a wording guard, not a behavioural fix.
+The guarded-file criterion is met only in part: `ask-codex.json` stayed absent, but `config.toml`'s hash changed at 10:29:39 — the moment the Codex desktop app started after the reboot, before probe D was launched and outside anything the WSL-sandboxed evals can reach — and the per-field list cannot be produced because only the hash, not the bytes, was kept. Recorded as the app's own rewrite; ticket 04 backs up the bytes first. The machine crashed mid-ticket after probes A–C; evidence for those was committed as `0190766`, the rest here.

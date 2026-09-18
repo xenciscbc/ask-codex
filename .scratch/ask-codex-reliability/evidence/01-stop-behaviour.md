@@ -62,4 +62,15 @@ So in this sample the report is **never written at the moment of the stop**; it 
 
 ## Probe E — `second-opinion-with-stance --keep-temp --runs 5` (bare `cd`)
 
-_Running; see below when finished._
+Results `evals/results/2026-09-18T02-40-04-451Z/`: **5 of 5 runs 1.00**, every grader passed including `no-bare-cd`. The five kept traces (`/tmp/ask-codex-eval.nGP721/tmp/claude-eval-{FOlqtY,DH6zEr,sZTxKM,JkEP74,bSusXX}`, deleted afterwards) were scanned for every Bash call: 12, 12, 14, 13 and 11 calls per run, and **no command in any form starting with `cd`** — neither as the first token nor after `;`, `&&`, `|`, `(` or a newline.
+
+**Conclusion E:** not reproduced in five runs. Ticket 17's single observation stands as a one-off; ticket 06 should be a wording guard plus the existing `no-bare-cd` grader (already 5/5 here), not a behavioural fix with a red phase — there is nothing to turn red.
+
+## Guarded files after all probes
+
+- `C:\Users\admin\.claude\ask-codex.json`: still absent.
+- `D:\codex\config.toml`: sha256 now `3cd8577077cee9a4…`, **different** from the `2eb8baef5a5bd4e1…` recorded before probes A–C and re-verified at 10:24 today (after the reboot, before anything was launched). The file's mtime is **10:29:39**, which is when the Codex desktop app came up after the reboot (`codex.exe` started 10:28:55); probe D was launched at 10:30 and both probes run inside WSL with a sandboxed `HOME`, so they cannot reach `D:\codex`. The change is therefore the app's own rewrite (the known runtime-path / pipe-GUID / app-version fields), not the skill's. The per-field list required by the ticket cannot be produced because no copy of the earlier bytes exists — only the hash was recorded. Top-level `model = "gpt-6-astra"` and `model_reasoning_effort = "medium"` are the current values; whether `model` was rewritten cannot be told from a hash. **Lesson for ticket 04:** back up `config.toml` bytes (not just the hash) before each live scenario, and take the hash only once the Codex app has finished starting.
+
+## Cleanup
+
+Probe workspace `D:\tmp\ask-codex-probe-stop` and the `R:\Temp\ask-codex\probe-*` run directories were deleted in the first session; both kept eval sandboxes (`/tmp/ask-codex-eval.JfFzd0`, `/tmp/ask-codex-eval.nGP721`) were deleted after their traces were read; the harness's own cleanup removed `.eval-stub/` and every `stubbin/`. No skill, eval or README file was changed by this ticket.
