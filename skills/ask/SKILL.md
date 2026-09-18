@@ -50,15 +50,17 @@ A consultation that cannot produce a valid opinion ends with a short, specific r
 | The output (`stderr.log` or `events.jsonl`) contains `os error 1` | Codex cannot run in this project's location — its Windows sandbox fails on this drive (`os error 1`). |
 | Any other non-zero exit | The Codex run failed: quote the most useful line of `<tmp>/stderr.log`, or, if that is empty, the last line of `<tmp>/events.jsonl`. |
 | `last-message.json` is missing, empty, or not readable text | Codex returned no usable reply. |
+| The run was stopped (step 8's stop path) | The `Consultation stopped:` line printed by the stop script, word for word, as the first line of your answer. |
 
 Say the reason with the right-hand column's wording, word for word (translate the rest of your answer if the conversation is in another language, but keep these sentences and anything in backticks as written). For a login failure the command must appear exactly as `! codex login` — with the `!`, which runs it in this session.
 
 For every failure:
 
+- For a stopped run, the first line of your final answer is the `Consultation stopped:` line the stop script printed, word for word — before the sentence from the table, before anything else.
 - Run `codex exec` at most once per consultation and model (see Ground rules); never retry.
 - Attribute nothing to Codex — no summary, claim, or opinion.
-- Clean up (step 11).
-- Then carry on with the work that led to the consultation. If the consultation was the whole request, answer the question yourself and label it clearly as your own view, not Codex's.
+- Clean up (step 11) — for a stopped run, after the stop script and `TaskStop` (step 8's stop path).
+- Then carry on with the work that led to the consultation. If the consultation was the whole request, answer the question yourself and label it clearly as your own view, not Codex's — for a stopped run, *below* the `Consultation stopped:` line that opens the answer, never instead of it.
 
 ## Proactive consultations
 
@@ -243,10 +245,10 @@ Before writing, check every slot:
 Run this single command with `run_in_background: true`, on one line, all paths single-quoted literals:
 
 ```bash
-codex exec -s read-only --ephemeral --skip-git-repo-check --json -C '<project directory>' -m <model> -c 'model_reasoning_effort="<effort>"' <one -c override per disabled server> --disable apps --output-schema '<skill directory>/consultation.schema.json' -o '<tmp>/last-message.json' - < '<tmp>/prompt.md' > '<tmp>/events.jsonl' 2> '<tmp>/stderr.log'
+bash '<skill directory>/scripts/run.sh' '<tmp>' -- codex exec -s read-only --ephemeral --skip-git-repo-check --json -C '<project directory>' -m <model> -c 'model_reasoning_effort="<effort>"' <one -c override per disabled server> --disable apps --output-schema '<skill directory>/consultation.schema.json' -o '<tmp>/last-message.json' - < '<tmp>/prompt.md' > '<tmp>/events.jsonl' 2> '<tmp>/stderr.log'
 ```
 
-Omit `-m <model>` only when step 6 found no model. Never add other flags or `-c` keys (no `--dangerously-*`, `--full-auto`, `--yolo`, `--profile`, `--add-dir`, `--ignore-user-config`, other sandbox modes, `resume`, or `fork`).
+The `run.sh` prefix ships with this skill: it starts Codex as its own process tree and writes `<tmp>/pid` so the stop script can end it; everything after `--` is the `codex exec` command with its redirections, unchanged. Omit `-m <model>` only when step 6 found no model. Never add other flags or `-c` keys (no `--dangerously-*`, `--full-auto`, `--yolo`, `--profile`, `--add-dir`, `--ignore-user-config`, other sandbox modes, `resume`, or `fork`).
 
 Then watch it until it finishes. **Do not end your turn while the consultation is still running** — in a non-interactive session nothing would bring you back, and the run would be orphaned. Do not start work that depends on the answer before it arrives.
 
@@ -257,7 +259,7 @@ Then watch it until it finishes. **Do not end your turn while the consultation i
 The **staleness threshold S** is T/6 (5 minutes by default).
 
 **Waiting.** Wait until the consultation finishes or T has passed, whichever comes first:
-- If a `TaskOutput` tool is available (load it with ToolSearch if it is deferred): call it on the consultation's background task with `block: true` and a timeout of the remaining time, at most 600000 ms per call, and repeat until T has passed.
+- If a `TaskOutput` tool is available (load it with ToolSearch if it is deferred): call it on the consultation's background task with `block: true` and `timeout` set to **the time left in the interval, in milliseconds** (T × 60 000 minus what has already elapsed — for T = 1 that is at most 60000, never the tool's own 600000 cap), and repeat until T has passed. A longer timeout would silently wait past the interval and skip the check.
 - Otherwise start a timer — `sleep <T in seconds>` with Bash `run_in_background: true` — and wait for whichever completion notification arrives first: the consultation's or the timer's.
 When the consultation finishes, go to step 9.
 
@@ -267,16 +269,22 @@ When the consultation finishes, go to step 9.
 - **Still running but the last event is older than S** → ask with `AskUserQuestion`, showing the elapsed time and the last event with its age, with the options "wait another T minutes" and "stop this consultation". Recommend "wait" if the last event is at most T/2 old, otherwise "stop". "Wait" starts another interval — there is no limit on how often the user may wait. "Stop" → stop path.
 - **No `AskUserQuestion`** (non-interactive session): state the same question and recommendation in text, then take "stop" — you cannot wait for an answer without ending your turn.
 
-**Stop path.** End the consultation's background task with `TaskStop`. Then handle it as a failure (see Failures): attribute nothing to Codex, clean up (step 11), and give a **final stop report** that states the interval in force (default or override), the elapsed time, the last event and its age (or "no events"), the two options that were offered with the recommended one, and that the consultation was stopped; then carry on.
+**Stop path.** Stop in this order:
+1. Run the stop script **while `<tmp>` still exists** (one line, single-quoted literals): `bash '<skill directory>/scripts/stop.sh' '<tmp>' --interval <T> --interval-source <default|override> --recommended <wait|stop>` — in a parallel consultation add `--done '<full slugs that finished, or none>' --still-running '<full slugs still going>'`, and run it once per run you stop. It ends the run's process tree, verifies that, and prints one line beginning `Consultation stopped:` with every field of the stop report.
+2. Write that line, copied word for word, as the **first line of the message in which you call `TaskStop`** (markdown emphasis around the fixed words is allowed; the words, their order and the values are not) — the line comes first, before any narration such as "now calling `TaskStop`"; a `TaskStop` call in a message that does not begin with the line is the defect this step exists to prevent. Never compose the report yourself. If the line ends `process tree NOT confirmed — pids <…>`, copy it unchanged and tell the user the stop could not be confirmed and which pids are listed; never turn it into "ended".
+3. Call `TaskStop` on that run's background task, whether or not the task already ended on its own.
+4. Only now clean up (step 11) — the stop script needs the run directory — with the stopped run's cleanup line, which first shows the lines your final answer must open with: `cat -- '<tmp>/stop-report'; rm -rf -- '<tmp>'`. In a parallel consultation, read the other run's reply (step 9) before cleaning up any directory.
+Then handle the run as a failure (see Failures): attribute nothing to Codex, and make the **first line of your final answer** that same `Consultation stopped:` line, word for word (step 10 item 1) — a stop described in prose without it is a defect.
 
 **Fixed wording.** Start each of these lines with the words shown, word for word (in any conversation language):
 - valid override: `Timeout override active: <T> minutes (staleness <S>).`
 - ignored override: `Timeout override ignored: "<value>" is not a positive whole number; using 30 minutes.`
 - confirmed-alive notice: `Codex still running — <elapsed> elapsed, last event <type> <age> ago; waiting another <T> minutes.`
-- final stop report: `Consultation stopped: ` followed by the required fields above.
+- confirmed-alive notice in a parallel consultation: `Codex still running — <elapsed> elapsed; done — <full slugs or none>; still running — <full slugs>; waiting another <T> minutes.`
+- final stop report: the `Consultation stopped:` line printed by the stop script, copied word for word — never composed by hand.
 Show the override line (if any) as soon as you have read the variable, and the notices when they happen; step 10 restates them.
 
-**Parallel consultation.** Start one background `codex exec` per model — each with its own `-m`, effort, run directory, `-o` and output files, and every one with the full disable set. Both share one timer. **Never stop a run, ask the user, or start another wait without having written this line for that check first.** Write it as the first text of the message in which you make the check — before you judge liveness, call `TaskStop`, ask, or wait again; on its own line, beginning exactly with `Parallel check:`, never paraphrased or replaced by prose: `Parallel check: done — <full slugs, or none>; still running — <full slugs>.` Making a check in a message with no text at all breaks this rule: write the line, then act. If you did stop or wait without it, write it as the first line of your very next message. Then apply the liveness rules above only to the runs still going (ask about them, or without `AskUserQuestion` stop them). Hold finished results: present nothing until every run has finished or been stopped.
+**Parallel consultation.** Start one background run per model (each through `run.sh`) — each with its own `-m`, effort, run directory, `-o` and output files, and every one with the full disable set. Both share one timer. At each check, apply the liveness rules above only to the runs still going, and carry the parallel state — which full slugs are done (or `none`) and which are still running — in the text you write for that check: the confirmed-alive notice uses its parallel form (fixed wording above); a question to the user starts, as the first line of its text, with `Parallel check: done — <full slugs or none>; still running — <full slugs>.`; a stop passes `--done` and `--still-running` to the stop script, so the stop line carries them. Without `AskUserQuestion`, stop every run still going, each through the stop path. Hold finished results: present nothing until every run has finished or been stopped.
 
 ### 9. Read the reply
 
@@ -289,12 +297,12 @@ Then **clean up now** — run step 11 immediately, before you present anything. 
 
 ### 10. Present with dispositions
 
-**Before you write this answer, the run directories must already be gone.** If step 11 has not run yet — on the normal path or after any stop — run it now; a presented answer with a surviving run directory is a defect, not a tidiness question.
+**Before you write this answer, the run directories must already be gone.** If step 11 has not run yet — on the normal path or after any stop — run it now; a presented answer with a surviving run directory is a defect, not a tidiness question. **If a run was stopped, the first line of this answer is the `Consultation stopped:` line the stop script printed, word for word** (one per stopped run, then item 1); an answer that describes the stop in prose without that line is a defect of the same kind.
 
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
 1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium`, an unsupported level clamped, or a model/effort choice that applies to this consultation only).
-   Then restate the timer outcome from step 8, each on **its own line that begins exactly with the fixed wording** — never folded into another sentence: the override line if the variable was set, and one line per liveness check that ran. For example:
+   Then restate the timer outcome from step 8, each on **its own line that begins exactly with the fixed wording** — never folded into another sentence: the override line if the variable was set, one line per liveness check that ran, and, for every run that was stopped, the `Consultation stopped:` line from the stop script, word for word. For example:
    `Timeout override ignored: "0" is not a positive whole number; using 30 minutes.`
    `Codex still running — 1 min elapsed, last event reasoning 4 s ago; waiting another 1 minutes.`
    Say nothing about the timer when no override was set and no check ran.
@@ -312,12 +320,18 @@ Only present claims that are actually in the reply. Cleanup already ran at the e
 `<id> [<followup_status>] <statement> — Updated disposition: <adopt|reject|investigate> — <reason>`
 A carried claim missing from the reply, or with a `null` status, is shown as `<id> [no status returned]`. New claims whose `followup_status` is `new-blocking` go under the heading `New blocking claim from Codex`, each with a disposition. A new claim that is not `new-blocking` is omitted — not presented, and not mentioned at all (not even to say that it was omitted).
 
-**Parallel reply.** Item 1 names both models and their efforts, followed — each on its own line, word for word (markdown emphasis around the fixed words is allowed; the words, their order and the values are not) — by every `Parallel check:` line you wrote during the run. Then all three of these headings, word for word and in this order, every time — `Consensus` (claims both models made), `Solo claims` (made by one model), `Divergences` (where they disagree) — never dropping one because it would be empty: under an empty heading write `none`. Tag every claim with its source's **full model slug** — `[gpt-6-astra]`, never the alias `[astra]` — or `[both]`, and give it a disposition; end every divergence with `Adopted: <slug> — <reason>`. If one run failed or was stopped, present the other run normally (no grouping) and add, on its own line (markdown emphasis around the fixed words is allowed; the words and the values are not), the line `Failed model: <slug> — <reason>` (for a stop: `Failed model: <slug> — stopped after <elapsed> without progress`); attribute nothing to the failed model.
+**Parallel reply.** Item 1 names both models and their efforts, followed — each on its own line, word for word (markdown emphasis around the fixed words is allowed; the words, their order and the values are not) — by one `Parallel check: done — <full slugs or none>; still running — <full slugs>.` line per liveness check that ran, composed from that check's state, in order, and by the `Consultation stopped:` line of every run that was stopped. Then all three of these headings, word for word and in this order, every time — `Consensus` (claims both models made), `Solo claims` (made by one model), `Divergences` (where they disagree) — never dropping one because it would be empty: under an empty heading write `none`. Tag every claim with its source's **full model slug** — `[gpt-6-astra]`, never the alias `[astra]` — or `[both]`, and give it a disposition; end every divergence with `Adopted: <slug> — <reason>`. If one run failed or was stopped, present the other run normally (no grouping) and **always** add, on its own line (markdown emphasis around the fixed words is allowed; the words and the values are not), the line `Failed model: <slug> — <reason>` — a stopped run gets this line *in addition to* its `Consultation stopped:` line, never instead of it (for a stop: `Failed model: <slug> — stopped after <elapsed> without progress`, with `<elapsed>` copied from the `elapsed` field of that run's stop line); attribute nothing to the failed model.
 
 ### 11. Clean up (mandatory, before your final answer)
 
-**Every stop is a cleanup.** Run this right after step 9, and before the message in which you tell the user about *any* stop after step 1 — a declined confirmation, a failed listing, an invalid server name, a guard mismatch, a stopped or timed-out run, or any path in **Failures**. Never leave it for after your final answer. Delete each run directory (both of them in a parallel consultation) with its literal path, only if that path contains `/ask-codex/`:
+**Every stop is a cleanup.** Run this right after step 9, and before the message in which you tell the user about *any* stop after step 1 — a declined confirmation, a failed listing, an invalid server name, a guard mismatch, a stopped or timed-out run, or any path in **Failures**. One exception, for a stopped run: the stop script must run while the run directory exists, so the `Consultation stopped:` line and `TaskStop` come first (step 8's stop path) and the cleanup follows immediately after `TaskStop` — still before your final answer. Never leave it for after your final answer. Delete each run directory (both of them in a parallel consultation) with its literal path, only if that path contains `/ask-codex/`:
 
 ```bash
 rm -rf -- '<tmp>'
+```
+
+For a run that was **stopped** (step 8's stop path), use this line instead — it shows the lines your final answer must open with, then deletes the directory:
+
+```bash
+cat -- '<tmp>/stop-report'; rm -rf -- '<tmp>'
 ```

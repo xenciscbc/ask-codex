@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved — by reliability slice 03 (2026-09-18)
 
 ## Evidence (resampling at `f5cfb07`, 2026-09-16)
 
@@ -20,6 +20,10 @@ In a parallel consultation the user may be told a run was stopped without ever b
 
 ## Acceptance criteria
 
-- [ ] ~~`parallel-shared-timer` passes `check-line-before-stop` on 3 of 3 runs.~~ 改寫（reliability slice-03 rev 3）：`check-line-before-stop` 隨「行動前先寫 `Parallel check:`」規則一起刪除；取代證據為 `parallel-info-before-stop`（done/still-running 欄位出現在 `TaskStop` 之前的 assistant 訊息）與 `stopped-report`（最終訊息含完整停止報告行與並行欄位）在 `--runs 5` 全數通過。
-- [ ] Ticket 08's comments record the measured reliability rather than the single-run result.
-- [ ] The step 8 rule is reworked so the line is tied to an action the model cannot skip, as the fix pass 2 attempted; if a wording change cannot reach 3 of 3, consider having the skill write the line from a command whose output is visible instead.
+- [x] ~~`parallel-shared-timer` passes `check-line-before-stop` on 3 of 3 runs.~~ 改寫（reliability slice-03 rev 3）：`check-line-before-stop` 隨「行動前先寫 `Parallel check:`」規則一起刪除；取代證據為 `parallel-info-before-stop`（done/still-running 欄位出現在 `TaskStop` 之前的 assistant 訊息）與 `stopped-report`（最終訊息含完整停止報告行與並行欄位）在 `--runs 5` 全數通過。
+- [x] Ticket 08's comments record the measured reliability rather than the single-run result.
+- [x] The step 8 rule is reworked so the line is tied to an action the model cannot skip, as the fix pass 2 attempted; if a wording change cannot reach 3 of 3, consider having the skill write the line from a command whose output is visible instead.
+
+## Comments
+
+**2026-09-18 — resolved by reliability slice 03.** The pre-action rule ("write `Parallel check:` before you act") was the unreliable part and is gone; the parallel state now rides on text the model necessarily writes: the parallel form of the still-running notice, the first line of the question text, and the `Consultation stopped:` line printed by `stop.sh` with `--done`/`--still-running`. Measured on the final bytes: `parallel-info-before-stop` (the fields on an assistant line before `TaskStop`) **15/15**, `check-line` (one `Parallel check:` line per check in the final answer) **15/15**, `stopped-report` 15/15 — three rounds of `parallel-shared-timer --runs 5`. Ticket 03's Comments list the result directories and traces.

@@ -4,16 +4,20 @@
 #   bash stop.sh '<run directory>' --interval <minutes> --interval-source default|override \
 #       --recommended wait|stop [--done '<slugs or none>' --still-running '<slugs>']
 #
-# Reads `<run directory>/pid` (written by run.sh), ends the whole process tree it names
-# (Windows: taskkill /T /F on the Windows pid; elsewhere: the process group created by
-# setsid), then verifies that no process of the tree survives and that `events.jsonl` does
-# not change during a 5-second observation window. Prints exactly one report line on stdout,
-# beginning with `Consultation stopped:`, for the model to copy verbatim; exits 0 only when
-# the tree is confirmed ended. Never deletes the run directory. Needs only bash and the
-# platform's own tools (Windows: tasklist, taskkill, powershell; Linux/macOS: ps, kill).
+# Reads `<run directory>/pid` (written by run.sh) and ends the whole process tree two ways at
+# once: it asks run.sh to do it from inside the child's process namespace (by creating
+# `<run directory>/stop-request` and waiting for `stop-result`), and, when the recorded pid is
+# visible from here, it also kills the tree directly (Windows: taskkill /T /F on the Windows
+# pid; elsewhere: the process group created by setsid). The tree counts as ended when run.sh
+# reports `ended`, or when the pid was visible and nothing of its tree survives. It then
+# verifies that `events.jsonl` does not change during a 5-second observation window. Prints
+# exactly one report line on stdout, beginning with `Consultation stopped:`, for the model to
+# copy verbatim; exits 0 only when the tree is confirmed ended. Never deletes the run
+# directory. Needs only bash and the platform's own tools.
 set -u
 
 WINDOW_S=5
+RESULT_WAIT_S=10
 
 usage() {
   echo "usage: stop.sh <run directory> --interval <minutes> --interval-source default|override --recommended wait|stop [--done <text> --still-running <text>]" >&2
@@ -37,48 +41,11 @@ case "$source" in default|override) ;; *) usage ;; esac
 case "$recommended" in wait|stop) ;; *) usage ;; esac
 [ -d "$run_dir" ] || { echo "stop.sh: run directory not found: $run_dir" >&2; exit 2; }
 
-# ---- helpers ---------------------------------------------------------------------------
+# shellcheck source=_tree.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_tree.sh"
 
 mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
-
-mtime() {
-  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
-}
-
-join() { local IFS=", "; echo "$*"; }
-
-# Windows: the pid and all its descendants, via the parent links PowerShell reports.
-win_tree() {
-  local root="$1" pairs
-  pairs="$(powershell.exe -NoProfile -NonInteractive -Command \
-    'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }' 2>/dev/null | tr -d '\r')"
-  printf '%s\n' "$pairs" | awk -v root="$root" '
-    { child[$1] = $2 }
-    END {
-      seen[root] = 1; changed = 1
-      while (changed) { changed = 0; for (c in child) if (!(c in seen) && (child[c] in seen)) { seen[c] = 1; changed = 1 } }
-      for (p in seen) print p
-    }'
-}
-
-# Windows: is the pid alive? `ps -W` omits some processes (a bash that has exec'd, for
-# one), so ask tasklist; its "no tasks" notice is localized, but a match has the pid in
-# column 2 whatever the language.
-win_alive() {
-  tasklist //NH //FI "PID eq $1" 2>/dev/null | awk -v p="$1" '$2 == p { found = 1 } END { exit found ? 0 : 1 }'
-}
-
-# POSIX: members of the process group (setsid made the pid its own group id), plus
-# descendants by parent pid in case the group was not created.
-posix_tree() {
-  local root="$1"
-  { ps -o pid= -g "$root" 2>/dev/null; echo "$root"; posix_descendants "$root"; } | tr -d ' ' | awk 'NF && !seen[$1]++'
-}
-posix_descendants() {
-  local p c
-  for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do echo "$c"; posix_descendants "$c"; done
-}
-posix_alive() { kill -0 "$1" 2>/dev/null; }
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
 
 # ---- read the pid file -----------------------------------------------------------------
 
@@ -103,12 +70,19 @@ else
 fi
 
 report() {
-  local verdict="$1"
-  local line="Consultation stopped: interval $interval minutes ($source); elapsed $elapsed; $last_event; offered: wait another $interval minutes / stop (recommended: $recommended); $verdict"
-  if [ "$parallel" = 1 ]; then
-    line="$line; done — ${done_text:-none}; still running — ${running_text:-none}"
-  fi
+  local line="Consultation stopped: interval $interval minutes ($source); elapsed $elapsed; $last_event; offered: wait another $interval minutes / stop (recommended: $recommended); $1"
+  [ "$parallel" = 1 ] && line="$line; done — ${done_text:-none}; still running — ${running_text:-none}"
   echo "$line"
+  # The model copies the line at the moment of the stop; say so where it is looking — and say
+  # nothing else here (a procedural hint in this output was followed over the skill's own order).
+  echo "stop.sh: copy the line above, verbatim, as the first line of your next message, before anything else." >&2
+  # The lines the final answer must open with, shown again by the cleanup command
+  # (`cat -- '<run dir>/stop-report'; rm -rf -- '<run dir>'`) right before that answer is written.
+  {
+    echo "Begin your final answer with these lines, verbatim (markdown emphasis around the fixed words is allowed):"
+    echo "$line"
+    [ "$parallel" = 1 ] && echo "Parallel check: done — ${done_text:-none}; still running — ${running_text:-none}."
+  } > "$run_dir/stop-report"
 }
 
 if [ -z "$pid" ] || [ -z "$platform" ]; then
@@ -117,46 +91,35 @@ if [ -z "$pid" ] || [ -z "$platform" ]; then
   exit 2
 fi
 
-# ---- kill the tree ---------------------------------------------------------------------
+# ---- stop the tree: cooperative request plus direct kill when the pid is visible ---------
 
-if [ "$platform" = windows ]; then
-  if ! win_alive "$pid"; then
-    echo "stop.sh: pid $pid is not running" >&2
-    report "process tree NOT confirmed — pids $pid (not running)"
-    exit 3
-  fi
-  members="$(win_tree "$pid")"
-  [ -n "$members" ] || members="$pid"
-  taskkill //T //F //PID "$pid" >/dev/null 2>&1
-  sleep 1
-  survivors=()
-  for p in $members; do win_alive "$p" && survivors+=("$p"); done
-  if [ ${#survivors[@]} -gt 0 ]; then
-    for p in "${survivors[@]}"; do taskkill //F //PID "$p" >/dev/null 2>&1; done
-    sleep 1
-    remaining=()
-    for p in "${survivors[@]}"; do win_alive "$p" && remaining+=("$p"); done
-    survivors=("${remaining[@]+"${remaining[@]}"}")
-  fi
-else
-  if ! posix_alive "$pid"; then
-    echo "stop.sh: pid $pid is not running" >&2
-    report "process tree NOT confirmed — pids $pid (not running)"
-    exit 3
-  fi
-  members="$(posix_tree "$pid")"
-  kill -TERM -- "-$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
-  for p in $members; do kill -TERM "$p" 2>/dev/null; done
-  for _ in 1 2 3 4 5 6; do
-    alive=0; for p in $members; do posix_alive "$p" && alive=1; done
-    [ "$alive" = 0 ] && break
-    sleep 0.5
-  done
-  kill -KILL -- "-$pid" 2>/dev/null
-  for p in $members; do kill -KILL "$p" 2>/dev/null; done
+rm -f "$run_dir/stop-result"
+: > "$run_dir/stop-request"
+
+visible=0; direct_survivors=""
+if tree_alive "$platform" "$pid"; then
+  visible=1
+  direct_survivors="$(tree_kill "$platform" "$pid")"
+fi
+
+result=""
+for _ in $(seq 1 $(( RESULT_WAIT_S * 2 ))); do
+  [ -s "$run_dir/stop-result" ] && { result="$(cat "$run_dir/stop-result")"; break; }
+  # Nothing to wait for once the pid was visible and its tree is gone.
+  [ "$visible" = 1 ] && [ -z "$direct_survivors" ] && ! tree_alive "$platform" "$pid" && break
   sleep 0.5
-  survivors=()
-  for p in $members; do posix_alive "$p" && survivors+=("$p"); done
+done
+
+ended=0; survivors=""
+case "$result" in
+  ended) ended=1 ;;
+  survivors\ *) survivors="${result#survivors }" ;;
+esac
+if [ "$ended" = 0 ] && [ -z "$survivors" ] && [ "$visible" = 1 ]; then
+  if [ -n "$direct_survivors" ]; then survivors="$direct_survivors"
+  elif ! tree_alive "$platform" "$pid"; then ended=1
+  else survivors="$pid"
+  fi
 fi
 
 # ---- observation window: events.jsonl must stay still ------------------------------------
@@ -164,15 +127,19 @@ fi
 before="$(mtime "$events")"
 sleep "$WINDOW_S"
 after="$(mtime "$events")"
-still_writing=0
-[ "$before" != "$after" ] && still_writing=1
 
-if [ ${#survivors[@]} -gt 0 ]; then
-  echo "stop.sh: processes still alive after taskkill/kill: ${survivors[*]}" >&2
-  report "process tree NOT confirmed — pids $(join "${survivors[@]}")"
+if [ "$ended" = 0 ]; then
+  if [ -n "$survivors" ]; then
+    echo "stop.sh: processes still alive after the kill: $survivors" >&2
+    report "process tree NOT confirmed — pids $survivors"
+  else
+    echo "stop.sh: pid $pid is not visible from here and run.sh gave no answer within ${RESULT_WAIT_S}s" >&2
+    report "process tree NOT confirmed — pids $pid (not running)"
+    exit 3
+  fi
   exit 1
 fi
-if [ "$still_writing" = 1 ]; then
+if [ "$before" != "$after" ]; then
   echo "stop.sh: events.jsonl changed during the ${WINDOW_S}s observation window" >&2
   report "process tree NOT confirmed — pids $pid (events.jsonl still changing)"
   exit 1

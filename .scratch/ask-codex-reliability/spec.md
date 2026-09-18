@@ -71,6 +71,8 @@ MVP 已上 `main`，但五個實測缺陷讓使用者不能完全相信 ask-code
 - 停止腳本接受模型才知道的欄位為參數（生效的檢查間隔與來源、曾提供的選項與建議、並行時各模型的狀態），印出完整的停止報告行；模型逐字複製，不自行組合。
 - 選 bash 而非 node 或 python：Bash tool 在 Windows 是 Git Bash、在 eval 是 WSL，兩邊保證存在；node 需自行接 stdin/stdout 轉導，python 在使用者機器上不保證存在。
 
+**已知殘餘（2026-09-18，slice 03 結案時記錄）**：模型每 5 到 10 次停止會有一次在「沒有任何文字的訊息」裡直接呼叫 `TaskStop`，此時停止報告行仍由腳本印出、仍是最終回覆的第一行，只是沒有出現在 `TaskStop` 之前；五輪 fix/reverify（散文、工具輸出提示、結構性改動）都無法壓到零，驗收因此縮為「5 跑至少 4 中」。
+
 **停止順序**：先跑停止腳本（kill、驗證、印報告行），再呼叫 `TaskStop` 收掉 harness 的 task 記錄，無論 task 是否已自行結束。
 
 **停止報告固定欄位**（英文固定字，任何對話語言皆可）：`Consultation stopped: interval <T> minutes (<default|override>); elapsed <m:ss>; last event <type> <age> ago | no events; offered: wait another <T> minutes / stop (recommended: <x>); process tree ended | process tree NOT confirmed — pids <…>`。並行時再接 `; done — <full slugs or none>; still running — <full slugs>`。

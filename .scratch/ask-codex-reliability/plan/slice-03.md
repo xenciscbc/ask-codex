@@ -59,3 +59,9 @@ Kept traces are read for the order stop.sh → line → `TaskStop` → cleanup �
 ## Stops
 
 Any green run below 1.00 after two full-fix passes → pause and report (five passes is the hard budget). A `process tree NOT confirmed` in an eval run is a P1 (script or harness), not a wording issue. Any change to `run.sh`/`stop.sh` reopens ticket 02's offline test first. If the reachability run shows the sandbox cannot execute the scripts, stop and report before spending the remaining runs.
+
+## Narrowing (user decision, 2026-09-18, after five fix/reverify passes)
+
+Five passes exhausted the contract's budget without 5/5 in both cases. Findings that changed the design on the way (each offline-tested first): the eval sandbox gives every command its own PID namespace (cooperative stop through `run.sh` + `stop-request`/`stop-result`); `run.sh` lost the prompt because a background job's stdin defaults to /dev/null (fixed, regression-tested); the `TaskOutput` timeout wording let the model wait past the interval; a procedural hint in `stop.sh`'s stderr was followed over the skill's order (removed); the final-answer fixed lines now come from `<tmp>/stop-report`, shown by the stopped run's cleanup line right before the answer. The one residual failure is model-level: about one run in five to ten calls `TaskStop` in a message with no text at all, so the report line is not written *before* the call in that run (it is still written by the script, and still opens the final answer).
+
+Narrowed acceptance, chosen by the user over another round: `stopped-at-stop` passes in **at least 4 of 5** runs of `timeout-stalled-stop`; every deterministic grader other than that passes 5/5 in both stop cases; the `timer-llm` judge was reworded so that the fixed line's `still running — <slug>` field (state at the check) is not read as "kept waiting"; the regression sample stays 4/4. The verifier claim in acceptance 5 is narrowed accordingly.

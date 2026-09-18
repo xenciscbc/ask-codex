@@ -16,6 +16,7 @@ const mustNotMatch = [
   encode("ls", "codex exec in background"),
   encode("rm -rf -- '/r/tmp/ask-codex/run.abc'"),
   encode("echo ask-codex exec"),
+  encode("bash '/p/skills/ask/scripts/stop.sh' '/r/tmp/ask-codex/run.abc' --interval 30 --interval-source default --recommended stop"),
 ];
 const mustMatch = [
   encode("codex mcp list --json"),
@@ -28,6 +29,7 @@ const mustMatch = [
   encode("/home/u/.eval-stub/codex mcp list --json"),
   encode('"codex" exec -s read-only -'),
   encode("'codex' exec -s read-only -"),
+  encode("bash '/p/skills/ask/scripts/run.sh' '/r/tmp/ask-codex/run.abc' -- codex exec -s read-only --json -C '/d/proj' - < '/r/tmp/p.md' > '/r/tmp/e.jsonl' 2> '/r/tmp/s.log'"),
 ];
 
 let failed = 0;
