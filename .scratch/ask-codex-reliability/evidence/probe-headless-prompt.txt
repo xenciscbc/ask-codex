@@ -1,0 +1,14 @@
+You are running a process-lifecycle probe. Do exactly the numbered steps below, in order, with no other tool calls, no analysis and no extra commands. Never use cd.
+
+1. With the Bash tool and run_in_background set to true, run exactly this one-line command:
+codex exec -s read-only --ephemeral --skip-git-repo-check --json -C 'D:\tmp\ask-codex-probe-stop' -c 'model_reasoning_effort="medium"' -c 'mcp_servers.blender={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.codex_app={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.comfyui={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.cua_repl={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.node_repl={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.pencil={command="ask-codex-disabled",enabled=false}' --disable apps --output-schema 'D:\work_data\project\skill\ask-codex\skills\ask\consultation.schema.json' -o 'R:\Temp\ask-codex\probe-headless\last-message.json' - < 'R:\Temp\ask-codex\probe-headless\prompt.md' > 'R:\Temp\ask-codex\probe-headless\events.jsonl' 2> 'R:\Temp\ask-codex\probe-headless\stderr.log'
+
+2. With the Bash tool (foreground), run exactly:
+sleep 20; echo SNAP-BEFORE-STOP; ls -l 'R:/Temp/ask-codex/probe-headless/events.jsonl'; powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -in 'codex.exe','node.exe','sh.exe' } | Select-Object ProcessId,ParentProcessId,Name | Sort-Object Name,ProcessId | Format-Table -HideTableHeaders | Out-String -Width 120"
+
+3. Call the TaskStop tool on the background task from step 1.
+
+4. With the Bash tool (foreground), run exactly:
+sleep 5; echo SNAP-AFTER-5S; ls -l 'R:/Temp/ask-codex/probe-headless/events.jsonl'; powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -in 'codex.exe','node.exe','sh.exe' } | Select-Object ProcessId,ParentProcessId,Name | Sort-Object Name,ProcessId | Format-Table -HideTableHeaders | Out-String -Width 120"; sleep 55; echo SNAP-AFTER-60S; ls -l 'R:/Temp/ask-codex/probe-headless/events.jsonl'; powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -in 'codex.exe','node.exe','sh.exe' } | Select-Object ProcessId,ParentProcessId,Name | Sort-Object Name,ProcessId | Format-Table -HideTableHeaders | Out-String -Width 120"
+
+5. Reply with the complete output of steps 2 and 4 verbatim, then one line "TASKSTOP-RESULT: <the exact message TaskStop returned>". Nothing else.

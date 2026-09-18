@@ -1,0 +1,20 @@
+
+ProcessId ParentProcessId Name      CreationDate          Cmd                                                                                       
+--------- --------------- ----      ------------          ---                                                                                       
+     2092           18676 bash.exe  2026/9/14 下午 04:10:03 "C:\Program Files\Git\bin\bash.exe" -c "codex app-server"                                 
+     5236            2092 bash.exe  2026/9/14 下午 04:10:03 "C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "codex app-server"                      
+    24424           37144 bash.exe  2026/9/18 上午 09:57:44 "C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/admin/.claude/shell-sna
+    37144           44924 bash.exe  2026/9/18 上午 09:57:44 "C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/admin/.claude/shell-sna
+    44924            8820 bash.exe  2026/9/18 上午 09:57:44 "C:\Program Files\Git\bin\bash.exe" -c "source /c/Users/admin/.claude/shell-snapshots/snap
+     2524           27040 codex.exe 2026/9/14 下午 04:10:03 C:\Users\admin\AppData\Local\pnpm\global\5\.pnpm\@openai+codex@0.153.4-win32-x64\node_modu
+    31680           39240 codex.exe 2026/9/18 上午 08:12:44 C:\Users\admin\AppData\Local\OpenAI\Codex\bin\cdef5aaf3e41ab53\codex.exe -c features.code_
+    13480           27024 node.exe  2026/9/18 上午 09:57:39 "C:\Program Files\nodejs\node.exe" C:\Users\admin\.tokentracker\tracker\app\bin\tracker.js
+    18676            4268 node.exe  2026/9/14 下午 04:10:03 "C:\Program Files\nodejs\node.exe" C:\Users\admin\.claude\plugins\cache\openai-codex\codex
+    19024           19012 node.exe  2026/9/14 下午 03:55:19 "C:\Program Files\Adobe\Adobe Creative Cloud Experience\libs\node.exe" "C:\Program Files\A
+    27040            1884 node.exe  2026/9/14 下午 04:10:03 "C:\Program Files\nodejs\node.exe" C:\Users\admin\AppData\Local\pnpm/global/5/.pnpm/@opena
+    32048           29992 node.exe  2026/9/16 下午 01:22:16 node   "C:\Users\admin\AppData\Local\pnpm\\global\5\.pnpm\pnpm@10.26.2\node_modules\pnpm\b
+    46568           31796 node.exe  2026/9/16 下午 01:22:16 node   "D:\work_data\project\go\nfsys2\web\node_modules\.bin\\..\vite\bin\vite.js"        
+     1884            5236 sh.exe    2026/9/14 下午 04:10:03 "C:\Program Files\Git\usr\bin\sh.exe" /c/Users/admin/AppData/Local/pnpm/codex app-server  
+
+
+

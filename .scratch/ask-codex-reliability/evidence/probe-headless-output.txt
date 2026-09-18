@@ -1,0 +1,53 @@
+```
+SNAP-BEFORE-STOP
+-rw-r--r-- 1 admin 197121 2092 Sep 18 10:01 R:/Temp/ask-codex/probe-headless/events.jsonl
+
+     2524           27040 codex.exe
+    31680           39240 codex.exe
+    32148           43208 codex.exe
+    18676            4268 node.exe 
+    19024           19012 node.exe 
+    25244           44680 node.exe 
+    27040            1884 node.exe 
+    43208           36396 node.exe 
+    44056           26468 node.exe 
+    44348           39228 node.exe 
+     1884            5236 sh.exe   
+    36396            7964 sh.exe
+```
+
+```
+SNAP-AFTER-5S
+-rw-r--r-- 1 admin 197121 2092 Sep 18 10:01 R:/Temp/ask-codex/probe-headless/events.jsonl
+
+     2524           27040 codex.exe
+    31680           39240 codex.exe
+    32148           43208 codex.exe
+    18676            4268 node.exe 
+    19024           19012 node.exe 
+    27040            1884 node.exe 
+    43208           36396 node.exe 
+    44056           26468 node.exe 
+    44348           39228 node.exe 
+     1884            5236 sh.exe   
+    36396            7964 sh.exe   
+
+
+
+SNAP-AFTER-60S
+-rw-r--r-- 1 admin 197121 2092 Sep 18 10:01 R:/Temp/ask-codex/probe-headless/events.jsonl
+
+     2524           27040 codex.exe
+    31680           39240 codex.exe
+    32148           43208 codex.exe
+    18676            4268 node.exe 
+    19024           19012 node.exe 
+    27040            1884 node.exe 
+    43208           36396 node.exe 
+    44056           26468 node.exe 
+    44348           39228 node.exe 
+     1884            5236 sh.exe   
+    36396            7964 sh.exe
+```
+
+TASKSTOP-RESULT: Successfully stopped task: bmqchd3xr (codex exec -s read-only --ephemeral --skip-git-repo-check --json -C 'D:\tmp\ask-codex-probe-stop' -c 'model_reasoning_effort="medium"' -c 'mcp_servers.blender={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.codex_app={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.comfyui={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.cua_repl={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.node_repl={command="ask-codex-disabled",enabled=false}' -c 'mcp_servers.pencil={command="ask-codex-disabled",enabled=false}' --disable apps --output-schema 'D:\work_data\project\skill\ask-codex\skills\ask\consultation.schema.json' -o 'R:\Temp\ask-codex\probe-headless\last-message.json' - < 'R:\Temp\ask-codex\probe-headless\prompt.md' > 'R:\Temp\ask-codex\probe-headless\events.jsonl' 2> 'R:\Temp\ask-codex\probe-headless\stderr.log')
