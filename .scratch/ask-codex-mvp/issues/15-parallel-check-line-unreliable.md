@@ -20,6 +20,6 @@ In a parallel consultation the user may be told a run was stopped without ever b
 
 ## Acceptance criteria
 
-- [ ] `parallel-shared-timer` passes `check-line-before-stop` on 3 of 3 runs.
+- [ ] ~~`parallel-shared-timer` passes `check-line-before-stop` on 3 of 3 runs.~~ 改寫（reliability slice-03 rev 3）：`check-line-before-stop` 隨「行動前先寫 `Parallel check:`」規則一起刪除；取代證據為 `parallel-info-before-stop`（done/still-running 欄位出現在 `TaskStop` 之前的 assistant 訊息）與 `stopped-report`（最終訊息含完整停止報告行與並行欄位）在 `--runs 5` 全數通過。
 - [ ] Ticket 08's comments record the measured reliability rather than the single-run result.
 - [ ] The step 8 rule is reworked so the line is tied to an action the model cannot skip, as the fix pass 2 attempted; if a wording change cannot reach 3 of 3, consider having the skill write the line from a command whose output is visible instead.
