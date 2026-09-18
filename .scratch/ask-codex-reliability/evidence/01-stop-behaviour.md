@@ -44,10 +44,22 @@ Again the run **completed on its own after the stop** (the 60 s of static size w
 
 **Conclusion C:** on Windows the stop script can record `$!`, map it to a Windows pid via `ps`, and rely on `taskkill /T /F` to end the pnpm shim → node → codex.exe chain. Enumerating the tree by `ParentProcessId` from the recorded pid is a workable post-kill verification.
 
-## Probe D — `timeout-stalled-stop` with `--keep-temp` (stop-report gap)
+## Probe D — `timeout-stalled-stop --keep-temp --runs 3` (stop-report gap)
 
-_Blocked: WSL networking failed at VM creation (`ConfigureNetworking/0x8007054f`, fell back to `networkingMode None`), so the eval harness cannot reach the API. Pending the user's decision on the WSL fix._
+Run after the reboot (WSL networking came back by itself). Results `evals/results/2026-09-18T02-30-38-949Z/`, traces read from the kept sandboxes `/tmp/ask-codex-eval.JfFzd0/tmp/claude-eval-{T0ud7T,Dq36wN,zasEBE}/out/trace.jsonl` (deleted afterwards). Scores: run 0 1.00, runs 1 and 2 0.86 — `stopped-line` (regex) passed in all three, `stop-report` (LLM judge, three votes) failed 3–0 in runs 1 and 2.
 
-## Probe E — `second-opinion-with-stance` `--keep-temp --runs 5` (bare `cd`)
+Where `Consultation stopped:` appears, per run (assistant text blocks numbered in order):
 
-_Blocked on the same WSL issue._
+| run | sandbox | blocks | stop-moment message | `TaskStop` | report line |
+|---|---|---|---|---|---|
+| 0 | T0ud7T | 11 | [9] describes the stale run, **no report line** | after [9] | [11] only — the final message |
+| 1 | Dq36wN | 13 | [11] describes the stale run, **no report line** | after [11] | [13] only — the final message |
+| 2 | zasEBE | 9 | [7] describes the stale run, **no report line** | after [7] | [9] only — the final message |
+
+So in this sample the report is **never written at the moment of the stop**; it is composed once, free-form, in the final presentation (step 10), after the cleanup. The two judged failures are field gaps in that free-form line: run 1 never states the two offered options, and run 2 reports the elapsed time as "~73+ seconds … past the 1-minute window" mixed with an unrelated remark about `-m`, while run 0 states everything. The ticket-16 shape ("no report at all", 1 in 3) did not recur here; the shape that did recur (2 in 3) is "written once at the end, with fields missing or muddled".
+
+**Conclusion D:** the gap is "not written at the stop, and improvised at the end" rather than "written mid-run and not restated". Both halves of the spec's remedy apply: the stop script prints the complete fixed line so the fields cannot be improvised, and the skill copies it verbatim twice — in the message that stops the run and again in step 10. Ticket 03's `stopped-line` grader should also require the line at the stop moment (a `target: trace` regex), not only in the final response.
+
+## Probe E — `second-opinion-with-stance --keep-temp --runs 5` (bare `cd`)
+
+_Running; see below when finished._
