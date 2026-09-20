@@ -27,3 +27,5 @@ In a parallel consultation the user may be told a run was stopped without ever b
 ## Comments
 
 **2026-09-18 — resolved by reliability slice 03.** The pre-action rule ("write `Parallel check:` before you act") was the unreliable part and is gone; the parallel state now rides on text the model necessarily writes: the parallel form of the still-running notice, the first line of the question text, and the `Consultation stopped:` line printed by `stop.sh` with `--done`/`--still-running`. Measured on the final bytes: `parallel-info-before-stop` (the fields on an assistant line before `TaskStop`) **15/15**, `check-line` (one `Parallel check:` line per check in the final answer) **15/15**, `stopped-report` 15/15 — three rounds of `parallel-shared-timer --runs 5`. Ticket 03's Comments list the result directories and traces.
+
+**2026-09-20 — live evidence.** The stop line was copied from `stop.sh` at the moment of the stop and again as the first line of the final answer in both live runs on real Codex (headless and interactive): `.scratch/ask-codex-reliability/evidence/04-live-stop.md`, replies in `04-live-H-reply.md` and `04-live-I-reply.md`.
