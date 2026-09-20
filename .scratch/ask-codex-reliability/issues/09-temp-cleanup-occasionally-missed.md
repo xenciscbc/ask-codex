@@ -16,3 +16,8 @@
 
 - [ ] 至少一份失敗 run 的 trace，指出是「沒清理」還是「形式不符」。
 - [ ] 若是沒清理：skill 修正後相關案例 `--runs 10` 全過 `temp-cleanup`；若是形式不符：grader 放寬到等價形式並有離線測試，且不放過真的沒清理的 run。
+
+## Comments
+
+**2026-09-21 — half an answer from ticket 07's traces.** In the early-stop cases (`pre-confirm-mismatch`, `project-config-table`, `project-layer-decline-aborts`, `project-layer-aborts-01`) `temp-cleanup` fails in roughly half the runs, on today's bytes and on `e2e8390` alike, and every failing trace read shows the same thing: no `mktemp` ran, because the model reads the configs and stops at the confirmation before creating the temporary directory. Nothing is left on disk; the grader's "at least one `rm -rf`" is wrong for that shape. Fix to consider: a grader on the sandbox's files (no `…/ask-codex/run.*` directory left) instead of on the command. The two misses seen during ticket 05 were full consultations (`alias-astra`, `override-restated-no-prompt`), which this does not explain — still open.
+
