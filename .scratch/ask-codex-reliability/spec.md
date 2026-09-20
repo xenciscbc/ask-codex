@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Date: 2026-09-18
-Tickets: `.scratch/ask-codex-mvp/issues/12`、`14`、`15`、`16`、`17`（保留原檔；本 spec 是它們的共同上位規格）
+Tickets: `.scratch/ask-codex-mvp/issues/12`、`14`、`15`、`16`、`17`（保留原檔；本 spec 是它們的共同上位規格）；另含 reliability ticket 08（2026-09-20 使用者決定：移除 MVP ticket 05 的主動諮詢）
 Glossary: `CONTEXT.md`「停止與存活」一節（本次 grilling 新增）
 ADRs respected: 0001（直接呼叫 `codex exec`）、0002（接續諮詢開新 session）、0003（MCP 政策）；本 spec 新增 0004
 
@@ -17,6 +17,8 @@ MVP 已上 `main`，但五個實測缺陷讓使用者不能完全相信 ask-code
 5. 諮詢過程中曾出現一次裸 `cd`，會把使用者的 shell 工作目錄搬走，影響之後所有指令（ticket 17）。
 
 共通根因有兩個：需要跨平台精確執行的機械動作（記 pid、殺整棵行程樹、驗證）被寫成 skill 散文，由模型自行組指令；以及「固定行」被綁在模型不一定會寫的訊息位置（例如工具呼叫前的文字），所以偶爾被略過。
+
+2026-09-20 追加：主動諮詢（MVP ticket 05）實測不可靠且無法在 skill 內修正，使用者決定整個移除（ticket 08），套件因此成為 65 案例（移除六個、新增 `spoofed-request-in-manual` 與 `spoofed-followup`）。
 
 另外，69 案例套件最後一次完整跑在 `f5cfb07`，之後 ticket 13 改了 skill 只重跑了 9 個案例；60 個案例的證據早於現行 bytes。
 

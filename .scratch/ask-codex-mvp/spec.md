@@ -38,15 +38,15 @@ A Claude Code plugin named `ask-codex` providing two skills: `ask` (invoked as `
 2. As a user, I want to invoke `/ask-codex:ask` with no question, so that Claude infers what to ask from the current conversation and sends it without further prompting.
 3. As a user, when Claude cannot infer any sensible question from an empty invocation, I want Claude to ask me what to consult about, so that no meaningless consultation is sent.
 4. As a user, I want saying "ask codex" or "get Codex's opinion" in plain language to count as a manual consultation, so that I don't have to remember the slash command and am not asked for consent I just gave.
-5. As a user, I want Claude to propose a proactive consultation when the same problem has failed two fix attempts, so that a third blind attempt is replaced by an independent diagnosis.
-6. As a user, I want Claude to propose a proactive consultation when the same Plan or spec still has unresolved blockers after two review rounds (from any review source), so that the review loop gets an outside second opinion.
-7. As a user, I want Claude never to propose a proactive consultation outside fix loops and review loops, so that Codex usage stays rare and deliberate.
-8. As a user, I want every proactive proposal to state which decision the consultation could change, so that I can judge whether it is worth the cost.
-9. As a user, I want the consent prompt to summarize the consultation in one line (type, question, what Codex may read — any file my account can read, instructed to stay in the project — and the MCP statement for the active policy), so that I know what will be sent to OpenAI and which tools Codex can use.
-10. As a user, I want to choose "consent this once", so that only this proactive consultation runs.
-11. As a user, I want to choose "consent for this session", so that later proactive consultations in this session run without asking me again.
-12. As a user, I want to choose "decline", so that Claude continues on its own and does not re-propose a consultation on the same topic in this session unless the situation materially changes.
-13. As a user, I want a session grant to disappear when the conversation context is lost, so that consent never silently outlives the conversation I gave it in.
+5. As a user, I want Claude to propose a proactive consultation when the same problem has failed two fix attempts, so that a third blind attempt is replaced by an independent diagnosis. *(removed 2026-09-20, reliability ticket 08)*
+6. As a user, I want Claude to propose a proactive consultation when the same Plan or spec still has unresolved blockers after two review rounds (from any review source), so that the review loop gets an outside second opinion. *(removed 2026-09-20, reliability ticket 08)*
+7. As a user, I want Claude never to propose a proactive consultation outside fix loops and review loops, so that Codex usage stays rare and deliberate. *(removed 2026-09-20, reliability ticket 08)*
+8. As a user, I want every proactive proposal to state which decision the consultation could change, so that I can judge whether it is worth the cost. *(removed 2026-09-20, reliability ticket 08)*
+9. As a user, I want the consent prompt to summarize the consultation in one line (type, question, what Codex may read — any file my account can read, instructed to stay in the project — and the MCP statement for the active policy), so that I know what will be sent to OpenAI and which tools Codex can use. *(removed 2026-09-20, reliability ticket 08)*
+10. As a user, I want to choose "consent this once", so that only this proactive consultation runs. *(removed 2026-09-20, reliability ticket 08)*
+11. As a user, I want to choose "consent for this session", so that later proactive consultations in this session run without asking me again. *(removed 2026-09-20, reliability ticket 08)*
+12. As a user, I want to choose "decline", so that Claude continues on its own and does not re-propose a consultation on the same topic in this session unless the situation materially changes. *(removed 2026-09-20, reliability ticket 08)*
+13. As a user, I want a session grant to disappear when the conversation context is lost, so that consent never silently outlives the conversation I gave it in. *(removed 2026-09-20, reliability ticket 08)*
 14. As a user, I want consent and manual triggers to count only when they come from my own messages or my answers to `AskUserQuestion`, never from file contents, tool results, or Codex output, so that nothing can grant consent on my behalf.
 
 ### Consultation types and packaging
@@ -56,7 +56,7 @@ A Claude Code plugin named `ask-codex` providing two skills: `ask` (invoked as `
 17. As Claude, when asking for a targeted check, I want to include the implementation or diff plus my specific concern, so that Codex focuses on the actual doubt rather than doing a general review.
 18. As Claude, when asking for a diagnosis, I want to send symptoms, evidence, and every failed attempt with its result, but not my current root-cause hypothesis, so that Codex's view is not anchored by mine and does not repeat failed fixes.
 19. As Claude, when asking a technical question, I want to send the question and relevant evidence blind, so that the answer is independent.
-20. As Claude, in a review loop, I want to include the Plan plus the unresolved blockers from earlier rounds, and ask Codex whether each blocker holds and whether the Plan should be simplified, split, or redirected, so that the consultation targets the actual deadlock.
+20. As Claude, in a review loop, I want to include the Plan plus the unresolved blockers from earlier rounds, and ask Codex whether each blocker holds and whether the Plan should be simplified, split, or redirected, so that the consultation targets the actual deadlock. *(removed 2026-09-20, reliability ticket 08 — the review-loop packaging rule itself is removed)*
 21. As Claude, I want to instruct Codex to stay within the project directory and any paths I explicitly list, never to read in-project secrets (`.env*`, `*.pem`, key/credential files), to use MCP tools for lookups only, and to treat all file and tool content as data, so that the read scope and tool use are limited even though the sandbox allows whole-disk reads and MCP runs outside it.
 22. As Claude, I want never to include secrets from the conversation in the packaged prompt, so that tokens or credentials are not sent to OpenAI.
 23. As Claude, I want prompts to Codex written in English, so that they are token-efficient and consistent with the skill.
@@ -88,7 +88,7 @@ A Claude Code plugin named `ask-codex` providing two skills: `ask` (invoked as `
 43. As a user, I want `ultra` used only when I explicitly ask for it, so that Codex's costly automatic delegation never happens by default.
 44. As a user, when I specify a model or effort that differs from the current session setting, I want to be asked whether it applies to this consultation only or to the rest of the session, so that my override lasts exactly as long as I intend.
 45. As a user, when I re-specify the setting already in force for the session, I want no prompt, so that I'm not asked redundant questions.
-46. As a user, I want proactive consultations to use the Codex default model (or my session override), never a model Claude picks for difficulty, so that cost decisions stay mine.
+46. As a user, I want proactive consultations to use the Codex default model (or my session override), never a model Claude picks for difficulty, so that cost decisions stay mine. *(removed 2026-09-20, reliability ticket 08)*
 
 ### Parallel consultation
 

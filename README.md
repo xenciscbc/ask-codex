@@ -38,17 +38,9 @@ Installing from GitHub as a marketplace plugin is untested — the branch is pub
 
 ## Usage
 
-**Manual consultation.** Run `/ask-codex:ask` with or without a question, or just say it in your own words ("ask Codex about this", "get Codex's opinion"). Asking is itself the go-ahead. Without a question, Claude infers one from the conversation and shows it in one line before sending.
+**Manual consultation.** Run `/ask-codex:ask` with or without a question, or just say it in your own words ("ask Codex about this", "get Codex's opinion"). Asking is itself the go-ahead. Without a question, Claude infers one from the conversation and shows it in one line before sending. ask-codex never consults Codex on its own: every consultation starts from your request.
 
 **Consultation types.** Claude picks the type from context: a second opinion (challenge a plan or decision), a diagnosis (find a root cause when stuck), a targeted check (inspect a specific implementation or diff), a technical question, or a follow-up. Diagnoses and technical questions are sent **blind** — Claude's own hypothesis is withheld so the answer is not anchored.
-
-**Proactive consultation.** Claude may offer one by itself when the same fix has failed twice (a fix loop) or a plan still has unresolved blockers after two review rounds (a review loop). It asks first, with three options:
-
-- **Consent this once** — one consultation.
-- **Consent for this session** — a session grant, valid only in the current conversation.
-- **Decline** — nothing is sent, and the same topic is not proposed again in this session.
-
-No `codex` command runs before you consent, including the MCP listings.
 
 **Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session; a headless run has no way to ask, so the choice applies to that consultation only and the reply says so on a line of its own: `Model choice applies to this consultation only: <model>, effort <effort>.` Naming the model the session already uses adds no such line.
 
@@ -65,13 +57,13 @@ No `codex` command runs before you consent, including the MCP listings.
 - The safety statement above is the whole of it: read-only applies to Codex's **shell commands**, not to MCP servers.
 - Codex's shell can read anything your account can read. The prompt limits its scope by instruction only.
 - Any MCP server you allow runs outside the sandbox and may include tools that write or execute.
+- Who may start a consultation is a rule Claude follows, not something the plugin enforces: there is no hook or tool-level block. In testing, text planted in a file started a consultation before a request check was added; with the check it was not seen again in a small number of runs, which is not proof that it cannot happen.
 - A consultation costs roughly 25k input tokens before your question is even considered (an estimate from the design notes, not a measured figure).
 
 ## Known limitations
 
 - A workspace on a drive where the Codex Windows sandbox cannot run is not consultable. Observed with a RAM disk: `codex exec -C R:\…` fails with `os error 1`. Claude reports the failure rather than inventing an answer.
 - Projects trusted persistently in your Codex config are covered only by the project-layer fail-safe, which has not been tested live.
-- **Proactive consultation is unreliable.** The path exists and behaves as described once it triggers, but in live testing — plugin loaded, a genuine fix loop, three rounds of "still failing" — Claude never offered a consultation. Improving it is paused. Asking explicitly always works.
 - **Stopping a headless consultation does not yet stop Codex.** In an interactive session, stopping ends the Codex process cleanly. In a `claude -p` run, the process survives the stop and keeps working and spending quota. A fix is tracked.
 - An external program can rewrite the `model` line in your Codex config while you work, and that line is what Claude uses when you name no model — so two consultations minutes apart can use different models with no action from you.
 

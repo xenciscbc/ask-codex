@@ -12,31 +12,11 @@ _Avoid_: 委派、rescue、把工作交給 Codex 做；英文避免 query、ask�
 把任務本身交給 Codex 執行（可能包含修改檔案），例如官方 codex plugin 的 `/codex:rescue`；不在 ask-codex 的範圍內。
 _Avoid_: 將委派與諮詢混用。
 
-### 發起與同意
-
-**主動諮詢**（proactive consultation）：
-由 Claude 自行發起的諮詢，只在出現反覆修復或反覆審查時提議；送出前必須取得使用者同意。
-_Avoid_: 自動諮詢、背景諮詢、在一般情況下順手諮詢；英文避免 auto consultation。
-
-**反覆修復**（fix loop）：
-同一個問題經過多次修復嘗試仍未解決的情況；觸發的是診斷。
-
-**反覆審查**（review loop）：
-同一份 Plan 或 spec 經過多輪審查仍無法收斂的情況；觸發的是第二意見。
+### 發起
 
 **手動諮詢**（manual consultation）：
 由使用者發起的諮詢，包括輸入 `/ask-codex:ask` 或在對話中明確要求詢問 Codex；發起本身即視為同意。
-
-**單次同意**（one-time consent）：
-使用者只允許眼前這一次主動諮詢。
-
-**Session 授權**（session grant）：
-使用者允許本 session 後續的主動諮詢都不必再詢問；只存在於當前對話，對話脈絡遺失即失效。
-_Avoid_: 永久授權、全域設定。
-
-**不同意**（decline）：
-使用者拒絕某次主動諮詢；同一議題在本 session 不再提議，除非情況有實質變化。
-_Avoid_: 拒絕後改用其他方式繞過。
+主動諮詢已於 2026-09-20 移除；所有諮詢皆由使用者發起。
 
 ### 模型選擇
 
@@ -142,7 +122,7 @@ _Avoid_: 直接照做 Codex 的建議。
 ### 諮詢類型
 
 **諮詢類型**（consultation type）：
-一次諮詢的用途，由 Claude 依上下文判斷，主動與手動諮詢皆然：第二意見、診斷、實作疑點審查、技術問答。
+一次諮詢的用途，由 Claude 依上下文判斷：第二意見、診斷、實作疑點審查、技術問答。
 _Avoid_: 讓使用者每次手動指定類型。
 
 **第二意見**（second opinion）：
