@@ -1,0 +1,18 @@
+# 09 — `temp-cleanup` 偶爾失敗（約 1/20）
+
+**What to build:** 釐清 `temp-cleanup` grader（`rm -rf -- '<含 /ask-codex/ 的單引號路徑>'` 至少一次）在正常完成的諮詢中偶爾失敗的原因：是 run directory 真的沒刪（ticket 13 的缺陷復發，會把含程式碼摘錄的 `prompt.md` 留在磁碟上），還是清理有做、只是指令形式不符 grader（引號、合併指令）。依結果修 skill 或修 grader。
+
+**Blocked by:** 無。**Status:** needs-triage
+
+## Evidence（2026-09-20，ticket 05 的五輪 eval）
+
+41 次 run 中 2 次：round 3 `alias-astra` run 2（0.90）、round 5 `override-restated-no-prompt` run 5（0.89），其餘 grader 全過。兩次都沒有 `--keep-temp`，trace 已不存在。ticket 05 沒有改 step 11；沒有「ticket 05 之前」的同量基線，所以無法說是不是新引入的——全套在 `f5cfb07` 是單跑，量不到 5% 的事件。
+
+## 下一步
+
+07 的全套重跑若出現同一失敗，對該案例以 `--keep-temp --runs 5` 重跑並**在同一支 script 內**把 trace 複製出 WSL `/tmp`，讀 trace 後再決定。
+
+## Acceptance criteria
+
+- [ ] 至少一份失敗 run 的 trace，指出是「沒清理」還是「形式不符」。
+- [ ] 若是沒清理：skill 修正後相關案例 `--runs 10` 全過 `temp-cleanup`；若是形式不符：grader 放寬到等價形式並有離線測試，且不放過真的沒清理的 run。

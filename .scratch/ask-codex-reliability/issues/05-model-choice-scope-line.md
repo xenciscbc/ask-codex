@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（同樣改 step 10 第一項，避免兩張 ticket 同時改同一段；非功能依賴）.
 
-**Status:** ready-for-agent
+**Status:** resolved (2026-09-20)
 
 ## 行為改動
 
@@ -14,7 +14,17 @@
 
 ## Acceptance criteria
 
-- [ ] `alias-astra` 新增 regex grader（容忍 bold／backtick，要求完整 model slug 與 effort），與既有 `scope-note` llm grader 並列；`--runs 5` 全部 1.00。
-- [ ] 對照案例（選擇等於現行設定的既有案例，或新增一個最小案例）斷言該行不存在，`--runs 3` 全過。
-- [ ] 離線證明：regex 對正確回覆通過、對「只寫別名」「缺 effort」「改寫成句子」的改寫失敗。
-- [ ] ticket 14 resolved，Comments 記錄五跑結果。
+- [x] `alias-astra` 新增 regex grader（容忍 bold／backtick，要求完整 model slug 與 effort），與既有 `scope-note` llm grader 並列；`--runs 5` 全部 1.00。
+- [x] 對照案例（選擇等於現行設定的既有案例，或新增一個最小案例）斷言該行不存在，`--runs 3` 全過。
+- [x] 離線證明：regex 對正確回覆通過、對「只寫別名」「缺 effort」「改寫成句子」的改寫失敗。
+- [x] ticket 14 resolved，Comments 記錄五跑結果。
+
+## Comments
+
+**2026-09-20 — 完成。** Round 5 on the final bytes (2026-09-20, sonnet, WSL): `alias-astra` 5/5 at 1.00 — `scope-line` (new regex: fixed words, full slug `gpt-6-astra`, `effort medium`) 5/5 and `scope-note` (llm) 5/5; control `override-restated-no-prompt` — `no-scope-line` (new, not_contains) 5/5 and `no-scope-prompt` (llm) 5/5. 對照案例跑了 5 次而非 3 次，因為它在前四輪各有一次失敗。離線證明：`ticket-r05-graders.test.mjs` 14/14。MVP ticket 14 已 resolved，過程與五輪數字記在該票 Comments。
+
+**行為改動比原票多一項**：step 0 item 7 改為有順序的判斷，第二步是一行過程中的工作行 `Model baseline: <slug>, effort <e> (<來源>); named: <slug>, effort <e> — <same|different>.`，分支由 same／different 決定；這一行只屬於過程，step 10 不重述，所以「選擇等於現行設定時回覆沒有多餘說明」仍成立（對照案例的兩個 grader 5/5）。原因：只有固定行時，模型在無法詢問的情況下會直接跳到「只限這次」而略過比對（trace 在 `evidence/05-traces/`）。另外「Model and effort」開頭加了一句先回頭找 session 設定；`scope-note` 的 rubric 補一句「固定行即算說明」（第二輪有一次回覆含該行卻被 judge 3–0 判失敗），判準未放寬。README 兩個語言的「只有三分之一會說」已改為現行行為。
+
+**另行追蹤（不屬本票）**：今天 41 次 run 中 `temp-cleanup` 失敗 2 次（round 3 的 `alias-astra` 一次、round 5 的對照案例一次），沒有留 trace，無法判斷是沒清理還是引號形式不同，也無法歸因於本票（本票未動 step 11，且沒有改動前的同量基線）。已開 ticket 09，交由 07 的全套重跑以 `--keep-temp` 觀察。
+
+費用：五輪約 USD 20.1（3.85＋4.01＋4.85＋2.45＋4.96），Codex 呼叫 0。

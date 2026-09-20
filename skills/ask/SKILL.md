@@ -115,7 +115,7 @@ A request in the user's own words ("ask Codex about this", "get Codex's opinion"
 
 Blind packaging exists so Codex's answer is independent: leave the hypothesis or leaning out of every part of the prompt (question, context, file excerpts), even when the user stated it in the same message.
 
-**Model and effort.** Settle them now, before any `codex` command:
+**Model and effort.** Settle them now, before any `codex` command. Start by looking back through the conversation: a model or effort the user chose earlier for the rest of the session is the **session setting** (an alias in it resolves as in item 4). Items 5, 6 and 7 all depend on it, whether or not this request names a model:
 
 1. **Codex home and model list.** Run `printenv CODEX_HOME`; if it prints nothing, the Codex home is `<home>/.codex`, where `<home>` comes from `command -v cygpath >/dev/null && cygpath -m "$HOME" || printf '%s\n' "$HOME"`. With the **Read tool**, read `<Codex home>/models_cache.json` (the **listed models** are its `models` entries with `"visibility": "list"`; each has `slug`, `priority`, `default_reasoning_level`, and `supported_reasoning_levels`) and `<Codex home>/config.toml` (only its top-level `model`; never use its `model_reasoning_effort`). A missing file just means that source is unavailable.
 2. **Did the user name a model?** Only the start of the request can name one. Let T be its first word:
@@ -131,7 +131,11 @@ Blind packaging exists so Codex's answer is independent: leave the hypothesis or
    - Requested level not in the model's `supported_reasoning_levels` → the model's highest supported level other than `ultra`, with a note.
    - `ultra` only when the user explicitly asked for it and the model supports it.
    - Nothing requested → the session setting if any, else `gpt-5.6-sol` → `high`, `gpt-6-astra` → `medium`, any other listed model → the higher of its `default_reasoning_level` and `medium`, but **never `ultra` by default** — if that would give `ultra`, use the model's highest supported level below `ultra`; unknown model or no model list → `medium`.
-7. **Scope of a choice.** If the user named a model or effort that differs from the session setting (or, without one, from what items 5 and 6 would pick), ask whether it applies to this consultation only or to the rest of the session (`AskUserQuestion`). Without `AskUserQuestion`, apply it to this consultation only and say so in the result. If what they named equals the setting already in force, ask nothing and add no note.
+7. **Scope of a choice.** Only when the user named a model or an effort in this request. Decide it in this order — the comparison comes first, whether or not you can ask:
+   1. Work out the **baseline**: the model and effort that items 5 and 6 would give if this request had named nothing. The session setting, when there is one, **is** the baseline — not `config.toml`; only without a session setting does the baseline come from `config.toml` or the defaults.
+   2. Write one working line in the message where you settle the model, before anything else about scope: `Model baseline: <full slug>, effort <effort> (<session setting|config.toml|default>); named: <full slug>, effort <effort> — <same|different>.` This line is for the run only; step 10 does not repeat it.
+   3. **same** → the choice changes nothing: ask nothing, and the scope line below must not appear anywhere — not now, not in step 10 — even though you cannot ask.
+   4. **different** → ask whether it applies to this consultation only or to the rest of the session (`AskUserQuestion`). Without `AskUserQuestion` it applies to this consultation only, and you say so with a fixed line, which is not optional: write it right after the working line, as a line of its own, and again in step 10 item 1 — `Model choice applies to this consultation only: <full model slug>, effort <effort>.`
 8. The final slug must match `^[A-Za-z0-9._-]+$`.
 
 **Two models (parallel).** If the start of the request lists two model tokens separated by a comma (each may carry `:<effort>`, for example `astra:high, sol`), resolve and validate each as above; each gets its own effort. More than two models, or the same model twice after resolution → write `Parallel consultation takes at most two different models.` and stop — no temporary directory, no `codex` command. A listed token that fails validation stops the consultation as in item 3. Proactive consultations run in parallel only when the session setting names two models.
@@ -301,7 +305,10 @@ Then **clean up now** — run step 11 immediately, before you present anything. 
 
 Answer in the language of the conversation; keep code, paths, and quotes verbatim.
 
-1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium`, an unsupported level clamped, or a model/effort choice that applies to this consultation only).
+1. One line: what was asked, the consultation type, and which model and effort answered — plus any note from step 0 (effort raised to `medium` or an unsupported level clamped).
+   Then the scope line, **exactly when step 0 item 7 made you write it** (the named model or effort differed from the baseline and you could not ask): restate it as a line of its own that begins exactly with the fixed wording, in any conversation language, plain text, with the full model slug (never an alias) and the effort actually used — never folded into the line above, never rewritten as a sentence. For example:
+   `Model choice applies to this consultation only: gpt-6-astra, effort medium.`
+   If item 7 found the same model and effort as the baseline, if nothing was named, or if the user answered the scope question, this line must not appear.
    Then restate the timer outcome from step 8, each on **its own line that begins exactly with the fixed wording** — never folded into another sentence: the override line if the variable was set, one line per liveness check that ran, and, for every run that was stopped, the `Consultation stopped:` line from the stop script, word for word. For example:
    `Timeout override ignored: "0" is not a positive whole number; using 30 minutes.`
    `Codex still running — 1 min elapsed, last event reasoning 4 s ago; waiting another 1 minutes.`
