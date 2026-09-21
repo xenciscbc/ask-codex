@@ -340,3 +340,32 @@ As before. No grader file is created, changed or deleted in this pass. `git diff
 ### Live acceptance of this pass (main session)
 
 Local commit; fresh run log; the same eleven cases and run counts. **This is fix pass 5 of 5: if a gate case is still short of 5/5 afterwards, the slice pauses and the exception rule of `slice-07b.md` section 2 applies — the user decides.**
+
+---
+
+# Pass 5 result and the FINAL claim of slice S3 (supersedes the "Claim" section above)
+
+## Pass 5 (commit `0ff2912`, run log `evidence/07b-s3-run-log.txt`)
+
+39 of 39 runs at 1.00: the five gate cases 5/5 each (`project-layer-decline-aborts`, `project-config-table`, `project-layer-aborts-01`, `project-env-redefined`, `pre-confirm-mismatch`), the regression cases 3/3 each (`project-redefined-allowed`, `project-layer-bare-table`, `project-widening-confirm`, and the reverse control `project-defined-server`), `manual-with-question` and `verbal-request` 1/1. HEAD, clean tree and the `SKILL.md` sha256 are identical before and after the runs. Five fix passes were used; none is left.
+
+| Pass | Commit | Runs at 1.00 | What it changed |
+|---|---|---|---|
+| 0 | `4428739` | 35/39 | line 41: clean up first, one final message carries the question (contract A); 17 deterministic graders |
+| 1 | `d4c5815` | 29/39 | fixed per-step sentences, fixed first line (the first-line rule proved too strict: 6 false fails) |
+| 2 | `c932d50` | 38/39 | fixed line may follow a lead-in; after-decline rule moved to line 39; two LLM judges replaced (user decision) |
+| 3 | `a5059e6` | 36/39 | line 39: the decline's outcome goes in the final message |
+| 4 | `3567d5d` | 38/39 | line 41: how to tell step 3 from step 4; the four remaining content judges replaced (user decision) |
+| 5 | `0ff2912` | 39/39 | line 39: a message stops being the last one when another tool is called — do everything else first, then ONE closing message |
+
+## Final claim (for the outcome verifier)
+
+On commit C = `0ff2912`, relative to `fb6bb9b` (the commit before S3):
+
+1. `skills/ask/SKILL.md` differs in exactly two lines, 39 and 41; lines 156, 162 and 175 are byte-identical; the file is still CRLF and has the same number of lines.
+2. Line 41 (a confirmation still pending, no `AskUserQuestion`): clean up first, then ONE final message that carries the fixed line `Consultation not sent — confirmation needed.`, names what was found, and offers the fixed copy-back sentence of each pending step — slots for server names matching `^[A-Za-z0-9_.-]+$` only — ending with `then ask Codex again.`; it says how step 3 and step 4 are told apart and what declining does for that step. Line 39: after a decline, the outcome only, in the final message, never another request for confirmation.
+3. The six LLM content judges of the confirmation cases are gone (`asks-f12b-env`, `asks-f12b-command`, `user-told-which-definition`, `asks-rule-c`, `asks-pencil`, `declined-abort`) — each by an explicit user decision recorded in this file — and every clause of each rubric is mapped to a deterministic grader that exists in that case's `graders/` directory; the clauses now pinned more weakly than the judge pinned them are listed in `evidence/07b-security-review.md` and not hidden.
+4. `node evals/_harness/ticket-r07b-s3-graders.test.mjs` exits 0 (1170 passed), as do `ticket-r07-graders.test.mjs` (20) and `ticket-r08-graders.test.mjs` (44). The S3 test contains the real failing replies of passes 0–4 as constants and asserts that the graders fail them, and that the real correct replies pass.
+5. The run log `evidence/07b-s3-run-log.txt` shows HEAD = C, an empty `git status --porcelain` and the same `SKILL.md` sha256 before and after, and names result directories in which the five gate cases are 5/5 and the four regression cases 3/3, all at 1.00. The earlier passes' logs (`07b-s3-run-log-pass0.txt` … `-pass4.txt`) show the failures this file describes.
+
+Not claimed: that the behaviour is deterministic (5 of 5 is an operational gate — a behaviour with a true success rate of 0.8 passes it one time in three); anything about cases outside the eleven that were run; step 0's and step 8's own plain-text questions (ticket 11). Commits after C that touch only `.scratch/` records do not change the claim.

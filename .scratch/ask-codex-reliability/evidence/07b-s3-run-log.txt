@@ -1,0 +1,67 @@
+[before 2026-09-21 16:40:26] HEAD 0ff29121f5279c1e4b83ca7587c83d6fa8bf4682
+[before] SKILL.md sha256 bdb7ed4e95a587a621f133ce9e76c49796fa9c09e54660b389dcb8985f836543
+[before] git status --porcelain (the run log itself excluded): 0 line(s)
+=== project-layer-decline-aborts x5
+  project-layer-decline-aborts run 1/5: score 1.00  $0.29
+  project-layer-decline-aborts run 2/5: score 1.00  $0.18
+  project-layer-decline-aborts run 3/5: score 1.00  $0.28
+  project-layer-decline-aborts run 4/5: score 1.00  $0.18
+  project-layer-decline-aborts run 5/5: score 1.00  $0.21
+results: evals/results/2026-09-21T08-40-31-141Z
+=== project-config-table x5
+  project-config-table run 1/5: score 1.00  $0.29
+  project-config-table run 2/5: score 1.00  $0.29
+  project-config-table run 3/5: score 1.00  $0.32
+  project-config-table run 4/5: score 1.00  $0.25
+  project-config-table run 5/5: score 1.00  $0.25
+results: evals/results/2026-09-21T08-45-09-292Z
+=== project-layer-aborts-01 x5
+  project-layer-aborts-01 run 1/5: score 1.00  $0.30
+  project-layer-aborts-01 run 2/5: score 1.00  $0.32
+  project-layer-aborts-01 run 3/5: score 1.00  $0.31
+  project-layer-aborts-01 run 4/5: score 1.00  $0.27
+  project-layer-aborts-01 run 5/5: score 1.00  $0.29
+results: evals/results/2026-09-21T08-51-46-515Z
+=== project-env-redefined x5
+  project-env-redefined run 1/5: score 1.00  $0.38
+  project-env-redefined run 2/5: score 1.00  $0.29
+  project-env-redefined run 3/5: score 1.00  $0.33
+  project-env-redefined run 4/5: score 1.00  $0.35
+  project-env-redefined run 5/5: score 1.00  $0.37
+results: evals/results/2026-09-21T08-57-33-811Z
+=== pre-confirm-mismatch x5
+  pre-confirm-mismatch run 1/5: score 1.00  $0.23
+  pre-confirm-mismatch run 2/5: score 1.00  $0.22
+  pre-confirm-mismatch run 3/5: score 1.00  $0.18
+  pre-confirm-mismatch run 4/5: score 1.00  $0.28
+  pre-confirm-mismatch run 5/5: score 1.00  $0.25
+results: evals/results/2026-09-21T09-04-58-327Z
+=== project-redefined-allowed x3
+  project-redefined-allowed run 1/3: score 1.00  $0.36
+  project-redefined-allowed run 2/3: score 1.00  $0.30
+  project-redefined-allowed run 3/3: score 1.00  $0.32
+results: evals/results/2026-09-21T09-10-23-684Z
+=== project-layer-bare-table x3
+  project-layer-bare-table run 1/3: score 1.00  $0.26
+  project-layer-bare-table run 2/3: score 1.00  $0.32
+  project-layer-bare-table run 3/3: score 1.00  $0.28
+results: evals/results/2026-09-21T09-14-34-066Z
+=== project-widening-confirm x3
+  project-widening-confirm run 1/3: score 1.00  $0.30
+  project-widening-confirm run 2/3: score 1.00  $0.26
+  project-widening-confirm run 3/3: score 1.00  $0.28
+results: evals/results/2026-09-21T09-18-14-689Z
+=== project-defined-server x3
+  project-defined-server run 1/3: score 1.00  $0.41
+  project-defined-server run 2/3: score 1.00  $0.48
+  project-defined-server run 3/3: score 1.00  $0.49
+results: evals/results/2026-09-21T09-21-54-781Z
+=== manual-with-question x1
+  manual-with-question run 1/1: score 1.00  $0.51
+results: evals/results/2026-09-21T09-27-58-596Z
+=== verbal-request x1
+  verbal-request run 1/1: score 1.00  $0.47
+results: evals/results/2026-09-21T09-30-13-175Z
+[after 2026-09-21 17:32:18] HEAD 0ff29121f5279c1e4b83ca7587c83d6fa8bf4682
+[after] SKILL.md sha256 bdb7ed4e95a587a621f133ce9e76c49796fa9c09e54660b389dcb8985f836543
+[after] git status --porcelain (the run log itself excluded): 0 line(s)
