@@ -20,3 +20,5 @@ step 10 是 R07b 的 non-goal，這個案例不在十個 gate 案例內（覆蓋
 
 - [ ] `--runs 5` 加 `--keep-temp`，分出「漏標題」與「judge 不穩」各佔多少。
 - [ ] 漏標題：step 10 的 Parallel reply 段落修到 `--runs 5` 全過；judge 不穩：`merged-llm` 的可判定部分改成 regex grader 並有離線測試。
+
+**2026-09-21 — same family, second case (Plan R07b S6b regression runs).** `parallel-one-fails` 2/3: in one run the fixed line `Failed model: gpt-5.6-sol — <reason>` was paraphrased as a bold sentence ("**gpt-5.6-sol failed to run** — the Codex process exited with an error …"), so `failed-line` missed; everything else passed. Step 10's parallel paragraph asks for that line "always, on its own line". Like the dropped `Divergences` heading this is fixed wording of step 10 left to free composition; S3 of R07b showed the remedy (fixed words as output slots plus an order of work). Trace: `D:/tmp/ask-codex-r07b-traces/s6b-parallel-one-fails/claude-eval-ZoBTPV.jsonl`.

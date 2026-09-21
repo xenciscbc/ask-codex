@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（同樣改 step 10 第一項，避免兩張 ticket 同時改同一段；非功能依賴）.
 
-**Status:** resolved (2026-09-20)
+**Status:** needs-triage — reopened 2026-09-21 (Plan R07b S7): the fix holds at about 80-90 %, not 100 %; named exception for the R07b gate, fix after the merge
 
 ## 行為改動
 
@@ -28,3 +28,5 @@
 **另行追蹤（不屬本票）**：今天 41 次 run 中 `temp-cleanup` 失敗 2 次（round 3 的 `alias-astra` 一次、round 5 的對照案例一次），沒有留 trace，無法判斷是沒清理還是引號形式不同，也無法歸因於本票（本票未動 step 11，且沒有改動前的同量基線）。已開 ticket 09，交由 07 的全套重跑以 `--keep-temp` 觀察。
 
 費用：五輪約 USD 20.1（3.85＋4.01＋4.85＋2.45＋4.96），Codex 呼叫 0。
+
+**2026-09-21 — reopened by Plan R07b S7: the fix holds at about 80–90 %, not 100 %.** `evidence/07b-s7-run-log.txt` (commit `71ac945`, `SKILL.md` `830c6bd5…`): `override-restated-no-prompt` 8/10 — in both misses the working line reads `Model baseline: gpt-5.6-terra, effort medium (config.toml); named: gpt-6-astra, effort medium — different.` although the history sets astra for the rest of the session: the baseline was taken from `config.toml`, not from the session setting, so the scope line appeared where it must not (`no-scope-line`; the LLM judge `no-scope-prompt` agreed 3:0). `alias-astra` 9/10 — the scope line is written correctly right after the working line, but in the final message it is folded into a sentence ("… — this model choice applies to this consultation only, since it differs from the config-default baseline …") (`scope-line`). The resolution of 2026-09-20 rested on 5/5 + 5/5; a behaviour with a true rate of 0.8 passes 5/5 one time in three. User decision 2026-09-21: named exceptions for the R07b gate (at most 2 and at most 1 misses in 5, those graders only), fix after the merge. What S3 of R07b taught applies here: free wording drifts, fixed wording with an explicit order of work does not — item 7 already fixes the words; what it lacks is where the baseline comes from stated as a lookup BEFORE the comparison, and the restatement as an output slot of step 10 rather than a reminder.

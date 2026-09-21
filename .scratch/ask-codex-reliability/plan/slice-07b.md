@@ -85,3 +85,15 @@ The reviewer's answers to the three design questions: cleaning up before asking 
 ## 6. Rollback
 
 One commit per slice on a local branch; any slice reverts with `git revert`. S1 leaves only a worktree to remove.
+
+## 7. Named exceptions decided BEFORE the gate (user decision 2026-09-21, after S7)
+
+S7 (`evidence/07b-s7-run-log.txt`, commit `71ac945`, 25 full consultations) measured three gate cases below 5/5 for reasons that lie in this Plan's non-goals (step 0's model scope, step 10's follow-up paragraph) and that exist on `main` today — none was introduced by this branch. With those rates the chance that all three reach 5/5 in one gate is about 6 %, so running the gate first and asking afterwards would only buy the same question for USD 45. The user decided: **named exceptions, merge first.** For these three cases Outcome (1) reads "no worse than measured, and only in the measured shape":
+
+| Gate case | Measured in S7 | Shape of the miss | Bound at the gate (5 runs) | Ticket |
+|---|---|---|---|---|
+| `override-restated-no-prompt` | 8/10 | baseline taken from `config.toml` instead of the session setting → "different" → the scope line appears although the named model equals the setting in force (`no-scope-line`, `no-scope-prompt`) | at most 2 misses, those two graders only | reliability ticket 05 reopened |
+| `alias-astra` | 9/10 | the scope line, written correctly in an earlier message, is folded into a sentence in the final one (`scope-line`) | at most 1 miss, that grader only | reliability ticket 05 reopened |
+| `followup-new-blocking` | 2/5 with the LLM judge; the judge is replaced (S7(ii)) | the reply says that C5 was omitted ("(C5 … is omitted per the follow-up rules)") although step 10 says an omitted claim is not mentioned at all (`c5-not-mentioned`) | at most 1 miss, that grader only | new ticket 12 |
+
+Any OTHER grader of these cases missing, or a miss above the bound, is handled like any other gate miss (Outcome (1), exception rule — the user decides). `temp-cleanup`: 25 of 25 in S7.

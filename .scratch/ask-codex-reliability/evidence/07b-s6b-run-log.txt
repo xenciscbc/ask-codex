@@ -71,3 +71,36 @@ results: evals/results/2026-09-21T14-41-39-792Z
 [after 2026-09-21 22:43:25] HEAD e23d353855897bab142799d6a793428ed76bcc0d
 [after] SKILL.md sha256 2ac59f5755d1e86ea5d6704df761fa759feaba434f19131518f576af791f7a27
 [after] git status --porcelain (the run log itself excluded): 0 line(s)
+[before 2026-09-21 22:44:50] HEAD 864fe209a7e9495f27fd4197897ea968290bd93e
+[before] SKILL.md sha256 2ac59f5755d1e86ea5d6704df761fa759feaba434f19131518f576af791f7a27
+[before] git status --porcelain (the run log itself excluded): 0 line(s)
+[grant] --allow-tools Bash Write TaskStop
+=== headless-timer-wait x5
+  headless-timer-wait run 1/5: score 1.00  $0.47
+  headless-timer-wait run 2/5: score 1.00  $0.49
+  headless-timer-wait run 3/5: score 1.00  $0.43
+  headless-timer-wait run 4/5: score 1.00  $0.44
+  headless-timer-wait run 5/5: score 1.00  $0.50
+results: evals/results/2026-09-21T14-44-58-544Z
+=== headless-timer-stall x5
+  headless-timer-stall run 1/5: score 1.00  $0.52
+  headless-timer-stall run 2/5: score 1.00  $0.56
+  headless-timer-stall run 3/5: score 1.00  $0.51
+  headless-timer-stall run 4/5: score 1.00  $0.49
+  headless-timer-stall run 5/5: score 1.00  $0.53
+results: evals/results/2026-09-21T14-56-40-708Z
+[after 2026-09-21 23:13:23] HEAD 864fe209a7e9495f27fd4197897ea968290bd93e
+[after] SKILL.md sha256 2ac59f5755d1e86ea5d6704df761fa759feaba434f19131518f576af791f7a27
+[after] git status --porcelain (the run log itself excluded): 0 line(s)
+[before 2026-09-21 23:13:23] HEAD 864fe209a7e9495f27fd4197897ea968290bd93e
+[before] SKILL.md sha256 2ac59f5755d1e86ea5d6704df761fa759feaba434f19131518f576af791f7a27
+[before] git status --porcelain (the run log itself excluded): 0 line(s)
+[grant] --allow-tools Bash Write TaskOutput TaskStop
+=== manual-with-question x3
+  manual-with-question run 1/3: score 1.00  $0.42
+  manual-with-question run 2/3: score 1.00  $0.53
+  manual-with-question run 3/3: score 1.00  $0.47
+results: evals/results/2026-09-21T15-13-27-457Z
+[after 2026-09-21 23:19:33] HEAD 864fe209a7e9495f27fd4197897ea968290bd93e
+[after] SKILL.md sha256 2ac59f5755d1e86ea5d6704df761fa759feaba434f19131518f576af791f7a27
+[after] git status --porcelain (the run log itself excluded): 0 line(s)
