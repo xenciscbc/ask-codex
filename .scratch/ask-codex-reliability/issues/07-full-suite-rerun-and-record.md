@@ -9,7 +9,7 @@
 ## 要做的事
 
 1. WSL 內先確認 Claude 登入有效，再以一次 `run-evals.sh` 跑全套（不分批、不並行），`--allow-tools Bash Write TaskOutput TaskStop`。
-2. 讀 `aggregate-result.json`：`diagnosis-leak-control` 的 `no-hypothesis` 必須失敗（red-phase control）；`history-probe-nofixture` 與 `task-tools-probe` 是 harness probe；其餘全部 1.00。
+2. 讀 `aggregate-result.json`：`history-probe-nofixture` 是 harness probe（不受 1.00 約束，0.80 是預期值）；`task-tools-probe` 照常要求 1.00；`diagnosis-leak-control` 的分數**只記錄、不判定**——它的 `no-hypothesis` grader 會不會咬，改由離線測試 `evals/_harness/ticket-r07b-s5-control.test.mjs` 證明（Plan R07b S5，2026-09-21：原本要求「live 必須失敗」，但那只在模型照做時才發生，9/20 的全套執行模型守住了 blind，control 拿到 1.00、什麼也沒證明）；其餘全部 1.00。
 3. 任一非 control 案例未達 1.00：先判斷是 grader 問題還是 skill 退步；退步則回到對應 ticket 修正並重跑受影響案例，不在本 ticket 內改 skill。
 4. 更新 `.scratch/ask-codex-mvp/plan/PLAN.md` 的覆蓋範圍縮窄註記為「已於 <commit> 全套重跑」，MVP spec 或 README 中的已知缺陷清單移除 12、14–17。
 
