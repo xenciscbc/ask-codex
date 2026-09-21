@@ -15,7 +15,7 @@ const expect = (ok, label) => { if (ok) pass++; else { fail++; console.log(`FAIL
 
 const cases = fs.readdirSync(evals).filter((c) => fs.existsSync(path.join(evals, c, "graders", "temp-cleanup.md")));
 const bodies = new Set(cases.map((c) => fs.readFileSync(path.join(evals, c, "graders", "temp-cleanup.md"), "utf8").replace(/\r\n/g, "\n")));
-expect(cases.length === 47, `47 cases carry temp-cleanup (found ${cases.length})`);
+expect(cases.length === 48, `48 cases carry temp-cleanup (found ${cases.length})`);
 expect(bodies.size === 1, "the grader is byte-identical in every case");
 const body = [...bodies][0];
 expect(/^type: regex$/m.test(body) && /^match: not_contains$/m.test(body) && /^target: trace$/m.test(body), "a not_contains regex on the trace");
