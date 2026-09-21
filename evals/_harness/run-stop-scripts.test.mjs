@@ -1,8 +1,11 @@
-// Offline test of the consultation launcher and stopper (reliability tickets 02 and 03):
+// Offline test of the consultation launcher, stopper and foreground wait (reliability tickets 02,
+// 03 and 10, Plan R07b slice S6b):
 //   node evals/_harness/run-stop-scripts.test.mjs
 // Starts the stub in `slow-silent` mode through run.sh with the skill's real command shape and
 // redirections, stops it with stop.sh, and checks the pid file, the process tree, events.jsonl,
-// exit codes and the report line; then the NOT-confirmed branches and the parallel fields.
+// exit codes and the report line; then the NOT-confirmed branches and the parallel fields; then
+// `run.sh`'s `exit-code` file and `wait.sh`'s foreground, file-based wait over one or more run
+// directories.
 // Needs bash on PATH (Git Bash on Windows) and python for the stub; runs under D:/tmp on Windows.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -46,6 +49,8 @@ const launch = ({ dir, run }) => {
   return state;
 };
 const stop = (run, args) => spawnSync("bash", [path.join(scripts, "stop.sh"), toBash(run), ...args], { encoding: "utf-8" });
+const waitScript = path.join(scripts, "wait.sh");
+const runWait = (args) => spawnSync("bash", [waitScript, ...args.map((a) => toBash(a))], { encoding: "utf-8" });
 const reportOf = (r) => (r.stdout.split(/\r?\n/).find((l) => l.startsWith("Consultation stopped: ")) || "");
 const FIELDS = /^Consultation stopped: interval \d+ minutes \((default|override)\); elapsed \d+:\d\d; (last event [\w.]+ \d+:\d\d ago|no events); offered: wait another \d+ minutes \/ stop \(recommended: (wait|stop)\); process tree (ended|NOT confirmed — pids .+)/;
 
@@ -138,6 +143,111 @@ try {
   {
     const r = stop(path.join(root, "nopid-run"), ["--interval", "30"]);
     check(r.status === 2 && reportOf(r) === "", "missing arguments: usage error, no report line");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // run.sh: `exit-code` (ticket 10, S6b).
+  // ---------------------------------------------------------------------------------------------
+  // A normal (fast) run writes `exit-code` = 0, and a stale one from an earlier run is removed
+  // at start.
+  {
+    const p = project("exit-code-ok", { exec: { mode: "valid" } });
+    fs.writeFileSync(path.join(p.run, "exit-code"), "99\n");
+    const state = launch(p);
+    check(await waitFor(() => state.exited, 10000), "run.sh: exits on a normal (fast) run");
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "exit-code")), 5000), "run.sh: writes exit-code");
+    check(fs.readFileSync(path.join(p.run, "exit-code"), "utf-8").trim() === "0", "run.sh: exit-code is 0 after a normal run (stale 99 removed at start)");
+  }
+  // A failing command's real non-zero status is written.
+  {
+    const p = project("exit-code-fail", { exec: { mode: "fail" } });
+    const state = launch(p);
+    check(await waitFor(() => state.exited, 10000), "run.sh: exits on a failing run");
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "exit-code")), 5000), "run.sh: writes exit-code on a failing run");
+    check(fs.readFileSync(path.join(p.run, "exit-code"), "utf-8").trim() === "1", `run.sh: exit-code is the command's real non-zero status (got ${fs.readFileSync(path.join(p.run, "exit-code"), "utf-8")})`);
+  }
+  // After a stop (stop.sh), exit-code exists too — run.sh writes it before the stop-request block,
+  // on every end of the launched command.
+  {
+    const p = project("exit-code-stop", { exec: { mode: "slow-silent", duration_s: 90 } });
+    const state = launch(p);
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "pid")), 10000), "exit-code after stop: pid file appears");
+    await sleep(1000);
+    const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
+    check(r.status === 0, "exit-code after stop: stop.sh confirms the tree ended");
+    check(await waitFor(() => state.exited, 5000), "exit-code after stop: run.sh exits");
+    check(fs.existsSync(path.join(p.run, "exit-code")), "exit-code after stop: exit-code exists after a stop request");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // wait.sh: foreground, file-based wait (ticket 10, S6b).
+  // ---------------------------------------------------------------------------------------------
+  const runDir = (name) => { const d = path.join(root, name); fs.mkdirSync(d); return d; };
+  const linesOf = (r) => r.stdout.split(/\r?\n/).filter((l) => l.length > 0);
+
+  // A directory that already finished: returns almost at once.
+  {
+    const d = runDir("wait-finished");
+    fs.writeFileSync(path.join(d, "exit-code"), "0\n");
+    const t0 = Date.now();
+    const r = runWait([d, "--seconds", "5"]);
+    const elapsedMs = Date.now() - t0;
+    check(r.status === 0, `wait.sh: exit status 0 on a finished directory (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+    check(elapsedMs < 2000, `wait.sh: returns within 2s of the run ending (took ${elapsedMs}ms)`);
+    check(linesOf(r).length === 1 && linesOf(r)[0] === `finished exit=0 ${toBash(d)}`, `wait.sh: prints 'finished exit=0 <dir>' (got ${JSON.stringify(r.stdout)})`);
+  }
+  // A never-finishing (slow-silent, run through run.sh) directory: returns at the time limit with
+  // 'still-running', and the run is still alive (no exit-code) afterwards.
+  {
+    const p = project("wait-slow", { exec: { mode: "slow-silent", duration_s: 90 } });
+    launch(p);
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "pid")), 10000), "wait.sh/slow-silent: pid file appears");
+    const t0 = Date.now();
+    const r = runWait([p.run, "--seconds", "3"]);
+    const elapsedS = (Date.now() - t0) / 1000;
+    check(r.status === 0, `wait.sh: exit status 0 on a still-running directory (got ${r.status})`);
+    check(elapsedS >= 3 && elapsedS <= 5, `wait.sh: returns after about 3s (took ${elapsedS.toFixed(1)}s)`);
+    check(/^still-running elapsed=\d+s /.test(r.stdout) && linesOf(r).length === 1, `wait.sh: prints 'still-running elapsed=<n>s <dir>' (got ${JSON.stringify(r.stdout)})`);
+    check(!fs.existsSync(path.join(p.run, "exit-code")), "wait.sh: the run is still alive afterwards (no exit-code yet)");
+    stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
+  }
+  // Two directories, one finished and one running: two lines, in argument order, and the call
+  // returns at the time limit (the running one never finishes within it).
+  {
+    const done = runDir("wait-two-done");
+    fs.writeFileSync(path.join(done, "exit-code"), "7\n");
+    const running = runDir("wait-two-running");
+    const t0 = Date.now();
+    const r = runWait([done, running, "--seconds", "2"]);
+    const elapsedS = (Date.now() - t0) / 1000;
+    check(r.status === 0, "wait.sh: exit status 0 with a mix of finished and still-running directories");
+    check(elapsedS >= 2 && elapsedS <= 5, `wait.sh: two directories return at the time limit (took ${elapsedS.toFixed(1)}s)`);
+    const ls = linesOf(r);
+    check(ls.length === 2 && ls[0] === `finished exit=7 ${toBash(done)}` && new RegExp(`^still-running elapsed=\\d+s ${toBash(running).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`).test(ls[1]), `wait.sh: one line per directory, in argument order (got ${JSON.stringify(r.stdout)})`);
+  }
+  // Both finished: returns at once.
+  {
+    const d1 = runDir("wait-both-1"); fs.writeFileSync(path.join(d1, "exit-code"), "0\n");
+    const d2 = runDir("wait-both-2"); fs.writeFileSync(path.join(d2, "exit-code"), "3\n");
+    const t0 = Date.now();
+    const r = runWait([d1, d2, "--seconds", "5"]);
+    const elapsedMs = Date.now() - t0;
+    check(r.status === 0, "wait.sh: exit status 0 when both directories are already finished");
+    check(elapsedMs < 2000, `wait.sh: both finished returns at once (took ${elapsedMs}ms)`);
+    const ls = linesOf(r);
+    check(ls.length === 2 && ls[0] === `finished exit=0 ${toBash(d1)}` && ls[1] === `finished exit=3 ${toBash(d2)}`, `wait.sh: both lines, in order (got ${JSON.stringify(r.stdout)})`);
+  }
+  // Usage errors: exit 2, nothing on stdout.
+  {
+    const d = runDir("wait-usage");
+    const noStdout = (r, label) => check(r.status === 2 && r.stdout === "", `wait.sh usage error (${label}): exit 2, empty stdout (status ${r.status}, stdout ${JSON.stringify(r.stdout)})`);
+    noStdout(runWait([d, "--seconds", "0"]), "--seconds 0");
+    noStdout(runWait([d, "--seconds", "571"]), "--seconds 571");
+    noStdout(runWait([d, "--seconds", "abc"]), "--seconds abc");
+    noStdout(runWait([d]), "missing --seconds");
+    noStdout(runWait(["--seconds", "5", d]), "--seconds before the directories");
+    noStdout(runWait(["--seconds", "5"]), "no directory");
+    noStdout(runWait([path.join(root, "wait-does-not-exist"), "--seconds", "5"]), "a directory that does not exist");
   }
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

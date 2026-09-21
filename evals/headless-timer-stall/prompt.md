@@ -1,5 +1,5 @@
 ---
-description: "Ticket r10: the wait without TaskOutput - the wait goes through the foreground wait script, and the run still reads the reply, cleans up and presents it in one turn. The harness cannot withhold TaskOutput (a deferred tool, reachable through ToolSearch whatever the grant or allowed_tools say), so its absence is SIMULATED by the appended system prompt."
+description: "Ticket r10: the stall path without TaskOutput - the wait script returns still-running, the check finds a stale last event, and without AskUserQuestion the run is stopped through the stop path."
 max_turns: 40
 timeout_seconds: 1200
 allowed_tools: [Skill, Bash, Read, Glob, Grep, Write, TaskStop]

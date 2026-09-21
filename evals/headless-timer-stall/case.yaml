@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: headless-timer-stall
+tags: [ticket-r10]
+context:
+  scaffold_script: scaffold.sh
+  add_dirs: [stubbin]
+execution:
+  env:
+    EVAL_ASK_CODEX_TIMEOUT_MINUTES: "1"

@@ -29,7 +29,7 @@ shift
 
 started="$(date +%s)"
 platform="$(tree_platform)"
-rm -f "$run_dir/stop-request" "$run_dir/stop-result"
+rm -f "$run_dir/stop-request" "$run_dir/stop-result" "$run_dir/exit-code"
 
 # A background job (`&`) of a non-interactive shell gets /dev/null as stdin unless stdin is
 # redirected explicitly, and the prompt arrives on stdin (`- < prompt.md`): keep it.
@@ -79,6 +79,8 @@ watcher=$!
 wait "$child"
 status=$?
 kill "$watcher" 2>/dev/null
+
+printf '%s\n' "$status" > "$run_dir/exit-code.tmp" && mv -f "$run_dir/exit-code.tmp" "$run_dir/exit-code"
 
 if [ -e "$run_dir/stop-request" ]; then
   survivors=""
