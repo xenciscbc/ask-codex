@@ -444,3 +444,24 @@ As before. Existing graders that may be touched: `no-reask-after-decline.md` and
 ### Live acceptance and verification (main session)
 
 Local commit; fresh run log; the same eleven cases and run counts; then a FRESH outcome verifier on an updated final claim, again asked to read the final messages. If a gate case is short of 5/5 or the verifier refutes again, the slice pauses and the user decides — no seventh pass without the user.
+
+---
+
+# Pass 6 result and the FINAL claim of slice S3, second edition (supersedes every earlier "claim" in this file)
+
+## Pass 6 (commit `633b60e`, run log `evidence/07b-s3-run-log.txt`)
+
+The five gate cases 5/5 each — including the three the verifier's findings came from: `pre-confirm-mismatch` (F1), `project-layer-decline-aborts` (F2), `project-env-redefined` (F3) — `project-config-table` 5/5, `project-layer-aborts-01` 5/5; the regression cases 3/3 each (`project-redefined-allowed`, `project-layer-bare-table`, `project-widening-confirm`, the reverse control `project-defined-server`); `verbal-request` 1/1. `manual-with-question`: the single run scored 0.93 — the LLM judge `dispositions` voted PASS FAIL FAIL on a reply that attributes the claims to Codex, presents C1–C3 and gives each a disposition with a reason (the only hedge: C3's "reject (as a fix), but agree with the framing"); the case was then rerun `--runs 5` on the same commit, appended to the same run log: 5/5 at 1.00. So 43 of 44 runs at 1.00 on `633b60e`; the one miss is an LLM judge on a full-consultation case that never reaches lines 39/41. HEAD, clean tree and the `SKILL.md` sha256 are identical before and after both invocations. `no-ran-claim`'s lookbehind compiled and graded in the live harness (six copies, no grader error).
+
+## Final claim (for the outcome verifier)
+
+On commit C = `633b60e`, relative to `fb6bb9b` (the commit before S3):
+
+1. `skills/ask/SKILL.md` differs in exactly two lines, 39 and 41; lines 156, 162 and 175 are byte-identical; still CRLF, same number of lines.
+2. Line 41 (a confirmation still pending, no `AskUserQuestion`): clean up first, then ONE final message with the fixed line `Consultation not sent — confirmation needed.`, what was found, the fixed copy-back sentence of each pending step (slots: server names matching `^[A-Za-z0-9_.-]+$` only) ending `then ask Codex again.`, how step 3 and step 4 are told apart, and under each sentence that step's FIXED decline line and nothing else about declining. Line 39: after a decline, the outcome only, in ONE closing message written after all other work, never another request for confirmation and never how a consultation could still be had.
+3. The six LLM content judges of the confirmation cases are gone, each by a recorded user decision, and every rubric clause is mapped to a deterministic grader that exists; the clauses pinned more weakly, and the bypass shapes the first verifier found (F5), are listed in `evidence/07b-security-review.md`.
+4. `node evals/_harness/ticket-r07b-s3-graders.test.mjs` exits 0 (1535 passed), as do `ticket-r07-graders.test.mjs` (20) and `ticket-r08-graders.test.mjs` (44). The S3 test holds the real defective replies of passes 0–5 — including the three the first verifier found — as constants, asserts that the graders fail them, and that real correct replies pass.
+5. The run log shows HEAD = C, an empty `git status --porcelain` and one `SKILL.md` sha256 throughout, and names result directories in which the five gate cases are 5/5 and the four regression cases 3/3, all at 1.00.
+6. **What the first verifier refuted is fixed in the final messages of pass 6, not only in the scores:** in the traces of the final pass (`D:\tmp\ask-codex-r07b-traces\s3-<case>\`, newest five per gate case) every pending stop's LAST message carries the fixed line, the right kind of sentence with the fixed ending, and that step's own decline line — no step-2 or step-4 stop says that declining means the consultation is not sent; and every decline reply states that nothing was sent and why, naming `.codex/config.toml` and `repo_helper`, without saying how a consultation could still be had.
+
+Not claimed: determinism (5 of 5 is an operational gate); cases outside those run; step 0's and step 8's own plain-text questions, and that a bare "I decline" carries no new request (ticket 11); the LLM judges of other cases (`dispositions` here, `merged-llm` in ticket 13). Commits after C that touch only `.scratch/` do not change the claim.
