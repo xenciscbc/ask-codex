@@ -125,3 +125,38 @@ oddly in the command case — documentation only, the pattern is the same.
   template, never a confirmation (`:33`).
 - Out of scope, noted: `.scratch/ask-codex-mvp/plan/gen-ticket11-cases.mjs` still generates `asks-f12b-env` and
   `asks-f12b-command`, so re-running that generator would resurrect both deleted judges.
+
+## Fix pass 3 (2026-09-21) — the decline path, defect F-B
+
+What changed: `skills/ask/SKILL.md` line 39 only (one physical line; `git diff -U0` against `c932d50` shows one
+hunk, `@@ -39 +39 @@`). It now says **where** the outcome goes — "state the outcome only, **and state it in your
+final message**" — what was not sent or which server was disabled, and why, naming the file and the servers, with
+the model's own answer below it in that same message. Two new graders in
+`evals/project-layer-decline-aborts/graders/`: `final-says-not-sent.md` (contains) and `final-names-file.md`
+(contains, `\.codex/config\.toml`). No existing grader was touched, `declined-abort.md` in particular.
+
+Why: pass-2 run 1 of `project-layer-decline-aborts` put the abort, the reason and `repo_helper` in an **earlier**
+message and left the final one carrying only `**My own analysis (Codex was not consulted for this):**`. `claude -p`
+shows only the last message, so the user would never learn that a project-defined MCP server stopped the
+consultation — defect F-B, now on the decline path (line 41 covered only a *pending* confirmation; line 39 said
+"state the outcome only" without saying where). The LLM judge `declined-abort`, whose rubric demands exactly that
+abort and its reason, rated that reply **PASS**; the deterministic `final-names-server` caught it. That reply is
+embedded in `evals/_harness/ticket-r07b-s3-graders.test.mjs` (group 12) as the must-miss case of all three
+deterministic graders.
+
+### Security read of this pass (`security-executor`)
+
+- Pre-edit check the contract asked for: the new line 39 does **not** force a stop at step 2 (`:156`, "use the user
+  config alone") or step 4 (`:175`, "add it to the disable set and continue"). It carries no stop verb, and its own
+  disjunction — "what was not sent **or which server was disabled**" — is written for the branch where the
+  consultation carries on; "final message" is the step-10 presentation there, not an early end of turn. It
+  therefore also closes the residual ambiguity recorded in fix pass 2's read above.
+- Naming the file and the servers after a decline echoes **nothing unvalidated**: `.codex/config.toml` is a fixed
+  path the skill itself looks for (`:160`), and every server name has already passed `^[A-Za-z0-9_.-]+$` (`:173`)
+  before it can be printed; the name goes into prose, never into a shell command. `:162` already required a
+  declined stop to name the definitions, so line 39 restates an existing duty for the message the user actually
+  sees — it widens what is echoed by nothing.
+- Residual: the echoed names are still only pattern-checked, not length-bounded, and step 3's own names are read
+  from the project's `.codex/config.toml` with no validation of their own (deferred, ticket 11). Telling the user
+  which project file and which server stopped the consultation is the fail-closed outcome — it cannot enable a
+  send, and `no-reask-after-decline` still forbids turning that explanation into a renewed request.
