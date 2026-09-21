@@ -8,3 +8,7 @@ ask-codex 是一份散文 skill，但「啟動 Codex、記下它、停止它、�
 - **node 腳本**：Claude Code 的環境一定有 node，但 `codex exec` 的 stdin／stdout／stderr 轉導必須留在呼叫端那一行（stub 的參數檢查與既有 grader 都看那一行），node 包裝得自己接管這些串流；殺行程樹在兩個平台上最後仍是呼叫 `taskkill` 與 `kill`。
 - **python 腳本**：使用者機器上不保證存在。
 - **bash 腳本（採用）**：Bash tool 在 Windows 是 Git Bash、在 eval 是 WSL，兩邊都保證存在；前綴形式讓原指令與轉導一字不改；離線測試可直接對 stub 驗證殺與驗證邏輯，不花 Codex 額度。
+
+## 2026-09-22 增補：等待也交給腳本（`wait.sh`，reliability ticket 10）
+
+原本的 step 8 在沒有 `TaskOutput` 時要模型「啟動背景計時器，等先到的完成通知」。模型沒有辦法「等」——它一停止呼叫工具，turn 就結束；互動 session 會被完成通知叫回來，headless（`claude -p`）不會，於是 Codex 跑完沒人讀、結果沒呈現、含程式碼摘錄的 `prompt.md` 留在磁碟上（ticket 10，以 eval 案例 `headless-timer-wait` 重現）。現行的 Claude Code session 可能根本沒有 `TaskOutput`，所以這條「備援」可能就是唯一的路徑。修法沿用本 ADR 的決定：`run.sh` 在被啟動的指令結束時把 exit status 原子寫入 `<run dir>/exit-code`（stop 之後也寫），新增的 `wait.sh` 在前景阻塞到每個指名的 run directory 都有 `exit-code` 或時間到，一律以檔案判斷——eval sandbox 裡每個 Bash 呼叫各有自己的 PID namespace，pid 跨呼叫沒有意義。檔案契約因此多一個 `exit-code`。代價與界線：Bash tool 的前景指令上限是 10 分鐘，所以預設 30 分鐘的間隔要連續呼叫數次（每段至多 540 秒）——這條多段路徑只有文字自洽與離線測試，eval 都用 1 分鐘的 override；`run.sh` 自己被殺或在啟動前因用法錯誤退出時不會有 `exit-code`，`wait.sh` 只會回報 `still-running`，由 step 8 的存活檢查在一個間隔後導向 stop path（有界）；Windows 上被 stop 的執行會寫出 `exit-code=0`，與正常結束無法區分，但 stop path 之後不會再等待。未決定的事：是否乾脆拿掉 `TaskOutput` 分支、一律用 `wait.sh`（只剩一條路徑，不必模擬就能測）——留給 ticket 10 的後續。

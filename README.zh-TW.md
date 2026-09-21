@@ -52,7 +52,7 @@ headless 執行必須明確給出工具權限；上面這組旗標就是實機�
 
 **接續諮詢。** 接續諮詢在全新的 Codex session 進行，附上前一次的論點與 Claude 的處置，並要求 Codex 逐項回報狀態；不會 resume 先前的 Codex session。
 
-**長時間執行。** Claude 預設每 30 分鐘檢查一次進行中的諮詢。Codex 仍存活且持續產生事件時，Claude 會自行繼續等待並以一行告知。看起來停滯時，互動 session 會顯示已經過時間與最後事件及其存在時間，詢問要再等一輪還是停止；headless 執行無法詢問，因此會把同樣的資訊寫出來後直接停止。停止一次諮詢時，ask-codex 會結束它啟動的整棵 Codex 行程樹，並在確認 `events.jsonl` 不再變動後才回報已停止；若無法確認，報告會寫明「停止未確認」並列出仍存活的行程，由使用者處理。停止後不會有任何內容被歸給 Codex。外掛為此隨附兩支腳本：一支把 Codex 起成自己的行程樹並記錄下來，另一支結束這棵樹並確認它已消失。停止行為已在 Windows（Git Bash）以真實的 Codex CLI 實測，互動 session 與 headless 執行各一次；Linux 由腳本的離線測試與使用 stub 的 eval 套件涵蓋，沒有真實 Codex 的實測；macOS 未測。
+**長時間執行。** Claude 預設每 30 分鐘檢查一次進行中的諮詢。Codex 仍存活且持續產生事件時，Claude 會自行繼續等待並以一行告知。看起來停滯時，互動 session 會顯示已經過時間與最後事件及其存在時間，詢問要再等一輪還是停止；headless 執行無法詢問，因此會把同樣的資訊寫出來後直接停止。停止一次諮詢時，ask-codex 會結束它啟動的整棵 Codex 行程樹，並在確認 `events.jsonl` 不再變動後才回報已停止；若無法確認，報告會寫明「停止未確認」並列出仍存活的行程，由使用者處理。停止後不會有任何內容被歸給 Codex。外掛為此隨附幾支腳本：一支把 Codex 起成自己的行程樹並記錄下來，一支結束這棵樹並確認它已消失，一支在前景等待這次執行。最後這支在 headless 執行時很要緊：session 的工具裡若沒有 `TaskOutput`，就沒辦法「等通知」——turn 會在 Codex 還在跑的時候結束，回覆永遠沒人讀——所以 Claude 改成阻塞在等待腳本上，每段最多九分鐘。停止行為已在 Windows（Git Bash）以真實的 Codex CLI 實測，互動 session 與 headless 執行各一次；Linux 由腳本的離線測試與使用 stub 的 eval 套件涵蓋，沒有真實 Codex 的實測；macOS 未測。沒有 `TaskOutput` 時的等待，由 Windows 與 Linux 上的離線測試，以及以指示模擬該工具不存在的 stub eval 案例涵蓋（eval harness 無法真的把它拿掉）；尚未以真實的 Codex CLI 實測。
 
 **MCP 政策。** 預設每次諮詢停用所有 MCP server（**白名單模式**、空清單）。你可以開放特定 server，或改用**最小停用模式**，只停用 `node_repl` 與 `cua_repl`。設定記錄在使用者層與專案層的 **ask-codex 設定檔**，專案層覆蓋使用者層；`/ask-codex:setup` 會協助建立。每次諮詢送出前，Claude 會重新列出 server 做 **MCP 事前檢查**，實際生效狀態與政策不符就中止。**專案定義的 server** 未經你具名確認一律不使用。
 
