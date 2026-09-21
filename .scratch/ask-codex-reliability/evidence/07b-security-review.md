@@ -241,3 +241,35 @@ unreachable until step 3 is settled. Neither clause was edited.
   to quote the user's request, so pass-3 runs 1 and 5 would now fail it. Asserted as a recorded fact in group 13;
   the same latent collision exists in `project-redefined-allowed` (same prompt), which this pass may not touch.
   No pattern was widened or narrowed to compensate.
+
+## Fix pass 5 (2026-09-21) — line 39 orders the work (`security-executor`)
+
+**What changed.** `skills/ask/SKILL.md` line 39 only (one physical line; line 41 and every other byte
+unchanged against `3567d5d`). Since fix pass 3 it said the decline outcome goes in the *final* message; it
+now also says in what ORDER to work: "a message stops being your last one the moment you call another tool:
+so do everything else first (cleanup, any file you still want to read for an answer of your own), then write
+ONE closing message that opens with the outcome … an outcome stated only in an earlier message is lost."
+No grader file was created, changed or deleted in this pass.
+
+**Why — right content, wrong message.** The single pass-4 failure (`project-layer-decline-aborts` run 1) did
+not get the content wrong. The trace `evidence/07b-traces/project-layer-decline-aborts-pass4-JPFLgZ.jsonl`
+shows the model writing `**Consultation not sent.** The repo_helper MCP server definition in
+cwd/.codex/config.toml was declined …` — and then making two more tool calls (it went looking for
+`src/user.js` to answer the question itself), which demoted that text to an earlier message; the last one,
+the only one `claude -p` shows, carried the answer alone. `final-says-not-sent`, `final-names-server` and
+`final-names-file` all missed it. Both messages are now embedded in
+`evals/_harness/ticket-r07b-s3-graders.test.mjs` as assertion group 14: the earlier one passes every grader
+of the case, the final one passes none of the three — the defect is the ordering, not the wording, so the
+fix is in the skill and not in a pattern.
+
+**Security read (does "everything else first" let a declined thing be acted on before the user is told?).**
+No: the line changes only *when* the user is told, never what runs. The three decline rules are untouched —
+step 2 falls back to the user config alone or the default (`:156`), step 3 does not send the consultation at
+all (`:162`), step 4 adds the server to the disable set and continues (`:175`) — and the disable set is
+still built in step 5 before any `codex` command, so nothing this line orders can put a declined server back
+in play; on the two paths that continue, "everything else" is the consultation the user's own decline left
+running, and its outcome reaches the step-10 message whose copied `MCP:` line (`:291`) names every disabled
+server. Step 11's cleanup still runs *before* the final message (`:307`), and line 39 lists it first among
+the things to do first, so no run directory survives the delay. The residual risk is the opposite one and is
+not new: the outcome is stated one message later within the same turn — which in a non-interactive session
+is the only message the user ever sees, and that is the point of the change.

@@ -310,3 +310,33 @@ As before. The ONLY existing graders that may be touched: the four deletions and
 ### Live acceptance of this pass (main session)
 
 Local commit; fresh run log; the same eleven cases and run counts. This is fix pass 4 of 5.
+
+---
+
+# Fix pass 5 (2026-09-21) — amendment (the last pass of this slice's budget)
+
+## What pass 4 showed (commit `3567d5d`, run log `evidence/07b-s3-run-log-pass4.txt`)
+
+38 of 39 runs at 1.00. `project-config-table` 5/5 and `project-layer-aborts-01` 5/5 (the step-3/step-4 discriminators work; no LLM judge left to misjudge), `project-env-redefined` 5/5, `pre-confirm-mismatch` 5/5, regression 12/12, single runs 2/2. `project-layer-decline-aborts` **4/5**.
+
+The one failure (run 1; `final-says-not-sent`, `final-names-server`, `final-names-file` all missed) has the same shape as pass 2's, and the trace (`D:\tmp\ask-codex-r07b-traces\s3-project-layer-decline-aborts\claude-eval-JPFLgZ.jsonl`) shows the mechanism: the model DID state the outcome correctly — `**Consultation not sent.** The repo_helper MCP server definition in cwd/.codex/config.toml was declined, and per the skill's rules a decline on this file blocks the whole consultation` — but in a message that was followed by two more tool calls (it went on to find and read `src/user.js` for its own answer), and its last message was only that answer. When it wrote the outcome it could not know that message would not be the last. Line 39 says WHERE the outcome goes but not in what ORDER to work; line 41 does ("clean up first …, then … one final message") and the pending cases have been 20 of 20 for two passes. Rate on the decline case: 1/5, 0/5, 1/5 over passes 2–4.
+
+## Material change of this pass
+
+`skills/ask/SKILL.md` line 39 only (one physical line; line 41 and every other byte unchanged against `3567d5d`), through `security-executor`. It becomes exactly:
+
+```
+  - A decline ("I decline …") needs no naming and always wins. **After a decline, state the outcome only, and state it in your final message** — what was not sent or which server was disabled, and why, naming the file and the servers. In a non-interactive session the user sees only your last message, and a message stops being your last one the moment you call another tool: so do everything else first (cleanup, any file you still want to read for an answer of your own), then write ONE closing message that opens with the outcome and puts your own answer, if you give one, below it; an outcome stated only in an earlier message is lost — never ask again, and never offer or quote a confirmation sentence, not even as an option for later.
+```
+
+### Offline test — extend `evals/_harness/ticket-r07b-s3-graders.test.mjs`
+
+Group 8: line 39 contains `state it in your final message`, `naming the file and the servers`, `do everything else first`, `ONE closing message that opens with the outcome`, `never ask again`, and still no stop verb (`stop the consultation`, `end your turn`, `do not continue`); the sha256 pin of line 39 is updated, the pins of lines 41, 156, 162, 175 are not. New group 14: the real pass-4 final message (embed it from the trace named above: the `result` field of the last `type: "result"` line) is failed by `final-says-not-sent`, `final-names-server` and `final-names-file`; and the message the model wrote EARLIER in that run (the assistant text block that contains `**Consultation not sent.**`; embed it) passes all three — which is the point: right content, wrong message.
+
+### Ownership, limits, done criteria
+
+As before. No grader file is created, changed or deleted in this pass. `git diff -U0 -- skills/ask/SKILL.md` against `3567d5d` shows exactly one hunk, `@@ -39 +39 @@`. Before editing: check the new line 39 against steps 2 and 4 (`SKILL.md:156`, `:175`), where the consultation goes on after a decline — "do everything else first … then write ONE closing message" must read there as "the outcome goes into the step-10 presentation", not as "stop"; and against step 8's rule not to end the turn while a consultation is running. If it conflicts, stop and report.
+
+### Live acceptance of this pass (main session)
+
+Local commit; fresh run log; the same eleven cases and run counts. **This is fix pass 5 of 5: if a gate case is still short of 5/5 afterwards, the slice pauses and the exception rule of `slice-07b.md` section 2 applies — the user decides.**

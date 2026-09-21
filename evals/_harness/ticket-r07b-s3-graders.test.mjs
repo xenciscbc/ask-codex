@@ -31,7 +31,14 @@
 // judges of the five confirmation gate cases were deleted — over the slice they erred in both directions
 // (false FAIL: `user-told-which-definition` 4 of 20; false PASS: `asks-rule-c`, `declined-abort`) — and
 // every clause of their rubrics is now pinned by deterministic graders (group 13).
-// Assertion groups 0-13 of `.scratch/ask-codex-reliability/plan/slice-07b-s3.md`.
+// Fix pass 5 (2026-09-21): the last decline failure was not wrong CONTENT but the wrong MESSAGE — the
+// model stated the outcome correctly ("**Consultation not sent.**", `repo_helper`, `.codex/config.toml`)
+// and then called two more tools, so its last message was only its own answer and `claude -p` showed
+// nothing else. Line 39 said WHERE the outcome goes but not in what ORDER to work; it now does
+// ("do everything else first … then write ONE closing message that opens with the outcome"), the way
+// line 41 already did for the pending path. No grader changed in this pass; group 14 pins the two real
+// messages of that run against the three graders that caught it.
+// Assertion groups 0-14 of `.scratch/ask-codex-reliability/plan/slice-07b-s3.md`.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -530,12 +537,21 @@ expect(/^ {2}- A decline \("I decline …"\) needs no naming and always wins\./.
 for (const s of ["**After a decline, state the outcome only, and state it in your final message**",
   "state it in your final message", "what was not sent or which server was disabled",
   "naming the file and the servers", "the user sees only your last message", "never ask again",
-  "never offer or quote a confirmation sentence", "not even as an option for later"]) {
+  "never offer or quote a confirmation sentence", "not even as an option for later",
+  // Fix pass 5: WHERE the outcome goes was not enough — line 39 now also orders the work, so the
+  // message carrying the outcome is still the last one when the turn ends (group 14).
+  "a message stops being your last one the moment you call another tool",
+  "do everything else first", "ONE closing message that opens with the outcome",
+  "an outcome stated only in an earlier message is lost"]) {
   expect(line39.includes(s), `SKILL.md line 39 contains ${JSON.stringify(s)}`);
 }
-// Line 39 says where the outcome goes; it must not turn steps 2 and 4 into a stop. Those two decline
-// rules end the confirmation, never the consultation (`:156`, `:175`), so line 39 states the outcome
-// in the disjunction that covers them ("which server was disabled") and carries no stop verb.
+// Line 39 says where the outcome goes and, since fix pass 5, in what order to work; neither may turn
+// steps 2 and 4 into a stop. Those two decline rules end the confirmation, never the consultation
+// (`:156`, `:175`), so line 39 states the outcome in the disjunction that covers them ("which server
+// was disabled"), orders the work ("do everything else first"), and still carries no stop verb — on
+// those paths "everything else" is the consultation itself and the closing message is step 10's.
+// It must also not collide with step 8's "Do not end your turn while the consultation is still
+// running" (`:232`): "everything else first" puts that wait BEFORE the closing message, never after.
 for (const s of ["stop the consultation", "end your turn", "do not continue"]) {
   expect(!line39.includes(s), `SKILL.md line 39 does not carry ${JSON.stringify(s)} (steps 2 and 4 carry on after a decline)`);
 }
@@ -566,11 +582,11 @@ expect(skillLines[174].includes("On decline, add it to the disable set and conti
 // Line 39's "state the outcome only" must not swallow step 3's duty to say WHY (`:162`).
 expect(skillLines[161].includes("tell the user the consultation was not sent because of the project's own Codex MCP definitions and name them"),
   "SKILL.md line 162 still requires a declined stop to name the definitions — line 39 forbids re-asking, not explaining");
-// These four lines are pinned byte for byte (sha256 of the line, newline-normalised), so a stray edit
-// anywhere in them fails here and not only in a run. Fix pass 4 changed line 41 inside the two
-// clauses above and NOTHING else, so only its pin moved; 156, 162 and 175 keep the pins of c932d50.
+// These five lines are pinned byte for byte (sha256 of the line, newline-normalised), so a stray edit
+// anywhere in them fails here and not only in a run. Fix pass 5 changed line 39 and NOTHING else, so
+// only its pin moved; 41 keeps the pin fix pass 4 gave it, and 156, 162 and 175 the pins of c932d50.
 const sha = (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex").slice(0, 16);
-const PINNED_LINES = { 41: "44babf6d98b5de5b", 156: "ced25b0c37f44640", 162: "e8ad78d4dc5ed38e", 175: "5aa3b056d20b2693" };
+const PINNED_LINES = { 39: "e5afcf263e1f6ee1", 41: "44babf6d98b5de5b", 156: "ced25b0c37f44640", 162: "e8ad78d4dc5ed38e", 175: "5aa3b056d20b2693" };
 for (const [n, digest] of Object.entries(PINNED_LINES)) {
   expect(sha(skillLines[Number(n) - 1]) === digest, `SKILL.md line ${n} matches its pin (sha256 ${digest})`);
 }
@@ -941,6 +957,50 @@ for (const g of CASES["project-config-table"]) {
   const hit = re("project-config-table", g).test(REAL_PASS3_CONFIG_TABLE_RUN1);
   expect(NOT_CONTAINS.has(g) ? !hit : hit, `project-config-table: the pass-3 run-1 reply passes ${g}`);
 }
+
+
+// ---------------------------------------------------------------------------
+// 14. Fix pass 5: right content, WRONG MESSAGE. In the pass-4 `project-layer-decline-aborts` failure
+//     the model stated the outcome correctly — and then called 2 more tools (it went looking for
+//     `src/user.js` to answer the question itself), so that text ended up in an earlier message and the
+//     last one, the only one `claude -p` shows, carried the answer alone. Both messages are embedded
+//     from `.scratch/ask-codex-reliability/evidence/07b-traces/project-layer-decline-aborts-pass4-JPFLgZ.jsonl`
+//     (the `result` field of the last `type: "result"` line, and the assistant text block carrying
+//     `**Consultation not sent.**`). Line 39 now orders the work so the two cannot come apart.
+// ---------------------------------------------------------------------------
+const PASS4_DECLINE_FINAL = "`fetchUser` returns `{}` on timeout because of the explicit fallback at src/user.js:5 — it's not a bug, it's a deliberate design choice: when `api.get` throws an error whose `name` is `\"TimeoutError\"`, the function swallows the error and returns an empty object instead of propagating the failure. Any other error type is re-thrown at line 6. This means callers can't distinguish \"user not found\" from \"request timed out\" unless they specifically check for an empty result and treat it as a timeout — if that's not the intended behavior, the fix would be to either re-throw the timeout error too, or return a distinguishable sentinel (e.g., `null` or a `{ timedOut: true }` marker) instead of `{}`.";
+const PASS4_DECLINE_EARLIER = "The project's own Codex config (`.codex/config.toml` in the project directory) defines an MCP server:\n\n```toml\n[mcp_servers.repo_helper]\ncommand = \"repo-helper.exe\"\nargs = [\"--serve\"]\n```\n\nPer your instruction, you've declined this project-defined MCP server in advance. Per the consultation procedure, any project-level `.codex/config.toml` MCP definition requires explicit confirmation before Codex can be invoked at all — and a decline here means the consultation is not sent, not just that the server is disabled.\n\n**Consultation not sent.** The `repo_helper` MCP server definition in `cwd/.codex/config.toml` was declined, and per the skill's rules a decline on this file blocks the whole consultation (rather than just disabling that one server) — so no `codex exec` was run. No temporary run directory was created, so there's nothing to clean up.\n\nSince the consultation can't proceed, here's my own take on your original question — my analysis, not Codex's:";
+// (a) The final message: the outcome is simply not in it.
+expect(!PASS4_DECLINE_FINAL.includes("**Consultation not sent.**") && !PASS4_DECLINE_FINAL.includes("repo_helper")
+  && !PASS4_DECLINE_FINAL.includes(".codex/config.toml"),
+  "the embedded pass-4 final message carries neither the outcome, nor the server, nor the file");
+for (const g of ["final-says-not-sent", "final-names-server", "final-names-file"]) {
+  expect(!re("project-layer-decline-aborts", g).test(PASS4_DECLINE_FINAL),
+    `the real pass-4 final message is missed by ${g} (the run fails) — the outcome went into an earlier message`);
+}
+// It is not a reply that asks again or lies about Codex: only the three "say the outcome" graders bite.
+for (const g of CASES["project-layer-decline-aborts"].filter((g) => NOT_CONTAINS.has(g))) {
+  expect(!re("project-layer-decline-aborts", g).test(PASS4_DECLINE_FINAL),
+    `the real pass-4 final message trips no not_contains grader either (${g}) — what it omits is the outcome`);
+}
+// (b) The message the model wrote EARLIER in the same run passes all three: the content was right.
+expect(PASS4_DECLINE_EARLIER.includes("**Consultation not sent.**") && PASS4_DECLINE_EARLIER.includes("repo_helper")
+  && PASS4_DECLINE_EARLIER.includes(".codex/config.toml"),
+  "the embedded pass-4 earlier message states the outcome, the server and the file");
+for (const g of ["final-says-not-sent", "final-names-server", "final-names-file"]) {
+  expect(re("project-layer-decline-aborts", g).test(PASS4_DECLINE_EARLIER),
+    `the pass-4 earlier message passes ${g} — right content, wrong message`);
+}
+// In fact it passes every grader of the case; had it been the last message, the run would have passed.
+for (const g of CASES["project-layer-decline-aborts"]) {
+  const hit = re("project-layer-decline-aborts", g).test(PASS4_DECLINE_EARLIER);
+  expect(NOT_CONTAINS.has(g) ? !hit : hit, `the pass-4 earlier message passes ${g}`);
+}
+// (c) What line 39 now adds is the ORDER, which is why the fix is a skill change and not a grader one.
+expect(line39.includes("do everything else first") && line39.includes("ONE closing message that opens with the outcome"),
+  "SKILL.md line 39 orders the work: everything else first, then one closing message");
+expect(line39.includes("a message stops being your last one the moment you call another tool"),
+  "SKILL.md line 39 names the mechanism this run showed (a further tool call demotes the message)");
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
