@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: '(?:[Ii](?:''|’)ll|[Ii] will|[Ii] can|[Ii](?:''|’)d|[Ii] would)\s+(?:just\s+|then\s+|simply\s+)?(?:proceed|continue|go ahead|carry on)\s+without\s+(?:that server|the server|this server|repo_helper|comfyui)|(?:will|would|can)\s+(?:just\s+|simply\s+)?stay\s+disabled\s+for\s+(?:the|this)\s+consultation'
+pattern: '(?:[Ii](?:''|’)ll|[Ii] will|[Ii] can|[Ii](?:''|’)d|[Ii] would)\s+(?:just\s+|then\s+|simply\s+)?(?:proceed|continue|go ahead|carry on)\s+without\s+(?:that server|the server|this server|repo_helper|comfyui)|(?:will|would|can)\s+(?:just\s+|simply\s+)?stay\s+disabled\s+for\s+(?:the|this)\s+consultation|(?:is|gets|will be|would be|stays|remains) (?:simply |just )?disabled[^.\n]{0,40}(?:consultation|everything else|the rest)[^.\n]{0,30}(?:go(?:es)? ahead|proceeds?|continues?)'
 match: not_contains
 ---
 
