@@ -1,0 +1,50 @@
+[before 2026-09-21 20:04:08] HEAD 71ac945abf8ff1a36b4f05841c123f467c4530ab
+[before] SKILL.md sha256 830c6bd58c26046bdd62fe23f63d9466d5c827a2fe2ccc13e538dbeea49c14d4
+[before] git status --porcelain (the run log itself excluded): 0 line(s)
+[grant] --allow-tools Bash Write TaskOutput TaskStop
+=== alias-astra x10
+  alias-astra run 1/10: score 0.90  $0.46
+    ✗ scope-line (weight 1): pattern not found in last_message
+  alias-astra run 2/10: score 1.00  $0.52
+  alias-astra run 3/10: score 1.00  $0.52
+  alias-astra run 4/10: score 1.00  $0.45
+  alias-astra run 5/10: score 1.00  $0.53
+  alias-astra run 6/10: score 1.00  $0.49
+  alias-astra run 7/10: score 1.00  $0.53
+  alias-astra run 8/10: score 1.00  $0.49
+  alias-astra run 9/10: score 1.00  $0.53
+  alias-astra run 10/10: score 1.00  $0.51
+✗ alias-astra  score 0.99  (10 runs)  $5.03
+results: evals/results/2026-09-21T12-04-17-030Z
+=== override-restated-no-prompt x10
+  override-restated-no-prompt run 1/10: score 1.00  $0.48
+  override-restated-no-prompt run 2/10: score 1.00  $0.51
+  override-restated-no-prompt run 3/10: score 1.00  $0.52
+  override-restated-no-prompt run 4/10: score 1.00  $0.56
+  override-restated-no-prompt run 5/10: score 0.78  $0.48
+    ✗ no-scope-line (weight 1): pattern found (expected absent)
+    ✗ no-scope-prompt (weight 1): judge votes: FAIL FAIL FAIL
+  override-restated-no-prompt run 6/10: score 1.00  $0.51
+  override-restated-no-prompt run 7/10: score 1.00  $0.52
+  override-restated-no-prompt run 8/10: score 1.00  $0.51
+  override-restated-no-prompt run 9/10: score 0.78  $0.51
+    ✗ no-scope-line (weight 1): pattern found (expected absent)
+    ✗ no-scope-prompt (weight 1): judge votes: FAIL FAIL FAIL
+  override-restated-no-prompt run 10/10: score 1.00  $0.51
+✗ override-restated-no-prompt  score 0.96  (10 runs)  $5.11
+results: evals/results/2026-09-21T12-25-48-741Z
+=== followup-new-blocking x5
+  followup-new-blocking run 1/5: score 0.94  $0.47
+    ✗ c5-not-mentioned (weight 1): pattern found (expected absent)
+  followup-new-blocking run 2/5: score 1.00  $0.43
+  followup-new-blocking run 3/5: score 0.94  $0.45
+    ✗ presentation (weight 1): judge votes: FAIL FAIL FAIL
+  followup-new-blocking run 4/5: score 0.94  $0.48
+    ✗ presentation (weight 1): judge votes: FAIL FAIL FAIL
+  followup-new-blocking run 5/5: score 1.00  $0.47
+✗ followup-new-blocking  score 0.96  (5 runs)  $2.31
+results: evals/results/2026-09-21T12-45-59-912Z
+[after 2026-09-21 20:54:52] HEAD 71ac945abf8ff1a36b4f05841c123f467c4530ab
+[after] SKILL.md sha256 830c6bd58c26046bdd62fe23f63d9466d5c827a2fe2ccc13e538dbeea49c14d4
+[after] git status --porcelain (the run log itself excluded): 1 line(s)
+[status]  M .scratch/ask-codex-reliability/plan/slice-07b-s6b.md
