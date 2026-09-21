@@ -24,9 +24,11 @@ for spec in "$@"; do
   c="${spec%%:*}"; runs="${spec##*:}"
   echo "=== $c x$runs" | tee -a "$log"
   before="$(ls evals/results 2>/dev/null | sort)"
-  MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash -i $REPO_WSL/evals/_harness/run-evals.sh --case "$c" --runs "$runs" --keep-temp --model claude-sonnet-5 --allow-tools $ALLOW 2>&1 \
+  # The spec `ALL:<runs>` runs the whole suite: no --case at all (a `*` could be glob-expanded on its way through wsl.exe).
+  sel=(--case "$c"); [ "$c" = ALL ] && sel=()
+  MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash -i $REPO_WSL/evals/_harness/run-evals.sh "${sel[@]}" --runs "$runs" --keep-temp --model claude-sonnet-5 --allow-tools $ALLOW 2>&1 \
     | tr -d '\0' | grep --line-buffered -E 'run [0-9]+/[0-9]+: score|✗|Not logged in|EAI_AGAIN' | tee -a "$log"
   comm -13 <(echo "$before") <(ls evals/results | sort) | sed 's|^|results: evals/results/|' | tee -a "$log"
-  MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash $REPO_WSL/.scratch/ask-codex-reliability/plan/r07b-copy-traces.sh "/mnt/d/tmp/ask-codex-r07b-traces/$seg-$c" 2>&1 | tr -d '\0' | tail -n 2
+  MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash $REPO_WSL/.scratch/ask-codex-reliability/plan/r07b-copy-traces.sh "/mnt/d/tmp/ask-codex-r07b-traces/$seg-${c//\*/all}" 2>&1 | tr -d '\0' | tail -n 2
 done
 fingerprint after | tee -a "$log"

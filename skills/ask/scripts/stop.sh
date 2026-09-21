@@ -28,11 +28,11 @@ run_dir="$1"; shift
 interval=""; source=""; recommended=""; done_text=""; running_text=""; parallel=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --interval) interval="${2:-}"; shift 2 ;;
-    --interval-source) source="${2:-}"; shift 2 ;;
-    --recommended) recommended="${2:-}"; shift 2 ;;
-    --done) done_text="${2:-}"; parallel=1; shift 2 ;;
-    --still-running) running_text="${2:-}"; parallel=1; shift 2 ;;
+    --interval) [ $# -ge 2 ] || usage; interval="$2"; shift 2 ;;
+    --interval-source) [ $# -ge 2 ] || usage; source="$2"; shift 2 ;;
+    --recommended) [ $# -ge 2 ] || usage; recommended="$2"; shift 2 ;;
+    --done) [ $# -ge 2 ] || usage; done_text="$2"; parallel=1; shift 2 ;;
+    --still-running) [ $# -ge 2 ] || usage; running_text="$2"; parallel=1; shift 2 ;;
     *) echo "stop.sh: unknown argument: $1" >&2; usage ;;
   esac
 done
@@ -96,29 +96,37 @@ fi
 rm -f "$run_dir/stop-result"
 : > "$run_dir/stop-request"
 
-visible=0; direct_survivors=""
-if tree_alive "$platform" "$pid"; then
-  visible=1
-  direct_survivors="$(tree_kill "$platform" "$pid")"
-fi
-
-result=""
-for _ in $(seq 1 $(( RESULT_WAIT_S * 2 ))); do
-  [ -s "$run_dir/stop-result" ] && { result="$(cat "$run_dir/stop-result")"; break; }
-  # Nothing to wait for once the pid was visible and its tree is gone.
-  [ "$visible" = 1 ] && [ -z "$direct_survivors" ] && ! tree_alive "$platform" "$pid" && break
-  sleep 0.5
-done
-
 ended=0; survivors=""
-case "$result" in
-  ended) ended=1 ;;
-  survivors\ *) survivors="${result#survivors }" ;;
-esac
-if [ "$ended" = 0 ] && [ -z "$survivors" ] && [ "$visible" = 1 ]; then
-  if [ -n "$direct_survivors" ]; then survivors="$direct_survivors"
-  elif ! tree_alive "$platform" "$pid"; then ended=1
-  else survivors="$pid"
+if [ -e "$run_dir/exit-code" ]; then
+  # The launched command already ended by itself; its pid may be gone or reused by an unrelated
+  # process. Do not kill anything and do not wait for stop-result — the tree already ended.
+  ended_code="$(cat -- "$run_dir/exit-code" 2>/dev/null)"
+  echo "stop.sh: the command had already ended by itself with exit status ${ended_code}; nothing was killed" >&2
+  ended=1
+else
+  visible=0; direct_survivors=""
+  if tree_alive "$platform" "$pid"; then
+    visible=1
+    direct_survivors="$(tree_kill "$platform" "$pid")"
+  fi
+
+  result=""
+  for _ in $(seq 1 $(( RESULT_WAIT_S * 2 ))); do
+    [ -s "$run_dir/stop-result" ] && { result="$(cat "$run_dir/stop-result")"; break; }
+    # Nothing to wait for once the pid was visible and its tree is gone.
+    [ "$visible" = 1 ] && [ -z "$direct_survivors" ] && ! tree_alive "$platform" "$pid" && break
+    sleep 0.5
+  done
+
+  case "$result" in
+    ended) ended=1 ;;
+    survivors\ *) survivors="${result#survivors }" ;;
+  esac
+  if [ "$ended" = 0 ] && [ -z "$survivors" ] && [ "$visible" = 1 ]; then
+    if [ -n "$direct_survivors" ]; then survivors="$direct_survivors"
+    elif ! tree_alive "$platform" "$pid"; then ended=1
+    else survivors="$pid"
+    fi
   fi
 fi
 

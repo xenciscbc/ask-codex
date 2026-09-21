@@ -144,6 +144,78 @@ try {
     const r = stop(path.join(root, "nopid-run"), ["--interval", "30"]);
     check(r.status === 2 && reportOf(r) === "", "missing arguments: usage error, no report line");
   }
+  // Finding 1: a flag that is the last token, with no value following it, is a usage error —
+  // not an infinite loop (there is no `set -e` and every branch used to `shift 2`).
+  {
+    const flagsOrder = ["--interval", "--interval-source", "--recommended", "--done", "--still-running"];
+    const valuesFor = { "--interval": "30", "--interval-source": "default", "--recommended": "stop", "--done": "gpt-6-astra", "--still-running": "gpt-5.6-sol" };
+    for (let i = 0; i < flagsOrder.length; i++) {
+      const flag = flagsOrder[i];
+      const args = [];
+      for (let j = 0; j < i; j++) args.push(flagsOrder[j], valuesFor[flagsOrder[j]]);
+      args.push(flag);
+      const dir = path.join(root, `missing-value-${flag.replace(/^--/, "")}`);
+      fs.mkdirSync(dir);
+      const t0 = Date.now();
+      const r = stop(dir, args);
+      const elapsedMs = Date.now() - t0;
+      check(elapsedMs < 3000, `stop.sh: ${flag} with no value returns within 3s, not a hang (took ${elapsedMs}ms)`);
+      check(r.status === 2, `stop.sh: ${flag} with no value exits 2 (got ${r.status})`);
+      check(r.stderr.length > 0, `stop.sh: ${flag} with no value prints a message on stderr`);
+      check(r.stdout === "", `stop.sh: ${flag} with no value prints nothing on stdout (got ${JSON.stringify(r.stdout)})`);
+      check(!fs.existsSync(path.join(dir, "stop-request")), `stop.sh: ${flag} with no value creates no stop-request`);
+      check(!fs.existsSync(path.join(dir, "stop-report")), `stop.sh: ${flag} with no value creates no stop-report`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // stop.sh: the launched command already ended by itself (Finding 2a, `exit-code`).
+  // ---------------------------------------------------------------------------------------------
+  // The command ended on its own (fast `valid` run) before stop.sh is asked to stop it: stop.sh
+  // must see `exit-code`, skip killing anything and skip waiting for `stop-result`, then still
+  // report the true fact that the tree ended.
+  {
+    const p = project("already-ended", { exec: { mode: "valid" } });
+    const state = launch(p);
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "exit-code")), 10000), "already-ended: run.sh writes exit-code once the command ends by itself");
+    check(await waitFor(() => state.exited, 5000), "already-ended: run.sh exits");
+    const t0 = Date.now();
+    const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
+    const elapsedMs = Date.now() - t0;
+    const line = reportOf(r);
+    check(r.status === 0, `already-ended: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+    check(FIELDS.test(line) && /process tree ended$/.test(line), `already-ended: report line ends with 'process tree ended' (got ${JSON.stringify(line)})`);
+    check(/already ended by itself with exit status 0/.test(r.stderr), `already-ended: stderr says the command had already ended (got ${JSON.stringify(r.stderr)})`);
+    // RESULT_WAIT_S (10s) would not have elapsed if stop.sh waited for stop-result; only the 5s
+    // observation window should have run.
+    check(elapsedMs < 8000, `already-ended: returns well under RESULT_WAIT_S + the observation window, proving it did not wait for stop-result (took ${elapsedMs}ms)`);
+  }
+  // Pid reuse is not acted on: after the run has ended by itself, an unrelated, test-owned
+  // process stands in for a reused pid. stop.sh must leave it alone (no tree_kill call at all,
+  // because exit-code already answers the question) and still report 'ended'.
+  {
+    const p = project("reused-pid", { exec: { mode: "valid" } });
+    launch(p);
+    check(await waitFor(() => fs.existsSync(path.join(p.run, "exit-code")), 10000), "reused-pid: exit-code appears");
+    // Spawned directly (no shell), so on every platform `.pid` is the real, directly killable
+    // pid of this process itself — the same shape `tree_alive`/`tree_kill` act on, without
+    // needing the WINPID translation `ps` gives run.sh's own (setsid'd / exec'd) children.
+    const unrelated = spawn(process.execPath, ["-e", "setTimeout(() => {}, 65000)"], { stdio: "ignore" });
+    await waitFor(() => typeof unrelated.pid === "number", 2000);
+    const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    check(alive(unrelated.pid), "reused-pid: the unrelated process is alive before stop.sh runs");
+    const platformField = process.platform === "win32" ? "windows" : "posix";
+    fs.writeFileSync(path.join(p.run, "pid"), `pid=${unrelated.pid}\nplatform=${platformField}\nstarted=${Math.floor(Date.now() / 1000)}\n`);
+    try {
+      const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
+      const line = reportOf(r);
+      check(r.status === 0, `reused-pid: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+      check(/process tree ended$/.test(line), `reused-pid: reports 'process tree ended' (got ${JSON.stringify(line)})`);
+      check(alive(unrelated.pid), "reused-pid: the unrelated (reused-pid) process is still alive after stop.sh — it was not killed");
+    } finally {
+      try { unrelated.kill(); } catch {}
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // run.sh: `exit-code` (ticket 10, S6b).
