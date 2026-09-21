@@ -24,3 +24,36 @@ The reviewer's answers to the three design questions: cleaning up before asking 
 
 - I3's closing clause was tightened in revision 3 of the S3 contract: the copy-back sentence's ending is no longer an example ("for example `… — then ask Codex again.`") but fixed wording — "end it with these words, exactly: `then ask Codex again.`" — so that a deterministic grader can pin contract A (the question is in the final message) instead of only the naming.
 - The reviewer's grader (e) (`codex mcp list` exactly twice) was REJECTED, and revision 1's grader (c) (`not_contains` on "confirmation/question/request above|earlier") was replaced by `final-carries-request`, which pins contract A positively: a last message that names everything but refers the user back to an earlier message fails it, while a legitimate sentence such as "because of your request earlier to decline any project-defined MCP servers" trips nothing.
+
+## Fix pass 1 (2026-09-21)
+
+Line 41 was replaced again (one physical line, `4428739` → this commit) after the pass-0 run log
+`evidence/07b-s3-run-log-pass0.txt`. Two changes: (i) **one fixed copy-back sentence per step**, with slots
+for server names only — step 2 `I confirm this project's ask-codex config .claude/ask-codex.local.json, which
+<sets minimal-deny mode | allows the MCP server <names>>, then ask Codex again.`, step 3 `I confirm the project
+Codex MCP definition in .codex/config.toml for server <names>, then ask Codex again.`, step 4 `I confirm the
+project-defined MCP server <name> with its changed definition, then ask Codex again.` This tightens **I2**
+further (the sentence is now the skill's fixed words plus a validated name, not model-composed prose) and closes
+the pass-0 defect where a step-3 stop offered step 4's sentence, which confirms nothing when pasted back
+(`SKILL.md:38`) and leaves the user stuck. (ii) A **fixed first line**, `Consultation not sent — confirmation
+needed.`, so the one message a non-interactive user sees states outright that nothing was sent. New deterministic
+graders: `final-right-kind` (4 cases), `final-first-line` (4 pending cases), `no-first-line-after-decline` (the
+decline case). The two LLM judges were not touched in this pass.
+
+### Security read of this pass (`security-executor`)
+
+- No fixed sentence widens what a user confirms against `SKILL.md:34-38`. Step 2 names the ask-codex config **and**
+  what it widens (:35); step 3 names `.codex/config.toml` **and** the servers (:37); step 4 names the server **and**
+  says it is project-defined **and** that its definition differs (:36). Each names exactly its own kind's item, and
+  :38 keeps a confirmation of one kind from covering another, so scope is unchanged — one kind, the named servers.
+- Step 4's "with its changed definition" replaces the example wording "with its changed command" (:36). It is not a
+  widening: :36 accepts "its definition differs", and in pass 0 models said "changed command" for a changed
+  *environment* — a false statement about the finding. The reply must still name what differs (line 41), so the
+  user is told before pasting anything.
+- The slot rule still fails closed: a name must match `^[A-Za-z0-9_.-]+$` or no sentence is offered at all. That
+  class has no whitespace and no quote, so a hostile server name cannot append a clause ("… and minimal-deny mode")
+  to the fixed sentence; it can only appear where a name belongs. The value reaches no shell. The residual path is
+  unchanged from I2: step 3 itself still has no name validation of its own (deferred, ticket 11) — line 41 validates
+  only what it pastes into the sentence.
+- Unchanged by this pass: a decline still wins (:39) and is pinned by `no-reask-after-decline` plus the new
+  `no-first-line-after-decline`; the drafted sentence is still declared a template, never a confirmation (:33).
