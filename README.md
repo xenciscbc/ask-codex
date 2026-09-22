@@ -14,7 +14,7 @@ Claude Code skills, also available as a plugin, that ask the local OpenAI Codex 
 
 ## Execution boundaries
 
-Consultations invoke Codex with its read-only shell sandbox and shell network access blocked. MCP servers run outside that sandbox and are disabled by default. Any server you permit may expose tools that write or execute; the plugin does not make those tools read-only.
+Consultations invoke Codex with its read-only shell sandbox and shell network access blocked. MCP servers run outside that sandbox; by default, the script disables every server observed during preflight. Configuration changes between preflight and execution can escape that check, as described below. Any server you permit may expose tools that write or execute; the plugin does not make those tools read-only.
 
 The skill instructs Claude to consult only when you request it and to treat Codex output as data. These are model instructions, not a hook or tool-level authorization barrier. Process termination also relies on observable process identities and snapshots, with the limitations described below.
 
@@ -120,7 +120,7 @@ Claude checks a running consultation every 30 minutes by default, using foregrou
 
 **Result delivery and recovery.** Collection writes and flushes the complete reply as ASCII-safe JSON before deleting successful run files, preserving Unicode content even with legacy Windows output encodings. If output delivery fails, the files remain so Claude can collect the same result again without starting another consultation. If cleanup fails after delivery, Claude reports the valid reply and retained location separately. There is no automatic retry after a model starts.
 
-**MCP policy.** By default every MCP server is disabled for each consultation (allowlist mode with an empty list). You can allow specific servers, or switch to minimal-deny mode where only `node_repl` and `cua_repl` are disabled. Settings live in an ask-codex config at the user level and optionally in the project, where the project's values override the user's; `/ask-codex:setup` helps you create them. Missing policy files use the documented fallback, while an existing file with invalid JSON, types, policy values or server names fails closed before Codex starts. The script checks the effective MCP state before execution and supports literal server names containing dots.
+**MCP policy.** By default the script disables every MCP server observed during preflight (allowlist mode with an empty list), subject to the configuration-race limitation below. You can allow specific servers, or switch to minimal-deny mode where only `node_repl` and `cua_repl` are disabled. Settings live in an ask-codex config at the user level and optionally in the project, where the project's values override the user's; `/ask-codex:setup` helps you create them. Missing policy files use the documented fallback, while an existing file with invalid JSON, types, policy values or server names fails closed before Codex starts. The script checks the effective MCP state before execution and supports literal server names containing dots.
 
 Policy files are merged key by key:
 
@@ -167,6 +167,7 @@ See the [validation record](.scratch/script-owned-consultation/evidence/validati
 
 ## Known risks and limitations
 
+- **MCP configuration race (unresolved):** preflight and `codex exec` load configuration separately. A new server added after the guard has no disabling override; an allowed server's definition can also change before execution. The guard does not provide an atomic configuration snapshot. Keep Codex settings and plugin configuration unchanged throughout preparation and execution; this operational precaution is not enforcement against concurrent or malicious changes. See the [investigation](docs/mcp-configuration-race.md).
 - **MCP access:** allowed tools execute outside the shell sandbox. Prompt instructions cannot enforce read-only behavior inside those tools. Read-only shell execution also does not itself constrain access to only the files relevant to your question.
 - **Request provenance:** consultation and confirmation require your own request under the skill's rules, but that rule depends on Claude following instructions. Earlier tests exposed a file-originated request before a request check was added; the limited subsequent checks do not prove immunity to prompt injection.
 - **Process snapshots:** tracking covers observed descendants, including captured detached children, and checks identities before individual signals. A child that detaches and is reparented before observation can escape discovery. If a PID/group is reused and its replacement leader exits before observation, the remaining group may be mistaken for the original group and signalled. The plugin does not provide kernel-enforced process ownership.

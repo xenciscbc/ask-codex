@@ -1,6 +1,6 @@
 // Offline test of the stub's failure modes (ticket 04):  node evals/_harness/stub-modes.test.mjs
-// Runs codex-stub.py directly in a throwaway directory (under D:/tmp on Windows, the OS temp dir
-// elsewhere) and checks exit codes, output text and the -o file for each mode.
+// Runs codex-stub.py directly in the OS temp directory and checks exit codes,
+// output text and the -o file for each mode.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +12,7 @@ const stub = path.join(here, "stub", "codex-stub.py");
 const python = ["python3", "python"].find((p) => spawnSync(p, ["--version"]).status === 0);
 if (!python) { console.log("FAIL no python found"); process.exit(1); }
 
-const base = process.platform === "win32" ? "D:/tmp" : os.tmpdir();
+const base = os.tmpdir();
 fs.mkdirSync(base, { recursive: true });
 const root = fs.mkdtempSync(path.join(base, "askcodex-stubtest-"));
 let pass = 0, fail = 0;

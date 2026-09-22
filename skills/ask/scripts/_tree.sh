@@ -50,11 +50,32 @@ posix_alive() {
   [ -n "$state" ] && [ "$state" != Z ]
 }
 
+posix_proc_starttime() {
+  local stat rest start
+  stat="$(cat "$1" 2>/dev/null)" || return 1
+  case "$stat" in
+    *')'*) rest="${stat##*)}" ;;
+    *) return 1 ;;
+  esac
+  # The comm field may contain spaces, parentheses, and newlines. Its delimiter is the
+  # final ')' in the record; everything after it starts with whitespace and field 3.
+  case "$rest" in [[:space:]]*) ;; *) return 1 ;; esac
+  start="$(printf '%s\n' "$rest" | awk '
+    { for (i = 1; i <= NF; i++) field[++count] = $i }
+    END {
+      if (count < 20 || field[20] !~ /^[0-9]+$/) exit 1
+      print field[20]
+    }')" || return 1
+  [ -n "$start" ] || return 1
+  printf '%s\n' "$start"
+}
+
 posix_identity() {
-  local start
-  if [ -r "/proc/$1/stat" ]; then
-    start="$(sed 's/^[^)]*) //' "/proc/$1/stat" 2>/dev/null | awk 'NR == 1 { print $20 }')"
-    [ -n "$start" ] && { printf 'proc:%s\n' "$start"; return; }
+  local stat_file="/proc/$1/stat" start
+  if [ -r "$stat_file" ]; then
+    start="$(posix_proc_starttime "$stat_file")" || return 1
+    printf 'proc:%s\n' "$start"
+    return
   fi
   ps -o lstart= -p "$1" 2>/dev/null | awk 'NR == 1 { gsub(/[[:space:]]+/, "_"); print }'
 }

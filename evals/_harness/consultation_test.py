@@ -265,6 +265,48 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertTrue(Path(collected["retained_location"]).exists())
         self.assertEqual(self.call("cleanup", ready["directory"])["state"], "failed")
 
+    def test_completion_receipt_failure_stops_other_parallel_worker(self):
+        self.request["models"].append({"model": "gpt-6-astra", "effort": "medium"})
+        self.scenario({"exec": {"by_model": {
+            "gpt-6-astra": {"mode": "slow-active", "duration_s": 20, "event_every_s": 0.1}}}})
+        self.env["ASK_CODEX_STOP_WINDOW_S"] = "1"
+        ready = self.prepare()
+        bootstrap = """
+import pathlib, sys, time
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).parent))
+import consult
+original = consult.write_json
+def write(path, data):
+    if pathlib.Path(path).name == 'result.json':
+        events = pathlib.Path(sys.argv[2]) / '1/events.jsonl'
+        deadline = time.monotonic() + 15
+        while (not events.exists() or not events.stat().st_size) and time.monotonic() < deadline:
+            time.sleep(.1)
+        raise PermissionError('injected completion receipt failure')
+    original(path, data)
+consult.write_json = write
+sys.argv = sys.argv[1:]
+consult.main()
+"""
+        result = subprocess.run([sys.executable, "-c", bootstrap, str(CLI), "run", ready["directory"]],
+                                env=self.env, capture_output=True, text=True, timeout=75)
+        outcome = json.loads(result.stdout)
+        self.assertEqual(outcome["state"], "launch_failed", outcome)
+        self.assertEqual(outcome["stop_requested"], ["1"], outcome)
+        self.assertEqual(len(outcome["termination"]["stops"]), 1)
+        directory = Path(ready["directory"])
+        self.assertTrue((directory / "1/stop-request").exists())
+        self.assertTrue((directory / "1/launcher-result.json").exists(), "stop must settle the stub launcher")
+        events = directory / "1/events.jsonl"
+        size = events.stat().st_size
+        time.sleep(.4)
+        self.assertEqual(events.stat().st_size, size, "stopped stub must not emit further events")
+        collected = self.call("collect", directory)
+        self.assertEqual(collected["runs"][0]["state"], "completed", collected)
+        self.assertIn(collected["runs"][1]["state"], ("stopped", "stop_unconfirmed"), collected)
+        self.assertNotIn("reply", collected["runs"][1])
+        self.assertEqual(len(list((self.project / ".stub/exec-calls").glob("*.json"))), 2)
+
     def test_late_second_launch_failure_preserves_first_completed_opinion(self):
         self.request["models"].append({"model": "gpt-6-astra", "effort": "medium"})
         ready = self.prepare()

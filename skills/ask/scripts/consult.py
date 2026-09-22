@@ -195,6 +195,16 @@ def run(directory):
                 worker = subprocess.Popen(invocation, cwd=plan["summary"]["project"], env=shell_environment(), **handles)
                 workers.append((worker, child))
                 (child / "launch-pending.json").unlink()
+            # Supervision is part of the launcher lifetime too. A failed
+            # completion receipt must not abandon another billable worker.
+            while workers:
+                for worker, child in list(workers):
+                    code = worker.poll()
+                    if code is not None:
+                        write_json(child / "result.json", {"exit_code": code})
+                        workers.remove((worker, child))
+                if workers:
+                    time.sleep(0.1)
         except (OSError, ValueError, subprocess.SubprocessError):
             # Stop started processes before any recovery bookkeeping that may
             # itself fail on a damaged/unwritable filesystem.
@@ -214,14 +224,6 @@ def run(directory):
                     pass  # run.sh writes its own durable completion receipt.
             return {"state": "launch_failed", "directory": str(directory), **failure,
                     "termination": stopped}
-        while workers:
-            for worker, child in list(workers):
-                code = worker.poll()
-                if code is not None:
-                    write_json(child / "result.json", {"exit_code": code})
-                    workers.remove((worker, child))
-            if workers:
-                time.sleep(0.1)
     return {"state": "finished", "directory": str(directory)}
 
 
