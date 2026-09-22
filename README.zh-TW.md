@@ -77,7 +77,7 @@ evals/_harness/run-evals.sh --case script-consultation --runs 1 --allow-tools Ba
 evals/_harness/run-evals.sh --case script-confirmation --runs 1 --allow-tools Bash Write
 ```
 
-公開 CLI 測試在兩個平台各通過 22 項。程序生命週期結果、審查修正、指令載入量與剩餘缺口，見[驗證紀錄](.scratch/script-owned-consultation/evidence/validation.md)。較早的 eval 案例與歷史 Windows 實機結果只驗證舊版實作，不是目前的驗收證據。獨立使用真實 `codex mcp list` 的 probe 已驗證可停用含點號的 server 名稱，但尚未驗證使用真實 Codex CLI 的完整諮詢。互動式 Claude 流程也尚未驗證。macOS 不在目前支援的驗收範圍內。
+公開 CLI 測試在兩個平台各通過 25 項。程序生命週期結果、審查修正、指令載入量與剩餘缺口，見[驗證紀錄](.scratch/script-owned-consultation/evidence/validation.md)。較早的 eval 案例與歷史 Windows 實機結果只驗證舊版實作，不是目前的驗收證據。獨立使用真實 `codex mcp list` 的 probe 已驗證可停用含點號的 server 名稱，但尚未驗證使用真實 Codex CLI 的完整諮詢。互動式 Claude 流程也尚未驗證。macOS 不在目前支援的驗收範圍內。
 
 ## 已知風險
 

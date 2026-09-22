@@ -326,11 +326,11 @@ def continue_wait(directory):
     return snapshot(directory, plan)
 
 
-def collect(directory):
+def collect(directory, after_delivery):
     directory, plan = plan_at(directory)
     if (directory / "execution-error.json").exists() and not (directory / "clock.json").exists():
         output = read_json(directory / "execution-error.json")
-        remove_run(directory, plan)
+        after_delivery.append(lambda: remove_run(directory, plan))
         return output
     runs = []
     for index, model in enumerate(plan["request"]["models"]):
@@ -360,7 +360,7 @@ def collect(directory):
         if result_for(child).get("reason"):
             result["reason"] = result_for(child)["reason"]
         runs.append(result)
-    output = {"state": "collected", "summary": plan["summary"], "timer": plan["timer"], "runs": runs,
+    output = {"state": "collected", "directory": str(directory), "summary": plan["summary"], "timer": plan["timer"], "runs": runs,
               "checks": read_json(directory / "clock.json").get("checks", [])}
     if (directory / "launch-error.json").exists():
         output["launch_error"] = read_json(directory / "launch-error.json")
@@ -371,18 +371,17 @@ def collect(directory):
     elif any(r["state"] == "stopped" for r in runs) and not all(result_for(directory / str(i)) is not None for i in range(len(runs))):
         output.update(state="settling", retained_location=str(directory))
     elif (directory / "retained").exists():
-        # Keep diagnostics after a later confirmed termination until explicit cleanup.
-        plan["request"].pop("prompt", None)
-        write_json(directory / "plan.json", plan)
-        for i in range(len(runs)):
-            for name in ("prompt.md", "last-message.json", "argv", "events.jsonl"):
-                (directory / str(i) / name).unlink(missing_ok=True)
+        # Destructive work runs only after the complete JSON has been flushed.
+        def prune_content():
+            plan["request"].pop("prompt", None)
+            write_json(directory / "plan.json", plan)
+            for i in range(len(runs)):
+                for name in ("prompt.md", "last-message.json", "argv", "events.jsonl"):
+                    (directory / str(i) / name).unlink(missing_ok=True)
+        after_delivery.append(prune_content)
         output["retained_location"] = str(directory)
     else:
-        try:
-            remove_run(directory, plan)
-        except OSError:
-            output.update(state="cleanup_failed", retained_location=str(directory))
+        after_delivery.append(lambda: remove_run(directory, plan))
     return output
 
 
@@ -452,6 +451,7 @@ def main():
     parser.add_argument("--offered", choices=("wait,stop", "none"), default="none")
     args = parser.parse_args()
     record_failure = True
+    after_delivery = []
     try:
         if args.action == "prepare":
             result = prepare(args.path, args.base)
@@ -459,6 +459,8 @@ def main():
             result = wait_for(args.path, args.seconds)
         elif args.action == "continue":
             result = continue_wait(args.path)
+        elif args.action == "collect":
+            result = collect(args.path, after_delivery)
         elif args.action == "stop":
             result = stop(args.path, args.recommended, args.offered)
         else:
@@ -478,8 +480,29 @@ def main():
                 write_json(directory / "execution-error.json", result)
         except (OSError, ValueError, KeyError):
             pass
-    print(json.dumps(result, ensure_ascii=False))
+    try:
+        # ASCII-safe JSON preserves Unicode values even on Windows legacy code pages.
+        print(json.dumps(result, ensure_ascii=True), flush=True)
+    except (OSError, UnicodeError):
+        try:
+            sys.stdout.close()
+        except OSError:
+            pass
+        print(json.dumps({"state": "delivery_failed", "retained_location": result.get("directory", args.path),
+                          "reason": "Output could not be delivered; collect the retained run again"
+                          if args.action == "collect" else "Output could not be delivered; inspect operation state"}),
+              file=sys.stderr, flush=True)
+        return 1
+    for finish in after_delivery:
+        try:
+            finish()
+        except OSError:
+            # The reply is already delivered on stdout. Report cleanup separately
+            # without replacing it or appending a second stdout JSON document.
+            print(json.dumps({"state": "cleanup_failed", "retained_location": args.path}),
+                  file=sys.stderr, flush=True)
+            return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

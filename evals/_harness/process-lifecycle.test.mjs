@@ -132,6 +132,46 @@ try {
     check(!alive, "POSIX normal root exit cleans the surviving process-group child");
   }
 
+  // A child may create its own session while its original parent is still running. The launcher
+  // must retain that descendant's identity and stop it individually; an empty root process group
+  // cannot by itself prove whole-tree termination.
+  if (process.platform !== "win32") {
+    const dir = makeRun("detached-descendant");
+    const childPidFile = path.join(dir, "detached-child-pid");
+    const fixture = path.join(dir, "detached-root.py");
+    fs.writeFileSync(fixture, [
+      "import pathlib, subprocess, sys, time",
+      "child = subprocess.Popen([sys.executable, '-c', 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'], start_new_session=True)",
+      "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')",
+      "time.sleep(60)",
+    ].join("\n"));
+    const state = launch(dir, `python3 '${toBash(fixture)}' '${toBash(childPidFile)}'`);
+    let childPid = 0;
+    const alive = () => {
+      if (!childPid) return false;
+      try { process.kill(childPid, 0); return true; } catch { return false; }
+    };
+    try {
+      check(await waitFor(() => fs.existsSync(childPidFile), 10000), "detached descendant publishes its pid");
+      childPid = Number(fs.readFileSync(childPidFile, "utf8"));
+      check(alive(), "detached descendant is alive before stop");
+      await sleep(750);
+      const result = stop(dir);
+      const status = readJson(path.join(dir, "stop-status.json"));
+      check((result.status === 0) === status.confirmed, "detached stop exit matches structured confirmation");
+      await state.completion;
+      await waitFor(() => !alive(), 3000);
+      check(status.confirmed === true, `detached descendant stop is positively verified (${status.termination.evidence})`);
+      check(!alive(), "confirmed detached-descendant stop independently observes the child dead");
+    } finally {
+      if (alive()) { try { process.kill(childPid, "SIGKILL"); } catch {} }
+      if (!fs.existsSync(path.join(dir, "launcher-result.json")) && fs.existsSync(path.join(dir, "pid"))) {
+        try { stop(dir); } catch {}
+      }
+      try { state.child.kill(); } catch {}
+    }
+  }
+
   // A caller that cannot see the recorded root still gets the in-namespace watcher's answer.
   {
     const dir = makeRun("cooperative");

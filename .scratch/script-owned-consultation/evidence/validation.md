@@ -8,6 +8,8 @@ The main agent integrated policy/confirmation handling, safe argv transport, gua
 
 Named child configurations were executor `gpt-5.6-sol` / `medium` and analyst `gpt-5.6-sol` / `high`, supplied through native dispatch according to repository guidance. Runtime backend model execution identity is not independently attested. No child was authorized to delegate. Reviewers wrote no source files; the main agent checked the resulting change set.
 
+The sections below record the initial implementation validation. The final section records the subsequent review fixes.
+
 ## Public CLI integration
 
 `python evals/_harness/consultation_test.py`: **22 tests passed on Windows**, Python 3.11, Git Bash. The same suite passed **22 tests on Ubuntu WSL**, Python 3.12.3. The final full reruns, after lifecycle and cancellation-accounting fixes, passed in 76.848s and 43.188s respectively.
@@ -60,3 +62,16 @@ English is retained. The skill alone shrank about 67%; full required consultatio
 - macOS is outside the accepted scope. Python 3.11+ is a new documented prerequisite.
 
 The implementation tickets are marked needs-triage for acceptance review, with acceptance checklists left open where full live coverage is absent. The parent specification is unchanged.
+
+## P1 review fixes
+
+Review baseline: `cc1645e`. Fixed the two reproduced P1 findings:
+
+- POSIX process discovery now combines recursive PPID ancestry, process-group membership and captured identity-matching subtree roots. The new detached-session regression failed before the fix because a positively confirmed stop left the child alive. After the fix, the lifecycle suite passes 34 assertions on Ubuntu WSL and 27 on elevated Windows Git Bash. A child that fully detaches and is reparented before any snapshot remains a process-observation limitation.
+- CLI output uses ASCII-safe JSON and flushes the full reply before deleting run files. A CP950 Unicode regression and a closed-pipe retry regression both failed before their respective fixes and pass afterward. A third test verifies that cleanup failure preserves the delivered reply on stdout and reports the retained location separately on stderr. Collection retry uses the same run and does not execute Codex again.
+
+The complete public CLI suite passes 25 tests on Windows (93.028s) and 25 on Ubuntu WSL (46.948s), using only stub Codex. Two read-only analysts reviewed the separate process-lifecycle and reply-delivery fixes with no actionable findings; the main agent integrated the changes and checked the diff. Named role settings remain those documented above; actual backend execution identity remains unconfirmed.
+
+The final ask skill is 15,012 UTF-8 bytes normalized to LF; the earlier size table records the initial implementation. No real Claude or live Codex consultation was rerun for these fixes. The remaining acceptance gaps and ticket statuses above are unchanged.
+
+All 18 Node offline test files passed again after the P1 fixes; see `review-fix-offline-summary.txt`. The full run includes the 27 Windows lifecycle assertions. Python compilation, Bash syntax checks and `git diff --check` also passed.

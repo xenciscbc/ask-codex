@@ -58,6 +58,60 @@ class ConsultationTest(unittest.TestCase):
         self.assertEqual(sent, self.request["prompt"])
         self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
 
+    def test_unicode_reply_is_delivered_with_legacy_stdout_encoding(self):
+        summary = "Unicode reply: \U0001f680 \u4e2d\u6587"
+        self.scenario({"exec": {"reply": {"summary": summary, "claims": [], "open_questions": []}}})
+        ready = self.prepare()
+        self.call("run", ready["directory"])
+        result = subprocess.run([sys.executable, str(CLI), "collect", ready["directory"]],
+                                env={**self.env, "PYTHONIOENCODING": "cp950"},
+                                capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("ascii", errors="replace"))
+        reply = json.loads(result.stdout)["runs"][0]["reply"]
+        self.assertEqual(reply["content"]["summary"], summary)
+        self.assertFalse(Path(ready["directory"]).exists())
+
+    def test_failed_reply_delivery_retains_run_for_collection_retry(self):
+        summary = "reply still recoverable " * 10000
+        self.scenario({"exec": {"reply": {"summary": summary, "claims": [], "open_questions": []}}})
+        ready = self.prepare()
+        self.call("run", ready["directory"])
+        with subprocess.Popen([sys.executable, str(CLI), "collect", ready["directory"]],
+                              env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+            process.stdout.close()  # The caller disappears before receiving the reply.
+            error = process.stderr.read()
+            self.assertNotEqual(process.wait(timeout=10), 0, error)
+        self.assertTrue(Path(ready["directory"]).exists(), "undelivered reply must remain recoverable")
+        collected = self.call("collect", ready["directory"])
+        self.assertEqual(collected["runs"][0]["reply"]["content"]["summary"], summary)
+        self.assertFalse(Path(ready["directory"]).exists())
+        self.assertEqual(len(list((self.project / ".stub/exec-calls").glob("*.json"))), 1)
+
+    def test_cleanup_failure_preserves_delivered_reply_and_reports_location(self):
+        ready = self.prepare()
+        self.call("run", ready["directory"])
+        bootstrap = """
+import pathlib, runpy, shutil, sys
+sys.argv.pop(0)
+original = shutil.rmtree
+def remove(path, *args, **kwargs):
+    if pathlib.Path(path) == pathlib.Path(sys.argv[2]) / '0':
+        raise PermissionError('test locked run files')
+    return original(path, *args, **kwargs)
+shutil.rmtree = remove
+sys.path.insert(0, str(pathlib.Path(sys.argv[0]).parent))
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+        result = subprocess.run([sys.executable, "-c", bootstrap, str(CLI), "collect", ready["directory"]],
+                                env=self.env, capture_output=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        collected = json.loads(result.stdout)
+        self.assertEqual(collected["runs"][0]["state"], "completed", collected)
+        failure = json.loads(result.stderr)
+        self.assertEqual(failure["state"], "cleanup_failed", failure)
+        self.assertEqual(failure["retained_location"], ready["directory"])
+        self.assertEqual(self.call("cleanup", ready["directory"])["state"], "cleaned")
+
     def test_invalid_project_policy_does_not_fall_back_to_wider_user_policy(self):
         (self.home / ".claude").mkdir()
         (self.home / ".claude/ask-codex.json").write_text('{"mcp_policy":"minimal-deny"}')

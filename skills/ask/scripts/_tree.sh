@@ -60,10 +60,33 @@ posix_identity() {
 }
 
 posix_tree() {
-  local root="$1" rows
-  rows="$(ps -axo pid=,pgid= 2>/dev/null)" || return 1
+  local root="$1" identities="${2:-}" rows seeds="$1" pid expected
+  if [ -n "$identities" ] && [ -f "$identities" ]; then
+    while IFS='|' read -r pid expected; do
+      [ -n "$pid" ] && [ -n "$expected" ] || continue
+      tree_identity_matches posix "$pid" "$expected" && seeds="$seeds,$pid"
+    done < "$identities"
+  fi
+  # One successful global snapshot supplies both PPID ancestry and process-group membership.
+  # Seeding captured identity-matching members keeps following a detached/reparented subtree
+  # after it leaves the original setsid group.
+  rows="$(ps -axo pid=,ppid=,pgid= 2>/dev/null)" || return 1
   printf '%s\n' "__TREE_OK__"
-  printf '%s\n' "$rows" | awk -v group="$root" '$2 == group { print $1 }'
+  printf '%s\n' "$rows" | awk -v seeds="$seeds" '
+    BEGIN { n = split(seeds, s, ","); for (i = 1; i <= n; i++) if (s[i] != "") seen[s[i]] = 1 }
+    { parent[$1] = $2; group[$1] = $3 }
+    END {
+      changed = 1
+      while (changed) {
+        changed = 0
+        for (p in parent) {
+          if (!(p in seen) && ((parent[p] in seen) || (group[p] in seen))) {
+            seen[p] = 1; changed = 1
+          }
+        }
+      }
+      for (p in parent) if (p in seen) print p
+    }'
 }
 
 tree_alive() {
@@ -85,7 +108,11 @@ tree_capture() {
   local platform="$1" root="$2" identities="$3" p identity listing complete=1
   [ -n "$root" ] || return 1
   touch "$identities"
-  listing="$(tree_members "$platform" "$root")"
+  if [ "$platform" = posix ]; then
+    listing="$(posix_tree "$root" "$identities")"
+  else
+    listing="$(tree_members "$platform" "$root")"
+  fi
   printf '%s\n' "$listing" | grep -q '^__TREE_OK__$' || { rm -f "$identities.complete"; return 1; }
   listing="$(printf '%s\n' "$listing" | sed '/^__TREE_OK__$/d')"
   for p in $listing; do

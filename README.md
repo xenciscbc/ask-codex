@@ -73,7 +73,7 @@ evals/_harness/run-evals.sh --case script-consultation --runs 1 --allow-tools Ba
 evals/_harness/run-evals.sh --case script-confirmation --runs 1 --allow-tools Bash Write
 ```
 
-The public CLI suite passes 22 tests on each platform. See [validation evidence](.scratch/script-owned-consultation/evidence/validation.md) for lifecycle results, review fixes, instruction-size measurements and remaining gaps. Earlier eval cases and historical live Windows results exercise the previous implementation and are not current acceptance evidence. Isolated real `codex mcp list` probes verified that a dotted server name can be disabled, but no full consultation with the real Codex CLI has been verified. Interactive Claude flows also remain unverified. macOS is outside the supported acceptance scope.
+The public CLI suite passes 25 tests on each platform. See [validation evidence](.scratch/script-owned-consultation/evidence/validation.md) for lifecycle results, review fixes, instruction-size measurements and remaining gaps. Earlier eval cases and historical live Windows results exercise the previous implementation and are not current acceptance evidence. Isolated real `codex mcp list` probes verified that a dotted server name can be disabled, but no full consultation with the real Codex CLI has been verified. Interactive Claude flows also remain unverified. macOS is outside the supported acceptance scope.
 
 ## Known risks
 
