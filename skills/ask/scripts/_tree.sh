@@ -59,22 +59,38 @@ posix_identity() {
   ps -o lstart= -p "$1" 2>/dev/null | awk 'NR == 1 { gsub(/[[:space:]]+/, "_"); print }'
 }
 
+posix_group_owned() {
+  local root="$1" identities="$2" expected actual
+  expected="$(awk -F'|' -v p="$root" '$1 == p { print $2; exit }' "$identities" 2>/dev/null)"
+  [ -n "$expected" ] || return 1
+  actual="$(posix_identity "$root")"
+  if [ -n "$actual" ]; then
+    [ "$actual" = "$expected" ]
+  else
+    # A group can outlive its leader; a live replacement must never inherit ownership.
+    ! posix_alive "$root"
+  fi
+}
+
 posix_tree() {
-  local root="$1" identities="${2:-}" rows seeds="$1" pid expected
+  local root="$1" identities="${2:-}" rows seeds="" pid expected root_group=""
   if [ -n "$identities" ] && [ -f "$identities" ]; then
     while IFS='|' read -r pid expected; do
       [ -n "$pid" ] && [ -n "$expected" ] || continue
       tree_identity_matches posix "$pid" "$expected" && seeds="$seeds,$pid"
     done < "$identities"
   fi
+  # A numeric root is only a process-group key, never an unverified PPID seed: after
+  # root exit its PID may belong to an unrelated parent outside the original group.
   # One successful global snapshot supplies both PPID ancestry and process-group membership.
   # Seeding captured identity-matching members keeps following a detached/reparented subtree
   # after it leaves the original setsid group.
   rows="$(ps -axo pid=,ppid=,pgid= 2>/dev/null)" || return 1
+  posix_group_owned "$root" "$identities" && root_group="$root"
   printf '%s\n' "__TREE_OK__"
-  printf '%s\n' "$rows" | awk -v seeds="$seeds" '
+  printf '%s\n' "$rows" | awk -v seeds="$seeds" -v root_group="$root_group" '
     BEGIN { n = split(seeds, s, ","); for (i = 1; i <= n; i++) if (s[i] != "") seen[s[i]] = 1 }
-    { parent[$1] = $2; group[$1] = $3 }
+    { parent[$1] = $2; group[$1] = $3; if ($3 == root_group) seen[$1] = 1 }
     END {
       changed = 1
       while (changed) {
@@ -101,7 +117,7 @@ tree_identity() {
 
 tree_members() {
   case "$2" in ''|*[!0-9]*) return 1 ;; esac
-  if [ "$1" = windows ]; then win_tree "$2"; else posix_tree "$2"; fi
+  if [ "$1" = windows ]; then win_tree "$2"; else posix_tree "$2" "${3:-}"; fi
 }
 
 tree_capture() {
@@ -152,7 +168,7 @@ tree_all_survivors() {
   local platform="$1" root="$2" identities="$3" survivors p current
   survivors="$(tree_survivors "$platform" "$identities")"
   if [ "$platform" = posix ]; then
-    current="$(tree_members "$platform" "$root" 2>/dev/null | sed '/^__TREE_OK__$/d')"
+    current="$(tree_members "$platform" "$root" "$identities" 2>/dev/null | sed '/^__TREE_OK__$/d')"
     for p in $current; do
       tree_alive "$platform" "$p" || continue
       case ", $survivors, " in *", $p, "*) ;; *) survivors="${survivors:+$survivors, }$p" ;; esac
@@ -178,7 +194,7 @@ tree_kill() {
     # member in that group or a complete prior scan showing that the group is already empty.
     if [ "$platform" = posix ]; then
       [ -f "$identities.owned" ] && owned=1
-      current="$(tree_members "$platform" "$root" 2>/dev/null | sed '/^__TREE_OK__$/d')"
+      current="$(tree_members "$platform" "$root" "$identities" 2>/dev/null | sed '/^__TREE_OK__$/d')"
       for p in $current; do
         expected="$(awk -F'|' -v n="$p" '$1 == n { print $2; exit }' "$identities")"
         [ -n "$expected" ] && tree_identity_matches "$platform" "$p" "$expected" && owned=1
@@ -193,7 +209,9 @@ tree_kill() {
     tree_survivors "$platform" "$identities"; return 0;
   }
 
-  [ "$platform" = posix ] && kill -TERM -- "-$root" 2>/dev/null
+  if [ "$platform" = posix ] && posix_group_owned "$root" "$identities"; then
+    kill -TERM -- "-$root" 2>/dev/null
+  fi
 
   while IFS='|' read -r pid expected; do
     [ -n "$pid" ] && tree_identity_matches "$platform" "$pid" "$expected" || continue
@@ -214,7 +232,7 @@ tree_kill() {
   if [ -n "$survivors" ]; then
     if [ "$platform" = posix ]; then
       tree_capture "$platform" "$root" "$identities" >/dev/null 2>&1 || true
-      kill -KILL -- "-$root" 2>/dev/null
+      posix_group_owned "$root" "$identities" && kill -KILL -- "-$root" 2>/dev/null
     fi
     while IFS='|' read -r pid expected; do
       [ -n "$pid" ] && tree_identity_matches "$platform" "$pid" "$expected" || continue

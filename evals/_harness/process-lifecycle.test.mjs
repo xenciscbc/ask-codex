@@ -69,6 +69,54 @@ const makeRun = (name) => {
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 
 try {
+  // Deterministic OS boundary: the original root PID is reused after TERM, while a
+  // captured detached child still needs KILL. Record signals without sending any.
+  for (const replacementGroup of ["900000009", "900000001"]) {
+    const dir = makeRun(`reuse-during-stop-${replacementGroup}`);
+    const fixture = path.join(dir, "os-boundary.sh");
+    fs.writeFileSync(fixture, String.raw`
+ps() {
+  case "$*" in
+    '-axo pid=,ppid=,pgid=')
+      if [ -f "$REUSE_DIR/reused" ]; then
+        printf '900000001 1 %s\n900000002 1 900000002\n900000003 900000001 %s\n' "$REUSE_GROUP" "$REUSE_GROUP"
+      else
+        printf '900000001 1 900000001\n900000002 900000001 900000002\n'
+      fi ;;
+    '-o lstart= -p 900000001')
+      if [ -f "$REUSE_DIR/reused" ]; then echo replacement; else echo original; fi ;;
+    '-o lstart= -p 900000002') echo detached ;;
+    '-o lstart= -p 900000003') echo unrelated ;;
+    '-o stat= -p 900000002') [ -f "$REUSE_DIR/child-ended" ] || echo S ;;
+    '-o stat= -p '*) echo S ;;
+    *) return 1 ;;
+  esac
+}
+kill() {
+  printf '%s\n' "$*" >> "$REUSE_DIR/signals"
+  case "$*" in
+    '-TERM -- -900000001') : > "$REUSE_DIR/reused" ;;
+    '-KILL 900000002') : > "$REUSE_DIR/child-ended" ;;
+  esac
+}
+sleep() { :; }
+`);
+    fs.writeFileSync(path.join(dir, "pid"), `pid=900000001\nplatform=posix\nstarted=${Math.floor(Date.now() / 1000)}\nidentity=original\n`);
+    fs.writeFileSync(path.join(dir, "process-identities"), "900000001|original\n900000002|detached\n");
+    const result = spawnSync(bash, [toBash(stopScript), toBash(dir),
+      "--interval", "30", "--interval-source", "default", "--recommended", "stop"], {
+      env: { ...env, BASH_ENV: toBash(fixture), REUSE_DIR: toBash(dir), REUSE_GROUP: replacementGroup }, encoding: "utf8", timeout: 60000,
+    });
+    check(!result.error, `PID reuse fixture finishes: ${result.error}`);
+    const signals = fs.readFileSync(path.join(dir, "signals"), "utf8").trim().split(/\r?\n/);
+    check(signals.includes("-KILL 900000002"), "captured detached child is still terminated after root PID reuse");
+    check(!signals.some((s) => /(?:^| )900000003$/.test(s)), "root PID reuse never signals an unrelated descendant");
+    check(!signals.some((s) => /(?:^| )900000001$/.test(s)), "replacement root is never individually signalled");
+    check(!signals.includes("-KILL -- -900000001"), "reused root never receives group escalation");
+    check((result.status === 0) === readJson(path.join(dir, "stop-status.json")).confirmed,
+      "PID reuse stop exit agrees with structured verification");
+  }
+
   // Normal completion reaps the identity watcher before returning, so the directory is no
   // longer held open by a helper that inherited the launcher's handles.
   {
@@ -186,7 +234,7 @@ try {
     check(status.interval_minutes === 30 && status.options_offered.join(",") === "wait,stop", "structured timer and offered actions recorded");
     await state.completion;
     const stopResult = fs.readFileSync(path.join(dir, "stop-result"), "utf8").trim();
-    check(status.confirmed ? stopResult === "ended" : stopResult.startsWith("unconfirmed "), "cooperative watcher publishes a truthful result");
+    check(status.confirmed ? stopResult === "ended" : stopResult.startsWith("unconfirmed "), `cooperative watcher publishes a truthful result: status=${JSON.stringify(status)}, watcher=${stopResult}`);
   }
 
   // exit-code is execution state, not termination proof. With no captured identities the stop

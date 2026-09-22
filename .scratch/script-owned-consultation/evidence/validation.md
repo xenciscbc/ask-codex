@@ -75,3 +75,15 @@ The complete public CLI suite passes 25 tests on Windows (93.028s) and 25 on Ubu
 The final ask skill is 15,012 UTF-8 bytes normalized to LF; the earlier size table records the initial implementation. No real Claude or live Codex consultation was rerun for these fixes. The remaining acceptance gaps and ticket statuses above are unchanged.
 
 All 18 Node offline test files passed again after the P1 fixes; see `review-fix-offline-summary.txt`. The full run includes the 27 Windows lifecycle assertions. Python compilation, Bash syntax checks and `git diff --check` also passed.
+
+## Root PID reuse follow-up
+
+Review baseline: `31b36b2`. The subsequent review found that unconditional root-PID seeding could capture unrelated descendants after TERM ended the original root and its PID was reused. The fix seeds PPID traversal only from identity-matching captured processes. Original process-group discovery and each group TERM/KILL now also recheck root ownership, rejecting a live replacement identity while preserving a group that outlives its original leader.
+
+The new regression invokes public `stop.sh` with deterministic OS-boundary process snapshots and recorded signals. The first regression failed on Windows before the source fix because the unrelated child was signalled. A second Linux red run caught group escalation after reuse. Final cases cover replacement PGIDs both different from and equal to the original root PID; they require the captured detached child to receive KILL while forbidding individual signals to the replacement root/unrelated child and group escalation after reuse. Linux lifecycle checks pass 46 assertions, including real detached-session and root-exit cleanup.
+
+An intermediate Windows full run hit the existing cooperative-stop assertion while CLI tests ran concurrently; an isolated rerun passed. Its assertion now includes status/watcher details without changing its pass condition. Final Windows suites run sequentially. No live Codex or real Claude consultation was run; broader acceptance gaps remain unchanged.
+
+Final validation: Windows lifecycle 39 assertions; Ubuntu WSL lifecycle 46 assertions; all 18 Windows Node test files passed (`pid-reuse-offline-summary.txt`); public CLI 25 tests on Windows (135.321s) and 25 on WSL (51.887s). Bash syntax and diff whitespace checks passed. The main agent implemented and integrated the fix; two read-only analysts reviewed it using the role settings recorded above.
+
+Residual scope limitation: a replacement group can become indistinguishable from the original numeric PGID if its replacement leader has already exited before observation. The baseline also accepts a leaderless original PGID. This fix rejects an observable replacement identity but does not introduce persistent kernel ownership tracking; the broader snapshot ambiguity remains, alongside the earlier detached-before-observation limitation. Live/interactive acceptance and ticket statuses remain unchanged.
