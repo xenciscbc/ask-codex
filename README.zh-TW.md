@@ -2,7 +2,7 @@
 
 *[English version](./README.md)*
 
-ask-codex 是 Claude Code 外掛，透過本機 OpenAI Codex CLI 取得獨立意見。Claude 準備問題、判斷回覆，並對每個實質論點給出**採納、不採納或待查**的處置及理由。實作決策仍由你與 Claude 負責。
+ask-codex 是一組 Claude Code skills，也提供 plugin 安裝方式，透過本機 OpenAI Codex CLI 取得獨立意見。Claude 準備問題、判斷回覆，並對每個實質論點給出**採納、不採納或待查**的處置及理由。實作決策仍由你與 Claude 負責。
 
 ## 目前能力
 
@@ -18,15 +18,63 @@ ask-codex 是 Claude Code 外掛，透過本機 OpenAI Codex CLI 取得獨立意
 
 Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為資料。這是模型指示，並非 hook 或工具層的授權屏障。行程停止也依賴可觀測的行程身份與快照，限制詳見下文。
 
-## 安裝
+## 安裝與更新
 
-複製此儲存庫後，以外掛方式載入：
+可選擇 marketplace plugin 或手動複製 skills；兩者都需要下方列出的先決條件。
+
+### 方式一：從 GitHub 安裝 plugin
+
+在 Claude Code 中加入此儲存庫的 marketplace，再安裝外掛：
+
+```text
+/plugin marketplace add xenciscbc/ask-codex
+/plugin install ask-codex@ask-codex
+```
+
+第一個 `ask-codex` 是外掛名稱，第二個是此儲存庫定義的 marketplace 名稱。安裝後使用 `/ask-codex:ask` 與 `/ask-codex:setup`。
+
+也可以在終端機安裝至使用者範圍：
+
+```bash
+claude plugin marketplace add xenciscbc/ask-codex
+claude plugin install ask-codex@ask-codex --scope user
+```
+
+更新這份安裝：
+
+```bash
+claude plugin marketplace update ask-codex
+claude plugin update ask-codex@ask-codex --scope user
+```
+
+若當初安裝於 `project` 或 `local` 範圍，請改用對應 scope。安裝或更新後重新啟動 Claude Code，也可在進行中的 session 使用 `/reload-plugins`。自動更新可於 `/plugin` → **Marketplaces** → **ask-codex** → **Enable auto-update** 開啟；第三方 marketplace 預設不會開啟。參考官方[安裝指南](https://code.claude.com/docs/en/discover-plugins)與[外掛 CLI 文件](https://code.claude.com/docs/en/plugins-reference)。
+
+維護者發布外掛更新時，必須提高 `.claude-plugin/plugin.json` 的 `version`。只新增 Git tag，不會改變已安裝外掛的版本判定。詳見[版本管理](https://code.claude.com/docs/en/plugin-marketplaces#version-resolution-and-release-channels)。
+
+### 方式二：手動複製 skills
+
+下載或 clone 此儲存庫，將下列**完整目錄**複製到選定範圍：
+
+| 來源 | 個人安裝 | 僅限專案 |
+|---|---|---|
+| `skills/ask/` | `~/.claude/skills/ask/` | `<project>/.claude/skills/ask/` |
+| `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
+
+Windows 的 `~` 是使用者家目錄，通常為 `C:\Users\<username>`。`ask` 必須包含 `SKILL.md`、`prompts/`、`scripts/` 與 `consultation.schema.json`，不能只複製 `SKILL.md`。`setup` 提供 MCP 政策設定輔助功能。
+
+使用上述目錄名稱時，指令是 `/ask` 與 `/setup`，取代本 README 其他段落中的 plugin 前綴指令。也可以直接用自然語言明確要求 Claude 諮詢 Codex。參考 Claude Code 的[skill 位置與命名規則](https://code.claude.com/docs/en/skills)。
+
+更新時，下載或 pull 最新儲存庫，以相應的新目錄替換已安裝的目錄，包含所有支援檔案；若有自行修改，請先備份。手動複製的 skills 不由 `claude plugin update` 管理。
+
+### 本機開發與 headless 執行
+
+不安裝外掛、直接測試本機 checkout：
 
 ```bash
 claude --plugin-dir /path/to/ask-codex
 ```
 
-headless 執行使用同一個旗標：
+使用該 checkout 執行 headless 諮詢：
 
 ```bash
 claude -p --plugin-dir /path/to/ask-codex \
@@ -35,13 +83,11 @@ claude -p --plugin-dir /path/to/ask-codex \
   "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
 ```
 
-headless 執行必須明確給出工具權限。腳本主導流程已透過 WSL Ubuntu 上的真實 Claude headless 搭配 stub Codex CLI 執行；這個範例尚未以真實 Codex CLI 完成端對端驗收。
-
-WSL headless 檢查使用的是本機 `--plugin-dir` 載入方式。Marketplace 安裝尚未測試。
+已安裝的 plugin 不需要 `--plugin-dir`；headless 執行仍須取得必要工具權限。已記錄的真實 Claude 檢查使用 WSL 本機載入與 stub Codex；此專案的驗證尚未對 marketplace 安裝／更新或手動複製 skills 執行端對端測試。
 
 ## 先決條件
 
-- 支援本機外掛載入的 Claude Code，並允許使用所需的檔案與 Bash 工具。
+- 支援 skills 或 plugin 的 Claude Code，並允許使用所需的檔案與 Bash 工具。
 - Python 3.11 以上版本。諮詢腳本使用標準函式庫的 `tomllib` 讀取 Codex 設定。
 - Bash。Linux 直接使用 Bash；Windows 必須使用 Git Bash。
 - 已安裝並登入的 Codex CLI。未登入時 Claude 會告訴你執行 `! codex login`。

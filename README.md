@@ -2,7 +2,7 @@
 
 *[繁體中文版本](./README.zh-TW.md)*
 
-A Claude Code plugin that asks the local OpenAI Codex CLI for an independent opinion. Claude prepares the question, evaluates the answer, and gives each substantive claim a disposition: **adopt, reject or investigate**, with a reason. Implementation decisions remain with you and Claude.
+Claude Code skills, also available as a plugin, that ask the local OpenAI Codex CLI for an independent opinion. Claude prepares the question, evaluates the answer, and gives each substantive claim a disposition: **adopt, reject or investigate**, with a reason. Implementation decisions remain with you and Claude.
 
 ## Current capabilities
 
@@ -18,15 +18,63 @@ Consultations invoke Codex with its read-only shell sandbox and shell network ac
 
 The skill instructs Claude to consult only when you request it and to treat Codex output as data. These are model instructions, not a hook or tool-level authorization barrier. Process termination also relies on observable process identities and snapshots, with the limitations described below.
 
-## Installation
+## Installation and updates
 
-Clone this repository and load it as a plugin:
+Choose either a marketplace plugin or manually copied skills. Both use the prerequisites below.
+
+### Option 1: Install from GitHub as a plugin
+
+In Claude Code, add this repository's marketplace and install its plugin:
+
+```text
+/plugin marketplace add xenciscbc/ask-codex
+/plugin install ask-codex@ask-codex
+```
+
+The first `ask-codex` is the plugin name; the second is the marketplace name defined in this repository. Then use `/ask-codex:ask` and `/ask-codex:setup`.
+
+Alternatively, install from your terminal at user scope:
+
+```bash
+claude plugin marketplace add xenciscbc/ask-codex
+claude plugin install ask-codex@ask-codex --scope user
+```
+
+To update that installation:
+
+```bash
+claude plugin marketplace update ask-codex
+claude plugin update ask-codex@ask-codex --scope user
+```
+
+If you installed at `project` or `local` scope, use that scope instead. Restart Claude Code after installing or updating, or use `/reload-plugins` in a running session. Automatic updates can be enabled under `/plugin` → **Marketplaces** → **ask-codex** → **Enable auto-update**; third-party marketplaces do not enable them by default. See the official [installation guide](https://code.claude.com/docs/en/discover-plugins) and [plugin CLI reference](https://code.claude.com/docs/en/plugins-reference).
+
+Release maintainers must increment `version` in `.claude-plugin/plugin.json` when publishing a plugin update. A Git tag alone does not change the installed plugin's version. See [version management](https://code.claude.com/docs/en/plugin-marketplaces#version-resolution-and-release-channels).
+
+### Option 2: Copy the skills manually
+
+Download or clone this repository, then copy these **entire directories**:
+
+| Source | Personal installation | Project-only installation |
+|---|---|---|
+| `skills/ask/` | `~/.claude/skills/ask/` | `<project>/.claude/skills/ask/` |
+| `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
+
+On Windows, `~` is your user home, typically `C:\Users\<username>`. The `ask` directory must include `SKILL.md`, `prompts/`, `scripts/` and `consultation.schema.json`; copying only `SKILL.md` is insufficient. `setup` provides the MCP policy setup helper.
+
+With these directory names, use `/ask` and `/setup` instead of the plugin-prefixed commands shown elsewhere in this README. You can also explicitly ask Claude to consult Codex in natural language. See Claude Code's [skill locations and naming rules](https://code.claude.com/docs/en/skills).
+
+To update, download or pull the latest repository and replace the installed directories with the matching new copies, including their supporting files. Back up any local edits first. Manually copied skills are not managed by `claude plugin update`.
+
+### Local development and headless use
+
+For testing a checkout without installing it:
 
 ```bash
 claude --plugin-dir /path/to/ask-codex
 ```
 
-The same flag works for a headless run:
+For a headless run using that checkout:
 
 ```bash
 claude -p --plugin-dir /path/to/ask-codex \
@@ -35,13 +83,11 @@ claude -p --plugin-dir /path/to/ask-codex \
   "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
 ```
 
-A headless run needs its tool permissions spelled out. The script-owned workflow has been exercised through real Claude headless under WSL Ubuntu with a stub Codex CLI; this example has not been accepted end to end with the real Codex CLI.
-
-The local `--plugin-dir` loading path was used in the WSL headless checks. Marketplace installation has not been tested.
+An installed plugin does not need `--plugin-dir`. Headless execution still needs the required tool permissions. The recorded real-Claude checks used local plugin loading under WSL with stub Codex; marketplace installation/update and manually copied skills have not been exercised end to end in this project's validation runs.
 
 ## Prerequisites
 
-- Claude Code with local plugin loading and permission to run the required file and Bash tools.
+- Claude Code with skill or plugin support and permission to run the required file and Bash tools.
 - Python 3.11 or newer. The consultation script uses the standard library's `tomllib` to read Codex configuration.
 - Bash. Linux uses Bash directly; Windows requires Git Bash.
 - The Codex CLI, installed and logged in. If it is not logged in, Claude tells you to run `! codex login`.
