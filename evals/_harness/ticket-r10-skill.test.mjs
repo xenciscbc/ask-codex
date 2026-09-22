@@ -6,7 +6,6 @@
 // sentences, checks that lines 39 and 41 (untouched by this slice, in the Confirmations section)
 // still match the sha256 pins `ticket-r07b-s3-graders.test.mjs` carries, and exercises the two
 // headless cases' graders: `no-background-wait` and `final-has-stopped-line`.
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,43 +17,9 @@ let pass = 0, fail = 0;
 const expect = (ok, label) => { if (ok) pass++; else { fail++; console.log(`FAIL ${label}`); } };
 
 // ---------------------------------------------------------------------------
-// 1. Step 8's text: the new bullet, the old wording gone, the other three sentences present.
-// ---------------------------------------------------------------------------
-const skill = norm(path.join(repo, "skills", "ask", "SKILL.md"));
-const skillLines = skill.split("\n");
-
-const NEW_BULLET = "- Otherwise wait with the wait script, in the **foreground** — never start a timer in the background and \"wait for a notification\": your turn ends the moment you stop calling tools, and in a non-interactive session nothing brings you back, so Codex would finish unread and the run directory would stay behind. One line, literal single-quoted paths, Bash `timeout: 600000`: `bash '<skill directory>/scripts/wait.sh' '<tmp>' --seconds <n>` where `<n>` is the time left in the interval in seconds, at most 540 (the Bash tool itself stops a command after 10 minutes). It prints `finished exit=<code> <tmp>` or `still-running elapsed=<n>s <tmp>`; while it prints `still-running` and T has not passed, run it again.";
-expect(skill.includes(NEW_BULLET), "SKILL.md carries the new Waiting bullet, word for word");
-expect(skillLines.filter((l) => l === NEW_BULLET).length === 1, "the new bullet occurs exactly once, as its own physical line");
-expect(!skill.includes("Otherwise start a timer"), "the old bullet opening \"Otherwise start a timer\" no longer occurs in SKILL.md");
-expect(!skill.includes("wait for whichever completion notification arrives first"), "\"wait for whichever completion notification arrives first\" is gone from SKILL.md");
-
-const LIVENESS_SENTENCE = "**Check when T has passed.** Judge liveness only from the tracked task's state — without `TaskOutput`, from the wait script's line — and the last event in `<tmp>/events.jsonl` — never from CPU use or process listings:";
-expect(skill.includes(LIVENESS_SENTENCE), "the reworded liveness-check sentence is present");
-
-const PARALLEL_SENTENCE = "Both share one interval; without `TaskOutput`, name both run directories in one wait command (`… wait.sh '<tmp1>' '<tmp2>' --seconds <n>`), which returns when both have finished or the time is up.";
-expect(skill.includes(PARALLEL_SENTENCE), "the reworded parallel-consultation sentence is present");
-
-const RUNSH_INSERT = "so the stop script can end it, and `<tmp>/exit-code` when the command ends so the wait script can see it;";
-expect(skill.includes(RUNSH_INSERT), "the run.sh paragraph carries the exit-code insertion");
-
-// ---------------------------------------------------------------------------
-// 2. Lines 39 and 41 (Confirmations section, untouched by this slice) still match the sha256 pins
-//    `ticket-r07b-s3-graders.test.mjs` carries — recomputed here, compared against the literals in
-//    that file (read, not retyped), so a drift in either file is caught.
-// ---------------------------------------------------------------------------
-const s3Test = fs.readFileSync(path.join(evals, "_harness", "ticket-r07b-s3-graders.test.mjs"), "utf8");
-const pinnedMatch = s3Test.match(/const PINNED_LINES = \{([^}]*)\};/);
-expect(!!pinnedMatch, "ticket-r07b-s3-graders.test.mjs still declares PINNED_LINES");
-const pinned = {};
-for (const m of pinnedMatch[1].matchAll(/(\d+):\s*"([0-9a-f]+)"/g)) pinned[Number(m[1])] = m[2];
-const sha = (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex").slice(0, 16);
-for (const n of [39, 41]) {
-  expect(pinned[n] !== undefined, `PINNED_LINES carries line ${n}`);
-  expect(sha(skillLines[n - 1]) === pinned[n], `SKILL.md line ${n} still matches the s3 pin (sha256 ${pinned[n]})`);
-}
-expect(skillLines.length === 320, "SKILL.md still has 320 lines — every replacement stayed one physical line");
-
+// Skill prose hashes and line counts were retired by ADR 0005.
+// Waiting behavior is tested through consult.py; the following sections only
+// retain coverage of historical grader fixtures.
 // ---------------------------------------------------------------------------
 // 3. The two headless cases' graders exist.
 // ---------------------------------------------------------------------------

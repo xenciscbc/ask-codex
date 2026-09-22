@@ -48,7 +48,6 @@
 // was widened to catch one worded without "I confirm" / "then ask Codex again" / "if you want to
 // proceed". `no-ran-claim` stopped false-failing the correct "no consultation ran" (group 15).
 // Assertion groups 0-15 of `.scratch/ask-codex-reliability/plan/slice-07b-s3.md`.
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -357,14 +356,9 @@ for (const [c, byGrader] of Object.entries(TOKENS)) {
     for (const tok of tokens) expect(fx.includes(tok), `${c}/${g}: "${tok}" occurs in that case's scaffold.sh or prompt.md`);
   }
 }
-const skill = norm(path.join(repo, "skills", "ask", "SKILL.md"));
-const skillLines = skill.split("\n");
-const line41 = skillLines[40];
 for (const c of NOT_SENT_LINE_CASES) {
   expect(re(c, "final-carries-request").source === FIXED_ENDING, `${c}/final-carries-request is exactly the fixed ending`);
 }
-expect(line41.includes(`${FIXED_ENDING}.`), `"${FIXED_ENDING}." occurs in skills/ask/SKILL.md line 41`);
-expect(skillLines.filter((l) => l.includes(FIXED_ENDING)).length === 1, "the fixed ending occurs in the skill only on line 41");
 // Fix pass 1's patterns: the wording halves come from line 41, the names from the fixture.
 for (const [c, byGrader] of Object.entries(NEW_TOKENS)) {
   const fx = fixture(c);
@@ -373,7 +367,6 @@ for (const [c, byGrader] of Object.entries(NEW_TOKENS)) {
     // A pattern may also accept inline-code backticks around a path or a name, as "`?".
     const src = re(c, g).source.replace(/\(\?:'\|’\)/g, "'").replace(/`\?/g, "").replace(/\\/g, "");
     for (const tok of where.skill) {
-      expect(line41.includes(tok), `${c}/${g}: "${tok}" is the skill's own wording (SKILL.md line 41)`);
       expect(src.includes(tok.trim()), `${c}/${g}: the pattern is built from "${tok.trim()}"`);
     }
     for (const tok of where.fixture) {
@@ -595,85 +588,9 @@ expect(passesAll("project-layer-decline-aborts", DECLINE_REASON),
   "project-layer-decline-aborts: naming the user's earlier decline as the reason trips nothing");
 
 // ---------------------------------------------------------------------------
-// 8. Skill bytes: line 39 carries the after-decline rule and, since fix pass 3, says WHERE the
-//    outcome goes; line 41 carries fix pass 2's fixed wording and points at line 39; and lines
-//    41, 156, 162 and 175 neither moved nor changed (each is pinned by its sha256).
-// ---------------------------------------------------------------------------
-const line39 = skillLines[38];
-expect(/^ {2}- A decline \("I decline …"\) needs no naming and always wins\./.test(line39),
-  "SKILL.md line 39 is still the decline sub-bullet of the Confirmations section");
-for (const s of ["**After a decline, state the outcome only, and state it in your final message**",
-  "state it in your final message", "what was not sent or which server was disabled",
-  "naming the file and the servers", "the user sees only your last message", "never ask again",
-  "never offer or quote a confirmation sentence", "not even as an option for later",
-  // Fix pass 5: WHERE the outcome goes was not enough — line 39 now also orders the work, so the
-  // message carrying the outcome is still the last one when the turn ends (group 14).
-  "a message stops being your last one the moment you call another tool",
-  "do everything else first", "ONE closing message that opens with the outcome",
-  "an outcome stated only in an earlier message is lost"]) {
-  expect(line39.includes(s), `SKILL.md line 39 contains ${JSON.stringify(s)}`);
-}
-// Line 39 says where the outcome goes and, since fix pass 5, in what order to work; neither may turn
-// steps 2 and 4 into a stop. Those two decline rules end the confirmation, never the consultation
-// (`:156`, `:175`), so line 39 states the outcome in the disjunction that covers them ("which server
-// was disabled"), orders the work ("do everything else first"), and still carries no stop verb — on
-// those paths "everything else" is the consultation itself and the closing message is step 10's.
-// It must also not collide with step 8's "Do not end your turn while the consultation is still
-// running" (`:232`): "everything else first" puts that wait BEFORE the closing message, never after.
-for (const s of ["stop the consultation", "end your turn", "do not continue"]) {
-  expect(!line39.includes(s), `SKILL.md line 39 does not carry ${JSON.stringify(s)} (steps 2 and 4 carry on after a decline)`);
-}
-// The rule must sit at line 39, not at the far end of the 1,900-character bullet it came from:
-// that is the whole point of fix pass 2's first change (security finding I1).
-expect(!line41.includes("**After a decline**"), "SKILL.md line 41 no longer restates the after-decline rule (it moved to line 39)");
-expect(!line41.includes("state the outcome only"), "SKILL.md line 41 no longer carries \"state the outcome only\"");
-expect(/^- \*\*No `AskUserQuestion` available\*\*/.test(line41), "SKILL.md line 41 is still the No-AskUserQuestion bullet");
-for (const s of ["still pending", "one final message that carries the question", `${FIXED_FIRST_LINE}`, ...FIXED_SENTENCES,
-  "then ask Codex again.", "(or the default)", "never a confirmation",
-  "word for word and on a line of its own",
-  "None of this applies after a decline (rule above): no line, no question, no sentence."]) {
-  expect(line41.includes(s), `SKILL.md line 41 contains ${JSON.stringify(s)}`);
-}
-// Fix pass 4: line 41 now says what tells step 3 from step 4 — the pass-3 defect was a step-3 finding
-// answered with step 4's sentence and step 4's decline rule, because the server name also exists
-// globally. Both clauses must be there, and the three fixed sentences must be unchanged.
-const STEP3_CLAUSE = "step 3 (the server is defined in a project `.codex/config.toml` — you found it by reading that file, before any `codex` command; this step comes first and wins even when the same name also exists elsewhere)";
-const STEP4_CLAUSE = "step 4 (the two `codex mcp list` outputs differ for that server — you can only reach this step after step 3 is settled)";
-expect(line41.includes(STEP3_CLAUSE), "SKILL.md line 41 carries the step-3 discriminating clause (found by reading the file, before any codex command; it wins over a name defined elsewhere)");
-expect(line41.includes(STEP4_CLAUSE), "SKILL.md line 41 carries the step-4 discriminating clause (the two listings differ; reachable only after step 3 is settled)");
-expect(line41.indexOf(STEP3_CLAUSE) < line41.indexOf(STEP4_CLAUSE), "SKILL.md line 41 still introduces the steps in order");
-// Fix pass 6: the decline rule is fixed wording now, per step. Line 41 carries the three lines and the
-// sentence that orders them and no longer the free-wording passage it replaced; line 39 adds that a
-// route back to a consultation must not be named either (F2 named one without asking again).
-const DECLINE_RULE_CLAUSE = "Under each sentence write that step's decline line, word for word, and say nothing else about declining — never another step's line";
-expect(line41.includes(DECLINE_RULE_CLAUSE), "SKILL.md line 41 orders each step's decline line to be written word for word, and nothing else about declining");
-for (const s of FIXED_DECLINE_LINES) expect(line41.includes(s), `SKILL.md line 41 carries the fixed decline line ${JSON.stringify(s)}`);
-expect(!line41.includes("Say what declining does **for that step, never another step's rule**"), "SKILL.md line 41 no longer leaves the decline rule to the model's own words");
-expect(!line41.includes("Say what declining does **for that step, never another step's rule**: step 2 — the user config alone (or the default) is used; step 3 — the consultation is not sent at all; step 4 — that server is disabled and the consultation goes ahead without it."), "SKILL.md line 41 no longer carries the pass-5 decline passage at all");
-expect(line39.includes("never ask again, never offer or quote a confirmation sentence, and never say how a consultation could still be had (no \"you would need to confirm\", no \"remove the definition\") — not even as an option for later."), "SKILL.md line 39 forbids naming a route back to a consultation after a decline");
-expect(!line39.includes("never ask again, and never offer or quote a confirmation sentence, not even as an option for later."), "SKILL.md line 39 no longer carries the pass-5 ending it replaced");
-// The wording fix pass 6 did NOT touch is still there (asserted above as well): the three copy-back
-// sentences, the two discriminating clauses and the fixed first line.
-expect(FIXED_SENTENCES.every((s) => line41.includes(s)) && line41.includes(FIXED_FIRST_LINE),
-  "SKILL.md line 41 keeps the three fixed copy-back sentences and the fixed first line unchanged");
-// Each replacement is ONE physical line, so nothing below the Confirmations section moved.
-expect(skillLines[39].startsWith("- **Asking.**"), "SKILL.md line 40 is still the Asking bullet, between the two changed lines");
-expect(skillLines[155].includes("On decline, use the user config alone (or the default)."), "SKILL.md line 156 still carries step 2's decline rule (no line number moved)");
-expect(skillLines[161].includes("On decline, stop: clean up (step 11)"), "SKILL.md line 162 still carries step 3's decline rule (no line number moved)");
-expect(skillLines[174].includes("On decline, add it to the disable set and continue"), "SKILL.md line 175 still carries step 4's decline rule (no line number moved)");
-// Line 39's "state the outcome only" must not swallow step 3's duty to say WHY (`:162`).
-expect(skillLines[161].includes("tell the user the consultation was not sent because of the project's own Codex MCP definitions and name them"),
-  "SKILL.md line 162 still requires a declined stop to name the definitions — line 39 forbids re-asking, not explaining");
-// These five lines are pinned byte for byte (sha256 of the line, newline-normalised), so a stray edit
-// anywhere in them fails here and not only in a run. Fix pass 6 replaced one passage in line 39 and
-// one in line 41, so those two pins moved; 156, 162 and 175 keep the pins of c932d50.
-const sha = (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex").slice(0, 16);
-const PINNED_LINES = { 39: "471b984594c78955", 41: "59aaac9d2fe9e2ba", 156: "ced25b0c37f44640", 162: "e8ad78d4dc5ed38e", 175: "5aa3b056d20b2693" };
-for (const [n, digest] of Object.entries(PINNED_LINES)) {
-  expect(sha(skillLines[Number(n) - 1]) === digest, `SKILL.md line ${n} matches its pin (sha256 ${digest})`);
-}
-expect(skillLines.length === 320, "SKILL.md still has the same number of lines — the replacement stayed one physical line");
-
+// Current skill byte/line pins were retired by ADR 0005. These remaining tests
+// validate historical grader fixtures only; current behavior is covered by the
+// public consultation integration suite and script-confirmation Claude eval.
 // ---------------------------------------------------------------------------
 // 9. Fix pass 1: the wrong KIND of sentence, and the wrong first line.
 // ---------------------------------------------------------------------------
@@ -901,10 +818,6 @@ expect(!DECLINE_FILE.test(REAL_PASS2_DECLINE),
 expect(!re("project-layer-decline-aborts", "no-reask-after-decline").test(REAL_PASS2_DECLINE),
   "the real pass-2 reply passes no-reask-after-decline — it asked for nothing; what it omitted is the outcome");
 // The two new graders' wording comes from the rule that now demands it.
-expect(line39.includes("what was not sent") && NOT_SENT.source.includes("not sent"),
-  "final-says-not-sent is built from line 39's own words (\"what was not sent\")");
-expect(line39.includes("naming the file and the servers"),
-  "final-names-file is asked for by line 39 (\"naming the file and the servers\")");
 // The correct decline replies pass every grader of the case, the two new ones included.
 for (const text of [DECLINE_OK, DECLINE_REASON]) {
   for (const g of CASES["project-layer-decline-aborts"]) {
@@ -1085,10 +998,6 @@ for (const g of CASES["project-layer-decline-aborts"]) {
   expect(NOT_CONTAINS.has(g) ? !hit : hit, `the pass-4 earlier message passes ${g}`);
 }
 // (c) What line 39 now adds is the ORDER, which is why the fix is a skill change and not a grader one.
-expect(line39.includes("do everything else first") && line39.includes("ONE closing message that opens with the outcome"),
-  "SKILL.md line 39 orders the work: everything else first, then one closing message");
-expect(line39.includes("a message stops being your last one the moment you call another tool"),
-  "SKILL.md line 39 names the mechanism this run showed (a further tool call demotes the message)");
 
 // ---------------------------------------------------------------------------
 // 15. Fix pass 6. A fresh outcome verifier REFUTED the pass-5 claim on three final messages that
@@ -1117,7 +1026,6 @@ for (const [c, i] of Object.entries(DECLINE_RULE_STEP)) {
   for (const j of [0, 1, 2]) {
     if (j !== i) expect(!g.test(FIXED_DECLINE_LINES[j]), `${c}/final-decline-rule does not accept step ${j + 1}'s line`);
   }
-  expect(line41.includes(FIXED_DECLINE_LINES[i]), `${c}/final-decline-rule's line is the skill's own wording (SKILL.md line 41)`);
 }
 expect(fs.readFileSync(path.join(evals, "project-layer-aborts-01", "graders", "final-decline-rule.md")).equals(
   fs.readFileSync(path.join(evals, "project-config-table", "graders", "final-decline-rule.md"))),

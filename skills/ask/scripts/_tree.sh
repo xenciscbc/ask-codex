@@ -1,6 +1,11 @@
 # Shared process-tree helpers for run.sh and stop.sh (sourced, not executed).
-# Needs only bash and the platform's own tools: Windows Git Bash — ps, tasklist, taskkill,
-# powershell.exe; Linux/macOS — ps, kill, setsid.
+# Every destructive operation is bound to a captured process identity. A numeric pid alone is
+# never enough: it may have been reused by an unrelated process.
+
+# Git Bash can be launched directly by a host whose sanitized PATH omits Git's own tools.
+if [ -x /usr/bin/uname ] && case "$(/usr/bin/uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) true ;; *) false ;; esac; then
+  PATH="/usr/bin:/bin:$PATH"; export PATH
+fi
 
 tree_platform() {
   case "$(uname -s 2>/dev/null)" in
@@ -9,79 +14,192 @@ tree_platform() {
   esac
 }
 
-# Windows: is the pid alive? `ps -W` omits some processes (a bash that has exec'd, for one),
-# so ask tasklist; its "no tasks" notice is localized, but a match has the pid in column 2.
 win_alive() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
   tasklist //NH //FI "PID eq $1" 2>/dev/null | awk -v p="$1" '$2 == p { found = 1 } END { exit found ? 0 : 1 }'
 }
 
-# Windows: the pid and all its descendants, via the parent links PowerShell reports.
+win_identity() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  powershell.exe -NoProfile -NonInteractive -Command \
+    "\$p=Get-Process -Id $1 -ErrorAction SilentlyContinue; if (\$p) { \$p.StartTime.ToUniversalTime().Ticks }" \
+    2>/dev/null | tr -d '\r\n'
+}
+
 win_tree() {
   local root="$1" pairs
+  case "$root" in ''|*[!0-9]*) return 1 ;; esac
   pairs="$(powershell.exe -NoProfile -NonInteractive -Command \
-    'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }' 2>/dev/null | tr -d '\r')"
+    'try { $items = @(Get-CimInstance Win32_Process -ErrorAction Stop); "__TREE_OK__"; $items | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" } } catch { $items = @(Get-Process -ErrorAction Stop); if ($items.Count -eq 0 -or -not ($items[0].PSObject.Properties.Name -contains "Parent")) { exit 1 }; "__TREE_OK__"; $items | ForEach-Object { try { $parent = $_.Parent; if ($parent) { "$($_.Id) $($parent.Id)" } } catch {} } }' \
+    2>/dev/null | tr -d '\r')"
   printf '%s\n' "$pairs" | awk -v root="$root" '
-    { child[$1] = $2 }
+    $0 == "__TREE_OK__" { ok = 1; next }
+    { parent[$1] = $2 }
     END {
+      if (!ok) exit 1
+      print "__TREE_OK__"
       seen[root] = 1; changed = 1
-      while (changed) { changed = 0; for (c in child) if (!(c in seen) && (child[c] in seen)) { seen[c] = 1; changed = 1 } }
+      while (changed) { changed = 0; for (c in parent) if (!(c in seen) && (parent[c] in seen)) { seen[c] = 1; changed = 1 } }
       for (p in seen) print p
     }'
 }
 
-posix_alive() { kill -0 "$1" 2>/dev/null; }
-
-posix_descendants() {
-  local c
-  for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do echo "$c"; posix_descendants "$c"; done
+posix_alive() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null | awk 'NR == 1 { print substr($1,1,1) }')"
+  [ -n "$state" ] && [ "$state" != Z ]
 }
 
-# POSIX: the process group (setsid made the root its own group id), the root, and its
-# descendants by parent pid in case the group was not created.
+posix_identity() {
+  local start
+  if [ -r "/proc/$1/stat" ]; then
+    start="$(sed 's/^[^)]*) //' "/proc/$1/stat" 2>/dev/null | awk 'NR == 1 { print $20 }')"
+    [ -n "$start" ] && { printf 'proc:%s\n' "$start"; return; }
+  fi
+  ps -o lstart= -p "$1" 2>/dev/null | awk 'NR == 1 { gsub(/[[:space:]]+/, "_"); print }'
+}
+
 posix_tree() {
-  local root="$1"
-  { ps -o pid= -g "$root" 2>/dev/null; echo "$root"; posix_descendants "$root"; } | tr -d ' ' | awk 'NF && !seen[$1]++'
+  local root="$1" rows
+  rows="$(ps -axo pid=,pgid= 2>/dev/null)" || return 1
+  printf '%s\n' "__TREE_OK__"
+  printf '%s\n' "$rows" | awk -v group="$root" '$2 == group { print $1 }'
 }
 
 tree_alive() {
+  case "$2" in ''|*[!0-9]*) return 1 ;; esac
   if [ "$1" = windows ]; then win_alive "$2"; else posix_alive "$2"; fi
 }
 
-tree_members() {
-  local m
-  if [ "$1" = windows ]; then m="$(win_tree "$2")"; else m="$(posix_tree "$2")"; fi
-  [ -n "$m" ] || m="$2"
-  echo "$m"
+tree_identity() {
+  case "$2" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$1" = windows ]; then win_identity "$2"; else posix_identity "$2"; fi
 }
 
-# Kill the whole tree rooted at $2 and print the pids that survived (empty on success).
-tree_kill() {
-  local platform="$1" root="$2" members p alive survivors=()
-  members="$(tree_members "$platform" "$root")"
-  if [ "$platform" = windows ]; then
-    taskkill //T //F //PID "$root" >/dev/null 2>&1
-    sleep 1
-    for p in $members; do win_alive "$p" && survivors+=("$p"); done
-    if [ ${#survivors[@]} -gt 0 ]; then
-      for p in "${survivors[@]}"; do taskkill //F //PID "$p" >/dev/null 2>&1; done
-      sleep 1
-      local remaining=()
-      for p in "${survivors[@]}"; do win_alive "$p" && remaining+=("$p"); done
-      survivors=("${remaining[@]+"${remaining[@]}"}")
+tree_members() {
+  case "$2" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$1" = windows ]; then win_tree "$2"; else posix_tree "$2"; fi
+}
+
+tree_capture() {
+  local platform="$1" root="$2" identities="$3" p identity listing complete=1
+  [ -n "$root" ] || return 1
+  touch "$identities"
+  listing="$(tree_members "$platform" "$root")"
+  printf '%s\n' "$listing" | grep -q '^__TREE_OK__$' || { rm -f "$identities.complete"; return 1; }
+  listing="$(printf '%s\n' "$listing" | sed '/^__TREE_OK__$/d')"
+  for p in $listing; do
+    case "$p" in ''|*[!0-9]*) continue ;; esac
+    grep -q "^${p}|" "$identities" 2>/dev/null && continue
+    identity="$(tree_identity "$platform" "$p")"
+    if [ -n "$identity" ]; then
+      printf '%s|%s\n' "$p" "$identity" >> "$identities"
+    elif tree_alive "$platform" "$p"; then
+      complete=0
     fi
-  else
-    kill -TERM -- "-$root" 2>/dev/null; kill -TERM "$root" 2>/dev/null
-    for p in $members; do kill -TERM "$p" 2>/dev/null; done
-    for _ in 1 2 3 4 5 6; do
-      alive=0; for p in $members; do posix_alive "$p" && alive=1; done
-      [ "$alive" = 0 ] && break
-      sleep 0.5
+  done
+  if [ "$complete" = 1 ]; then : > "$identities.complete"; else rm -f "$identities.complete"; fi
+}
+
+tree_verification_complete() { [ -f "$2.verified" ]; }
+
+tree_identity_matches() {
+  local platform="$1" pid="$2" expected="$3" actual
+  actual="$(tree_identity "$platform" "$pid")"
+  [ -n "$actual" ] && [ "$actual" = "$expected" ]
+}
+
+tree_survivors() {
+  local platform="$1" identities="$2" pid expected survivors=""
+  [ -f "$identities" ] || return 0
+  while IFS='|' read -r pid expected; do
+    [ -n "$pid" ] && [ -n "$expected" ] || continue
+    if tree_alive "$platform" "$pid" && tree_identity_matches "$platform" "$pid" "$expected"; then
+      survivors="${survivors:+$survivors, }$pid"
+    fi
+  done < "$identities"
+  [ -n "$survivors" ] && printf '%s\n' "$survivors"
+}
+
+tree_all_survivors() {
+  local platform="$1" root="$2" identities="$3" survivors p current
+  survivors="$(tree_survivors "$platform" "$identities")"
+  if [ "$platform" = posix ]; then
+    current="$(tree_members "$platform" "$root" 2>/dev/null | sed '/^__TREE_OK__$/d')"
+    for p in $current; do
+      tree_alive "$platform" "$p" || continue
+      case ", $survivors, " in *", $p, "*) ;; *) survivors="${survivors:+$survivors, }$p" ;; esac
     done
-    kill -KILL -- "-$root" 2>/dev/null
-    for p in $members; do kill -KILL "$p" 2>/dev/null; done
-    sleep 0.5
-    for p in $members; do posix_alive "$p" && survivors+=("$p"); done
   fi
-  [ ${#survivors[@]} -gt 0 ] && { local IFS=", "; echo "${survivors[*]}"; }
+  [ -n "$survivors" ] && printf '%s\n' "$survivors"
+}
+
+tree_kill() {
+  local platform="$1" root="$2" identities="$3" root_expected pid expected survivors owned=0 current
+  rm -f "$identities.verified" "$identities.unverified-reason"
+  root_expected="$(awk -F'|' -v p="$root" '$1 == p { print $2; exit }' "$identities" 2>/dev/null)"
+  [ -n "$root_expected" ] || {
+    printf 'root_identity_unmatched\n' > "$identities.unverified-reason"
+    tree_survivors "$platform" "$identities"; return 0;
+  }
+  if tree_identity_matches "$platform" "$root" "$root_expected"; then
+    owned=1
+    tree_capture "$platform" "$root" "$identities" >/dev/null 2>&1 || true
+    [ "$platform" = windows ] && taskkill //T //F //PID "$root" >/dev/null 2>&1
+  elif ! tree_alive "$platform" "$root"; then
+    # A dead recorded root can still own a live setsid group. Require either a matching captured
+    # member in that group or a complete prior scan showing that the group is already empty.
+    if [ "$platform" = posix ]; then
+      [ -f "$identities.owned" ] && owned=1
+      current="$(tree_members "$platform" "$root" 2>/dev/null | sed '/^__TREE_OK__$/d')"
+      for p in $current; do
+        expected="$(awk -F'|' -v n="$p" '$1 == n { print $2; exit }' "$identities")"
+        [ -n "$expected" ] && tree_identity_matches "$platform" "$p" "$expected" && owned=1
+      done
+      [ -z "$current" ] && [ -f "$identities.complete" ] && owned=1
+    elif [ -f "$identities.complete" ]; then
+      owned=1
+    fi
+  fi
+  [ "$owned" = 1 ] || {
+    printf 'root_identity_unmatched\n' > "$identities.unverified-reason"
+    tree_survivors "$platform" "$identities"; return 0;
+  }
+
+  [ "$platform" = posix ] && kill -TERM -- "-$root" 2>/dev/null
+
+  while IFS='|' read -r pid expected; do
+    [ -n "$pid" ] && tree_identity_matches "$platform" "$pid" "$expected" || continue
+    if [ "$platform" = windows ]; then taskkill //F //PID "$pid" >/dev/null 2>&1
+    else kill -TERM "$pid" 2>/dev/null
+    fi
+  done < <(awk '{ a[NR]=$0 } END { for (i=NR;i>0;i--) print a[i] }' "$identities")
+
+  # Deterministic integration-test seam for the root-exit / verification race.
+  [ -n "${ASK_CODEX_TREE_VERIFY_DELAY_S:-}" ] && sleep "$ASK_CODEX_TREE_VERIFY_DELAY_S"
+
+  for _ in 1 2 3 4 5 6; do
+    tree_capture "$platform" "$root" "$identities" >/dev/null 2>&1 || true
+    survivors="$(tree_all_survivors "$platform" "$root" "$identities")"
+    [ -z "$survivors" ] && break
+    sleep 0.5
+  done
+  if [ -n "$survivors" ]; then
+    if [ "$platform" = posix ]; then
+      tree_capture "$platform" "$root" "$identities" >/dev/null 2>&1 || true
+      kill -KILL -- "-$root" 2>/dev/null
+    fi
+    while IFS='|' read -r pid expected; do
+      [ -n "$pid" ] && tree_identity_matches "$platform" "$pid" "$expected" || continue
+      if [ "$platform" = windows ]; then taskkill //F //PID "$pid" >/dev/null 2>&1
+      else kill -KILL "$pid" 2>/dev/null
+      fi
+    done < <(awk '{ a[NR]=$0 } END { for (i=NR;i>0;i--) print a[i] }' "$identities")
+    sleep 0.5
+  fi
+  tree_capture "$platform" "$root" "$identities" >/dev/null 2>&1 || true
+  survivors="$(tree_all_survivors "$platform" "$root" "$identities")"
+  [ -z "$survivors" ] && [ -f "$identities.complete" ] && : > "$identities.verified"
+  [ -n "$survivors" ] && printf '%s\n' "$survivors"
   return 0
 }

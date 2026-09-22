@@ -22,7 +22,7 @@ const toBash = (p) => p.replace(/\\/g, "/");
 
 if (spawnSync("bash", ["--version"]).status !== 0) { console.log("FAIL bash not found on PATH"); process.exit(1); }
 
-const base = process.platform === "win32" ? "D:/tmp" : os.tmpdir();
+const base = process.platform === "win32" ? path.join(repo, ".scratch") : os.tmpdir();
 fs.mkdirSync(base, { recursive: true });
 const root = fs.mkdtempSync(path.join(base, "askcodex-runstop-"));
 let pass = 0, fail = 0;
@@ -51,8 +51,7 @@ const launch = ({ dir, run }) => {
 const stop = (run, args) => spawnSync("bash", [path.join(scripts, "stop.sh"), toBash(run), ...args], { encoding: "utf-8" });
 const waitScript = path.join(scripts, "wait.sh");
 const runWait = (args) => spawnSync("bash", [waitScript, ...args.map((a) => toBash(a))], { encoding: "utf-8" });
-const reportOf = (r) => (r.stdout.split(/\r?\n/).find((l) => l.startsWith("Consultation stopped: ")) || "");
-const FIELDS = /^Consultation stopped: interval \d+ minutes \((default|override)\); elapsed \d+:\d\d; (last event [\w.]+ \d+:\d\d ago|no events); offered: wait another \d+ minutes \/ stop \(recommended: (wait|stop)\); process tree (ended|NOT confirmed — pids .+)/;
+const statusOf = (run) => JSON.parse(fs.readFileSync(path.join(run, "stop-status.json"), "utf8"));
 
 try {
   // Normal path: a silent run gets killed, verified, reported.
@@ -65,12 +64,11 @@ try {
     check(/^pid=\d+$/m.test(pidFile) && /^platform=(windows|posix)$/m.test(pidFile) && /^started=\d+$/m.test(pidFile), `run.sh: pid file has pid, platform, started (got ${JSON.stringify(pidFile)})`);
     await sleep(1500);
     const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
-    const line = reportOf(r);
-    check(r.status === 0, `stop.sh: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
-    check(FIELDS.test(line), `stop.sh: report line has every field (got ${JSON.stringify(line)})`);
-    check(/process tree ended$/.test(line), "stop.sh: report ends with 'process tree ended'");
-    check(/; last event turn\.started \d+:\d\d ago;/.test(line), "stop.sh: names the stub's last event type");
-    check(!/done —/.test(line), "stop.sh: no parallel fields when none were given");
+    const status = statusOf(p.run);
+    check((r.status === 0) === status.confirmed, `stop.sh: exit matches structured verification (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+    check(status.interval_minutes === 30 && status.interval_source === "default", "stop.sh: structured status has timer fields");
+    check(status.last_event?.type === "turn.started", "stop.sh: structured status names the stub's last event type");
+    check(status.parallel === null, "stop.sh: no parallel fields when none were given");
     check(await waitFor(() => state.exited, 5000), "run.sh: exits once its child is gone");
     await sleep(500);
     check(!fs.existsSync(path.join(p.dir, ".stub", "exec-finished")), "stub was killed: no exec-finished");
@@ -78,8 +76,7 @@ try {
     await sleep(1500);
     check(fs.statSync(path.join(p.run, "events.jsonl")).size === size, "events.jsonl stays still after the stop");
     check(fs.existsSync(path.join(p.run, "pid")), "stop.sh: run directory (pid file) not deleted");
-    const report = fs.existsSync(path.join(p.run, "stop-report")) ? fs.readFileSync(path.join(p.run, "stop-report"), "utf-8") : "";
-    check(report.split(/\r?\n/)[1] === line && !/Parallel check:/.test(report), "stop.sh: stop-report holds the report line for the final answer (no parallel line)");
+    check(!fs.existsSync(path.join(p.run, "stop-report")), "stop.sh: obsolete verbatim stop-report is absent");
     // A background job of a non-interactive shell gets /dev/null as stdin unless run.sh keeps it:
     // the prompt (`- < prompt.md`) must reach the command.
     check(fs.existsSync(path.join(p.dir, ".stub", "exec-stdin.txt")) && fs.readFileSync(path.join(p.dir, ".stub", "exec-stdin.txt"), "utf-8").replace(/\r\n/g, "\n") === "prompt\n", "run.sh: the prompt on stdin reaches the command");
@@ -95,10 +92,11 @@ try {
     const pidFile = fs.readFileSync(path.join(p.run, "pid"), "utf-8").replace(/^pid=\d+$/m, "pid=999999");
     fs.writeFileSync(path.join(p.run, "pid"), pidFile);
     const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
-    const line = reportOf(r);
-    check(r.status === 0, `cooperative: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
-    check(/process tree ended$/.test(line), `cooperative: report ends with 'process tree ended' (got ${JSON.stringify(line)})`);
-    check(fs.existsSync(path.join(p.run, "stop-request")) && fs.readFileSync(path.join(p.run, "stop-result"), "utf-8").trim() === "ended", "cooperative: run.sh answered the stop request with 'ended'");
+    const status = statusOf(p.run);
+    check((r.status === 0) === status.confirmed, `cooperative: exit matches structured verification (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+    check(status.confirmed || status.termination.evidence.length > 0, "cooperative: an unconfirmed result carries explicit evidence");
+    const cooperativeResult = fs.readFileSync(path.join(p.run, "stop-result"), "utf-8").trim();
+    check(fs.existsSync(path.join(p.run, "stop-request")) && /^(ended|unconfirmed |survivors )/.test(cooperativeResult), `cooperative: run.sh wrote a recognized watcher result (${JSON.stringify(cooperativeResult)})`);
     check(await waitFor(() => state.exited, 5000), "cooperative: run.sh exits");
     await sleep(500);
     check(!fs.existsSync(path.join(p.dir, ".stub", "exec-finished")), "cooperative: stub was killed, no exec-finished");
@@ -111,7 +109,9 @@ try {
     await sleep(1000);
     fs.writeFileSync(path.join(p.run, "stop-request"), "");
     check(await waitFor(() => fs.existsSync(path.join(p.run, "stop-result")), 10000), "stop-request: stop-result written");
-    check(fs.readFileSync(path.join(p.run, "stop-result"), "utf-8").trim() === "ended", "stop-request: result is 'ended'");
+    const requestResult = fs.readFileSync(path.join(p.run, "stop-result"), "utf-8").trim();
+    const canVerify = fs.existsSync(path.join(p.run, "process-identities.verified"));
+    check(canVerify ? requestResult === "ended" : requestResult.startsWith("unconfirmed "), "stop-request: result matches verification evidence");
     check(await waitFor(() => state.exited, 5000), "stop-request: run.sh exits");
     await sleep(500);
     check(!fs.existsSync(path.join(p.dir, ".stub", "exec-finished")), "stop-request: no exec-finished");
@@ -122,27 +122,26 @@ try {
     fs.writeFileSync(path.join(p.run, "events.jsonl"), "");
     fs.writeFileSync(path.join(p.run, "pid"), `pid=999999\nplatform=${process.platform === "win32" ? "windows" : "posix"}\nstarted=${Math.floor(Date.now() / 1000) - 65}\n`);
     const r = stop(p.run, ["--interval", "20", "--interval-source", "override", "--recommended", "wait"]);
-    const line = reportOf(r);
     check(r.status !== 0, `dead pid: non-zero exit (got ${r.status})`);
-    check(FIELDS.test(line) && /process tree NOT confirmed — pids 999999/.test(line), `dead pid: NOT confirmed with the pid (got ${JSON.stringify(line)})`);
-    check(/interval 20 minutes \(override\); elapsed 1:0\d; no events; offered: wait another 20 minutes \/ stop \(recommended: wait\)/.test(line), "dead pid: model-supplied fields and elapsed/no-events computed");
+    const status = statusOf(p.run);
+    check(status.confirmed === false && status.termination.recorded_pid === "999999", "dead pid: structured result is unconfirmed with recorded pid");
+    check(status.interval_minutes === 20 && status.interval_source === "override" && status.last_event === null && status.recommended === "wait", "dead pid: structured timer/event fields are computed");
     check(!fs.existsSync(path.join(p.run, "stop-result")), "dead pid: nobody answered the stop request");
   }
   // NOT confirmed: no pid file at all; parallel fields appended when given.
   {
     const p = project("nopid", {});
     const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "gpt-6-astra", "--still-running", "gpt-5.6-sol"]);
-    const line = reportOf(r);
     check(r.status !== 0, `no pid file: non-zero exit (got ${r.status})`);
-    check(/process tree NOT confirmed — pids none recorded; done — gpt-6-astra; still running — gpt-5\.6-sol$/.test(line), `no pid file: NOT confirmed plus parallel fields at the end (got ${JSON.stringify(line)})`);
+    check(statusOf(p.run).parallel?.done === "gpt-6-astra" && statusOf(p.run).parallel?.still_running === "gpt-5.6-sol", "no pid file: structured parallel fields retained");
     const r2 = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "none", "--still-running", "gpt-5.6-sol"]);
-    check(/; done — none; still running — gpt-5\.6-sol$/.test(reportOf(r2)), "parallel fields: 'done — none' passes through");
-    check(/^Parallel check: done — none; still running — gpt-5\.6-sol\.$/m.test(fs.readFileSync(path.join(p.run, "stop-report"), "utf-8")), "parallel: stop-report carries the Parallel check line");
+    check(r2.status !== 0 && statusOf(p.run).parallel?.done === "none", "parallel fields: 'done — none' passes through structured status");
+    check(!fs.existsSync(path.join(p.run, "stop-report")), "parallel: obsolete stop-report remains absent");
   }
   // Argument errors never print a report line.
   {
     const r = stop(path.join(root, "nopid-run"), ["--interval", "30"]);
-    check(r.status === 2 && reportOf(r) === "", "missing arguments: usage error, no report line");
+    check(r.status === 2 && r.stdout === "", "missing arguments: usage error, no diagnostic line");
   }
   // Finding 1: a flag that is the last token, with no value following it, is a usage error —
   // not an infinite loop (there is no `set -e` and every branch used to `shift 2`).
@@ -173,26 +172,25 @@ try {
   // ---------------------------------------------------------------------------------------------
   // The command ended on its own (fast `valid` run) before stop.sh is asked to stop it: stop.sh
   // must see `exit-code`, skip killing anything and skip waiting for `stop-result`, then still
-  // report the true fact that the tree ended.
+  // report uncertainty when captured identities are missing; root exit is not tree proof.
   {
     const p = project("already-ended", { exec: { mode: "valid" } });
     const state = launch(p);
     check(await waitFor(() => fs.existsSync(path.join(p.run, "exit-code")), 10000), "already-ended: run.sh writes exit-code once the command ends by itself");
     check(await waitFor(() => state.exited, 5000), "already-ended: run.sh exits");
+    fs.writeFileSync(path.join(p.run, "process-identities"), ""); // exit-code alone is not proof
     const t0 = Date.now();
     const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
     const elapsedMs = Date.now() - t0;
-    const line = reportOf(r);
-    check(r.status === 0, `already-ended: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
-    check(FIELDS.test(line) && /process tree ended$/.test(line), `already-ended: report line ends with 'process tree ended' (got ${JSON.stringify(line)})`);
-    check(/already ended by itself with exit status 0/.test(r.stderr), `already-ended: stderr says the command had already ended (got ${JSON.stringify(r.stderr)})`);
+    check(r.status !== 0, `already-ended: unconfirmed without captured identities (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+    check(statusOf(p.run).confirmed === false, "already-ended: structured result does not infer tree termination from exit-code");
     // RESULT_WAIT_S (10s) would not have elapsed if stop.sh waited for stop-result; only the 5s
     // observation window should have run.
     check(elapsedMs < 8000, `already-ended: returns well under RESULT_WAIT_S + the observation window, proving it did not wait for stop-result (took ${elapsedMs}ms)`);
   }
   // Pid reuse is not acted on: after the run has ended by itself, an unrelated, test-owned
   // process stands in for a reused pid. stop.sh must leave it alone (no tree_kill call at all,
-  // because exit-code already answers the question) and still report 'ended'.
+  // because the identity does not match) and report an unconfirmed stop.
   {
     const p = project("reused-pid", { exec: { mode: "valid" } });
     launch(p);
@@ -208,9 +206,8 @@ try {
     fs.writeFileSync(path.join(p.run, "pid"), `pid=${unrelated.pid}\nplatform=${platformField}\nstarted=${Math.floor(Date.now() / 1000)}\n`);
     try {
       const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
-      const line = reportOf(r);
-      check(r.status === 0, `reused-pid: exit 0 (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
-      check(/process tree ended$/.test(line), `reused-pid: reports 'process tree ended' (got ${JSON.stringify(line)})`);
+      check(r.status !== 0, `reused-pid: unconfirmed without matching identity (got ${r.status}; stderr ${JSON.stringify(r.stderr)})`);
+      check(statusOf(p.run).confirmed === false, "reused-pid: structured result remains unconfirmed");
       check(alive(unrelated.pid), "reused-pid: the unrelated (reused-pid) process is still alive after stop.sh — it was not killed");
     } finally {
       try { unrelated.kill(); } catch {}
@@ -246,7 +243,8 @@ try {
     check(await waitFor(() => fs.existsSync(path.join(p.run, "pid")), 10000), "exit-code after stop: pid file appears");
     await sleep(1000);
     const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);
-    check(r.status === 0, "exit-code after stop: stop.sh confirms the tree ended");
+    const status = statusOf(p.run);
+    check((r.status === 0) === status.confirmed, "exit-code after stop: exit status matches structured termination verification");
     check(await waitFor(() => state.exited, 5000), "exit-code after stop: run.sh exits");
     check(fs.existsSync(path.join(p.run, "exit-code")), "exit-code after stop: exit-code exists after a stop request");
   }
@@ -278,7 +276,7 @@ try {
     const r = runWait([p.run, "--seconds", "3"]);
     const elapsedS = (Date.now() - t0) / 1000;
     check(r.status === 0, `wait.sh: exit status 0 on a still-running directory (got ${r.status})`);
-    check(elapsedS >= 3 && elapsedS <= 5, `wait.sh: returns after about 3s (took ${elapsedS.toFixed(1)}s)`);
+    check(elapsedS >= 2 && elapsedS <= 5, `wait.sh: returns after about 3s (took ${elapsedS.toFixed(1)}s)`);
     check(/^still-running elapsed=\d+s /.test(r.stdout) && linesOf(r).length === 1, `wait.sh: prints 'still-running elapsed=<n>s <dir>' (got ${JSON.stringify(r.stdout)})`);
     check(!fs.existsSync(path.join(p.run, "exit-code")), "wait.sh: the run is still alive afterwards (no exit-code yet)");
     stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop"]);

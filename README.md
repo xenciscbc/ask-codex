@@ -27,14 +27,16 @@ claude -p --plugin-dir /path/to/ask-codex \
   "/ask-codex:ask Why does fetchUser return an empty object on timeout?"
 ```
 
-A headless run needs its tool permissions spelled out; those are the flags the live acceptance runs used.
+A headless run needs its tool permissions spelled out. The script-owned workflow has been exercised through real Claude headless under WSL Ubuntu with a stub Codex CLI; this example has not been accepted end to end with the real Codex CLI.
 
 Installing from GitHub as a marketplace plugin is untested — the branch is published, but that flow has never been exercised, so only the command above is known to work.
 
 ## Prerequisites
 
+- Python 3.11 or newer. The consultation script uses the standard library's `tomllib` to read Codex configuration.
+- Bash. Linux uses Bash directly; Windows requires Git Bash.
 - The Codex CLI, installed and logged in. If it is not logged in, Claude tells you to run `! codex login`.
-- Verified against `codex-cli 0.154.0`. On the test machine `codex` resolved to the pnpm-installed `@openai/codex`, not the Codex desktop app's own binary — if both are installed, the one on your `PATH` is the one used.
+- The previous implementation was verified against `codex-cli 0.154.0`. On that test machine `codex` resolved to the pnpm-installed `@openai/codex`, not the Codex desktop app's own binary — if both are installed, the one on your `PATH` is the one used.
 
 ## Usage
 
@@ -42,15 +44,36 @@ Installing from GitHub as a marketplace plugin is untested — the branch is pub
 
 **Consultation types.** Claude picks the type from context: a second opinion (challenge a plan or decision), a diagnosis (find a root cause when stuck), a targeted check (inspect a specific implementation or diff), a technical question, or a follow-up. Diagnoses and technical questions are sent **blind** — Claude's own hypothesis is withheld so the answer is not anchored.
 
-**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session; a headless run has no way to ask, so the choice applies to that consultation only and the reply says so on a line of its own: `Model choice applies to this consultation only: <model>, effort <effort>.` Naming the model the session already uses adds no such line.
+**Models and effort.** Name a model by alias (`sol`, `astra`, `5.6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority model Codex lists. Consultation effort is never below `medium` and is always passed explicitly, so Codex's own configured effort is not inherited. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session. A headless run cannot ask, so the choice applies only to that consultation and the report discloses the scope in the conversation language; no fixed sentence or line position is required. Naming the model and effort already in use needs no scope note.
 
 **Parallel consultation.** Name two different models (`astra, sol`) to ask both the same question and get independent opinions, merged into consensus, solo claims and divergences, each tagged with the model that made it, and each divergence resolved with a stated reason. At most two models, never the same one twice.
 
 **Follow-up consultation.** A follow-up runs in a fresh Codex session carrying the previous claims and Claude's dispositions, and asks Codex to report a status for each. It never resumes the earlier Codex session.
 
-**Long runs.** Claude checks a running consultation every 30 minutes by default. While Codex is alive and producing events, it keeps waiting and says so in one line. If the run looks stalled, an interactive session asks whether to wait another interval or stop, showing the elapsed time and the last event with its age; a headless run has no way to ask, so it states the same information and stops. When a consultation is stopped, ask-codex ends the whole Codex process tree it started and reports the stop only after confirming that `events.jsonl` no longer changes; if it cannot confirm that, the report says the stop is not confirmed and lists the processes still alive, for you to deal with. Nothing is attributed to Codex after a stop. The plugin ships small scripts for this: one starts Codex as a process tree of its own and records it, one ends that tree and verifies that it is gone, and one waits for the run in the foreground. That last one matters in a headless run: a session whose tools include no `TaskOutput` cannot "wait for a notification" — its turn would end while Codex is still running, and the reply would never be read — so Claude blocks on the wait script instead, in chunks of at most nine minutes. Stopping was tested live with the real Codex CLI on Windows (Git Bash), in both an interactive and a headless session; on Linux it is covered by the scripts' offline test and the stubbed eval suite, not by a live Codex run; macOS is untested. The wait without `TaskOutput` is covered by the offline test on Windows and Linux and by stubbed eval cases in which the tool's absence is simulated by instruction (the eval harness cannot take it away); it has not been run live against the real Codex CLI.
+**Script-owned execution and long runs.** Claude prepares the question and judges the answer, while `scripts/consult.py` owns policy resolution, preflight checks, safe command construction, process lifecycle and structured status. It prepares a reviewable summary of the model and effort, project directory, allowed MCP servers and policy before launch. Its statuses distinguish pending confirmation, preflight failure, running, completion, execution failure, confirmed stop and unconfirmed stop; a runtime failure is never treated as a Codex opinion.
 
-**MCP policy.** By default every MCP server is disabled for each consultation (allowlist mode with an empty list). You can allow specific servers, or switch to minimal-deny mode where only `node_repl` and `cua_repl` are disabled. Settings live in an ask-codex config at the user level and optionally in the project, where the project's values override the user's; `/ask-codex:setup` helps you create them. Before every consultation Claude re-lists the servers as an MCP guard and aborts if what is actually enabled differs from the policy. A server defined by the project's own Codex config is never used without your explicit confirmation naming it.
+Claude checks a running consultation every 30 minutes by default, using foreground waits of no more than 60 seconds and never exceeding the remaining check interval. If the run looks stalled, an interactive session shows elapsed time and the last event and asks whether to wait another interval or stop; a headless run reports the same information and follows the stop path. A stop is reported as confirmed only after the process tree is verified ended. An unconfirmed stop preserves its control files and diagnostics, including anything a surviving process may still use, and reports their location. Those diagnostics have no automatic expiry and are removed only after an explicit cleanup request; logs may contain project content. Prompts and replies are removed once termination is confirmed rather than retained as long-term diagnostics.
+
+**MCP policy.** By default every MCP server is disabled for each consultation (allowlist mode with an empty list). You can allow specific servers, or switch to minimal-deny mode where only `node_repl` and `cua_repl` are disabled. Settings live in an ask-codex config at the user level and optionally in the project, where the project's values override the user's; `/ask-codex:setup` helps you create them. Missing policy files use the documented fallback, while an existing file with invalid JSON, types, policy values or server names fails closed before Codex starts. The script checks the effective MCP state before execution and supports literal server names containing dots.
+
+A project-defined server needs explicit source confirmation, bound to that exact definition. Changing its command, arguments, endpoint, environment or other definition fields invalidates the earlier confirmation. Source confirmation only acknowledges the definition; permission to use the server is a separate decision, although Claude may ask for both clearly in one question. Confirmation IDs come from the prepared definition and cannot themselves grant consent.
+
+## Verification
+
+The public stub-CLI integration suite has been exercised on Windows and Linux with:
+
+```bash
+python evals/_harness/consultation_test.py
+```
+
+On 2026-09-22, real Claude headless under WSL Ubuntu ran each new focused eval once against the stub Codex CLI. `script-consultation` passed all 3 graders with score 1, and `script-confirmation` passed both graders with score 1:
+
+```bash
+evals/_harness/run-evals.sh --case script-consultation --runs 1 --allow-tools Bash Write
+evals/_harness/run-evals.sh --case script-confirmation --runs 1 --allow-tools Bash Write
+```
+
+The public CLI suite passes 22 tests on each platform. See [validation evidence](.scratch/script-owned-consultation/evidence/validation.md) for lifecycle results, review fixes, instruction-size measurements and remaining gaps. Earlier eval cases and historical live Windows results exercise the previous implementation and are not current acceptance evidence. Isolated real `codex mcp list` probes verified that a dotted server name can be disabled, but no full consultation with the real Codex CLI has been verified. Interactive Claude flows also remain unverified. macOS is outside the supported acceptance scope.
 
 ## Known risks
 
@@ -58,14 +81,16 @@ Installing from GitHub as a marketplace plugin is untested — the branch is pub
 - Codex's shell can read anything your account can read. The prompt limits its scope by instruction only.
 - Any MCP server you allow runs outside the sandbox and may include tools that write or execute.
 - Who may start a consultation is a rule Claude follows, not something the plugin enforces: there is no hook or tool-level block. In testing, text planted in a file started a consultation before a request check was added; with the check it was not seen again in a small number of runs, which is not proof that it cannot happen.
+- An unconfirmed stop can leave processes alive. ask-codex reports that uncertainty and retains the run files needed for diagnosis rather than claiming the consultation ended.
 - A consultation costs roughly 25k input tokens before your question is even considered (an estimate from the design notes, not a measured figure).
 
 ## Known limitations
 
 - A workspace on a drive where the Codex Windows sandbox cannot run is not consultable. Observed with a RAM disk: `codex exec -C R:\…` fails with `os error 1`. Claude reports the failure rather than inventing an answer.
-- Projects trusted persistently in your Codex config are covered only by the project-layer fail-safe, which has not been tested live.
-- About one stop in five to ten, the `Consultation stopped:` line appears only at the top of the final reply rather than at the moment of the stop (measured in the eval suite). The processes are ended either way.
+- Persistently trusted projects still rely on the script's project-definition checks; that path has not been verified end to end with the real Codex CLI.
 - An external program can rewrite the `model` line in your Codex config while you work, and that line is what Claude uses when you name no model — so two consultations minutes apart can use different models with no action from you.
+
+Reports may follow the conversation language and wording. There is no required English heading or fixed line position, but the report must preserve the question and consultation type, model and effort, effective MCP policy, relevant timer and stop details, and Claude's disposition for each substantive claim.
 
 ## License
 

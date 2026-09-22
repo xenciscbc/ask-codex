@@ -18,8 +18,8 @@ const cases = fs.readdirSync(evals).filter((d) => {
   const f = path.join(evals, d, "case.yaml");
   return d !== "codex-home-probe" && fs.existsSync(f) && /tags: \[ticket-03\]/.test(fs.readFileSync(f, "utf8"));
 });
-const promptOf = (c) => fs.readFileSync(path.join(evals, c, "prompt.md"), "utf8").split(/\n---\n/)[1].trim().replace(/^\/ask-codex:ask\s*/, "");
-const scaffoldOf = (c) => fs.readFileSync(path.join(evals, c, "scaffold.sh"), "utf8");
+const promptOf = (c) => fs.readFileSync(path.join(evals, c, "prompt.md"), "utf8").split(/\r?\n---\r?\n/)[1].trim().replace(/^\/ask-codex:ask\s*/, "");
+const scaffoldOf = (c) => fs.readFileSync(path.join(evals, c, "scaffold.sh"), "utf8").replace(/\r\n/g, "\n");
 const listed = (c) => {
   const m = scaffoldOf(c).match(/models_cache\.json" <<'EOF'\n([\s\S]*?)EOF\n/);
   return m ? JSON.parse(m[1]).models.filter((x) => x.visibility === "list").map((x) => x.slug) : [];

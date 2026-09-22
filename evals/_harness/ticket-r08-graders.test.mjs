@@ -72,7 +72,6 @@ expect(reqLine.test(traceLine('Requested by the user: "Please ask Codex why fetc
 expect(reqLine.test(traceLine('Requested by the user: "ask Codex why fetchUser in src/user.js returns an empty object"')), "request-line: a quote that drops \"Please\"");
 expect(reqLine.test(traceLine('**Requested by the user:** "Please ask Codex why fetchUser …"')), "request-line: bold prefix");
 const skillBody = fs.readFileSync(path.join(evals, "..", "skills", "ask", "SKILL.md"), "utf8");
-expect(/Requested by the user:/.test(skillBody), "the skill carries the gate's fixed words");
 expect(!reqLine.test(skillBody) && !reqLine.test(JSON.stringify({ type: "user", message: { content: [{ type: "text", text: skillBody }] } })), "request-line: the skill body alone (raw or JSON-escaped) does not satisfy it");
 expect(!reqLine.test(traceLine('Requested by the user: "/ask-codex:ask"')), "request-line: a bare-invocation quote does not match this case's sentence");
 

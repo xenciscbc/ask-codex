@@ -1,44 +1,38 @@
 #!/usr/bin/env bash
-# ask-codex consultation stopper.
-#
-#   bash stop.sh '<run directory>' --interval <minutes> --interval-source default|override \
-#       --recommended wait|stop [--done '<slugs or none>' --still-running '<slugs>']
-#
-# Reads `<run directory>/pid` (written by run.sh) and ends the whole process tree two ways at
-# once: it asks run.sh to do it from inside the child's process namespace (by creating
-# `<run directory>/stop-request` and waiting for `stop-result`), and, when the recorded pid is
-# visible from here, it also kills the tree directly (Windows: taskkill /T /F on the Windows
-# pid; elsewhere: the process group created by setsid). The tree counts as ended when run.sh
-# reports `ended`, or when the pid was visible and nothing of its tree survives. It then
-# verifies that `events.jsonl` does not change during a 5-second observation window. Prints
-# exactly one report line on stdout, beginning with `Consultation stopped:`, for the model to
-# copy verbatim; exits 0 only when the tree is confirmed ended. Never deletes the run
-# directory. Needs only bash and the platform's own tools.
+# Request and verify termination of one consultation. stop-status.json is the machine-readable
+# contract; stdout is only a concise human diagnostic.
 set -u
 
-WINDOW_S=5
-RESULT_WAIT_S=10
+if [ -x /usr/bin/uname ] && case "$(/usr/bin/uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) true ;; *) false ;; esac; then
+  PATH="/usr/bin:/bin:$PATH"; export PATH
+fi
+
+WINDOW_S="${ASK_CODEX_STOP_WINDOW_S:-5}"
+RESULT_WAIT_S="${ASK_CODEX_STOP_RESULT_WAIT_S:-10}"
 
 usage() {
-  echo "usage: stop.sh <run directory> --interval <minutes> --interval-source default|override --recommended wait|stop [--done <text> --still-running <text>]" >&2
+  echo "usage: stop.sh <run directory> --interval <minutes> --interval-source default|override --recommended wait|stop [--offered none|wait,stop] [--done <text> --still-running <text>]" >&2
   exit 2
 }
 [ $# -ge 1 ] || usage
 run_dir="$1"; shift
-interval=""; source=""; recommended=""; done_text=""; running_text=""; parallel=0
+interval=""; source=""; recommended=""; offered="none"; done_text=""; running_text=""; parallel=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --interval) [ $# -ge 2 ] || usage; interval="$2"; shift 2 ;;
     --interval-source) [ $# -ge 2 ] || usage; source="$2"; shift 2 ;;
     --recommended) [ $# -ge 2 ] || usage; recommended="$2"; shift 2 ;;
+    --offered) [ $# -ge 2 ] || usage; offered="$2"; shift 2 ;;
     --done) [ $# -ge 2 ] || usage; done_text="$2"; parallel=1; shift 2 ;;
     --still-running) [ $# -ge 2 ] || usage; running_text="$2"; parallel=1; shift 2 ;;
     *) echo "stop.sh: unknown argument: $1" >&2; usage ;;
   esac
 done
-[ -n "$interval" ] && [ -n "$source" ] && [ -n "$recommended" ] || usage
+case "$interval" in ''|*[!0-9]*) usage ;; esac
+[ "$interval" -gt 0 ] || usage
 case "$source" in default|override) ;; *) usage ;; esac
 case "$recommended" in wait|stop) ;; *) usage ;; esac
+case "$offered" in none|wait,stop) ;; *) usage ;; esac
 [ -d "$run_dir" ] || { echo "stop.sh: run directory not found: $run_dir" >&2; exit 2; }
 
 # shellcheck source=_tree.sh
@@ -46,111 +40,113 @@ case "$recommended" in wait|stop) ;; *) usage ;; esac
 
 mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/\\r/g; s/\t/\\t/g'; }
+json_string() { printf '"%s"' "$(json_escape "$1")"; }
 
-# ---- read the pid file -----------------------------------------------------------------
-
-pid=""; platform=""; started=""
+pid=""; platform=""; started=""; recorded_identity=""
 if [ -f "$run_dir/pid" ]; then
   while IFS='=' read -r k v; do
-    case "$k" in pid) pid="$v" ;; platform) platform="$v" ;; started) started="$v" ;; esac
+    case "$k" in pid) pid="$v" ;; platform) platform="$v" ;; started) started="$v" ;; identity) recorded_identity="$v" ;; esac
   done < "$run_dir/pid"
 fi
 now="$(date +%s)"
 [ -n "$started" ] || started="$(mtime "$run_dir/pid")"
 [ "$started" -gt 0 ] 2>/dev/null || started="$now"
-elapsed="$(mmss $(( now - started )))"
+elapsed_seconds=$(( now - started )); [ "$elapsed_seconds" -ge 0 ] || elapsed_seconds=0
+elapsed="$(mmss "$elapsed_seconds")"
 
-events="$run_dir/events.jsonl"
+events="$run_dir/events.jsonl"; event_type=""; event_age=""
 if [ -s "$events" ]; then
-  type="$(tail -n 1 "$events" | sed -n 's/.*"type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-  [ -n "$type" ] || type="unknown"
-  last_event="last event $type $(mmss $(( now - $(mtime "$events") ))) ago"
+  event_type="$(tail -n 1 "$events" | sed -n 's/.*"type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  [ -n "$event_type" ] || event_type="unknown"
+  event_age=$(( now - $(mtime "$events") )); [ "$event_age" -ge 0 ] || event_age=0
+  last_event="last event $event_type $(mmss "$event_age") ago"
 else
   last_event="no events"
 fi
 
-report() {
-  local line="Consultation stopped: interval $interval minutes ($source); elapsed $elapsed; $last_event; offered: wait another $interval minutes / stop (recommended: $recommended); $1"
-  [ "$parallel" = 1 ] && line="$line; done — ${done_text:-none}; still running — ${running_text:-none}"
-  echo "$line"
-  # The model copies the line at the moment of the stop; say so where it is looking — and say
-  # nothing else here (a procedural hint in this output was followed over the skill's own order).
-  echo "stop.sh: copy the line above, verbatim, as the first line of your next message, before anything else." >&2
-  # The lines the final answer must open with, shown again by the cleanup command
-  # (`cat -- '<run dir>/stop-report'; rm -rf -- '<run dir>'`) right before that answer is written.
+write_status() {
+  local status="$1" confirmed="$2" evidence="$3" survivors="$4" retained_json="null" event_json="null" parallel_json="null" offered_json="[]"
+  [ "$confirmed" = false ] && retained_json="$(json_string "$run_dir")"
+  if [ -n "$event_type" ]; then
+    event_json="{\"type\":$(json_string "$event_type"),\"age_seconds\":$event_age}"
+  fi
+  if [ "$parallel" = 1 ]; then
+    parallel_json="{\"done\":$(json_string "${done_text:-none}"),\"still_running\":$(json_string "${running_text:-none}")}"
+  fi
+  [ "$offered" = "wait,stop" ] && offered_json='["wait","stop"]'
   {
-    echo "Begin your final answer with these lines, verbatim (markdown emphasis around the fixed words is allowed):"
-    echo "$line"
-    [ "$parallel" = 1 ] && echo "Parallel check: done — ${done_text:-none}; still running — ${running_text:-none}."
-  } > "$run_dir/stop-report"
+    printf '{"schema_version":1,"status":%s,"confirmed":%s,' "$(json_string "$status")" "$confirmed"
+    printf '"interval_minutes":%s,"interval_source":%s,"elapsed_seconds":%s,' "$interval" "$(json_string "$source")" "$elapsed_seconds"
+    printf '"last_event":%s,"options_offered":%s,"recommended":%s,' "$event_json" "$offered_json" "$(json_string "$recommended")"
+    printf '"termination":{"evidence":%s,"recorded_pid":%s,"recorded_identity":%s,"survivors":%s,"exit_code_present":%s},' \
+      "$(json_string "$evidence")" "$(json_string "${pid:-}")" "$(json_string "${recorded_identity:-}")" "$(json_string "${survivors:-}")" "$([ -e "$run_dir/exit-code" ] && echo true || echo false)"
+    printf '"retained_location":%s,"parallel":%s}\n' "$retained_json" "$parallel_json"
+  } > "$run_dir/stop-status.json.tmp" && mv -f "$run_dir/stop-status.json.tmp" "$run_dir/stop-status.json"
 }
 
-if [ -z "$pid" ] || [ -z "$platform" ]; then
-  echo "stop.sh: no usable pid file in $run_dir" >&2
-  report "process tree NOT confirmed — pids none recorded"
+report() { printf 'stop.sh: %s; status=%s\n' "$1" "$run_dir/stop-status.json"; }
+
+identities="$run_dir/process-identities"
+rm -f "$run_dir/stop-report"
+if [ -z "$pid" ] || case "$pid" in *[!0-9]*) true ;; *) false ;; esac || \
+   case "$platform" in windows|posix) false ;; *) true ;; esac || [ ! -s "$identities" ]; then
+  echo "stop.sh: no usable captured process identity in $run_dir" >&2
+  : > "$run_dir/stop-request"
+  write_status unconfirmed_stop false identity_unavailable "${pid:-none recorded}"
+  report "termination unconfirmed"
   exit 2
 fi
 
-# ---- stop the tree: cooperative request plus direct kill when the pid is visible ---------
-
 rm -f "$run_dir/stop-result"
 : > "$run_dir/stop-request"
+direct_survivors="$(tree_kill "$platform" "$pid" "$identities")"
 
-ended=0; survivors=""
-if [ -e "$run_dir/exit-code" ]; then
-  # The launched command already ended by itself; its pid may be gone or reused by an unrelated
-  # process. Do not kill anything and do not wait for stop-result — the tree already ended.
-  ended_code="$(cat -- "$run_dir/exit-code" 2>/dev/null)"
-  echo "stop.sh: the command had already ended by itself with exit status ${ended_code}; nothing was killed" >&2
-  ended=1
-else
-  visible=0; direct_survivors=""
-  if tree_alive "$platform" "$pid"; then
-    visible=1
-    direct_survivors="$(tree_kill "$platform" "$pid")"
-  fi
+result=""
+for _ in $(seq 1 $(( RESULT_WAIT_S * 2 ))); do
+  [ -s "$run_dir/stop-result" ] && { result="$(cat "$run_dir/stop-result")"; break; }
+  [ -s "$identities.unverified-reason" ] && [ -e "$run_dir/exit-code" ] && break
+  current="$(tree_all_survivors "$platform" "$pid" "$identities")"
+  [ -z "$current" ] && tree_verification_complete "$platform" "$identities" && break
+  sleep 0.5
+done
 
-  result=""
-  for _ in $(seq 1 $(( RESULT_WAIT_S * 2 ))); do
-    [ -s "$run_dir/stop-result" ] && { result="$(cat "$run_dir/stop-result")"; break; }
-    # Nothing to wait for once the pid was visible and its tree is gone.
-    [ "$visible" = 1 ] && [ -z "$direct_survivors" ] && ! tree_alive "$platform" "$pid" && break
-    sleep 0.5
-  done
-
-  case "$result" in
-    ended) ended=1 ;;
-    survivors\ *) survivors="${result#survivors }" ;;
-  esac
-  if [ "$ended" = 0 ] && [ -z "$survivors" ] && [ "$visible" = 1 ]; then
-    if [ -n "$direct_survivors" ]; then survivors="$direct_survivors"
-    elif ! tree_alive "$platform" "$pid"; then ended=1
-    else survivors="$pid"
-    fi
+survivors="$(tree_all_survivors "$platform" "$pid" "$identities")"
+confirmed=0; evidence="verification_incomplete"; complete=0; enumerated=0
+[ -f "$identities.complete" ] && enumerated=1
+tree_verification_complete "$platform" "$identities" && complete=1
+case "$result" in
+  ended) [ "$complete" = 1 ] && [ -z "$survivors" ] && { confirmed=1; evidence="launcher_identity_verified"; } ;;
+  survivors\ *) survivors="${result#survivors }" ;;
+  unconfirmed\ *) evidence="${result#unconfirmed }" ;;
+esac
+if [ "$confirmed" = 0 ] && [ "$complete" = 1 ] && [ -z "$survivors" ]; then
+  confirmed=1; evidence="captured_identities_absent"
+fi
+if [ "$complete" != 1 ]; then
+  if [ -s "$identities.unverified-reason" ]; then evidence="$(cat "$identities.unverified-reason")"
+  elif [ "$enumerated" = 1 ]; then evidence="tree_ownership_unproven"
+  else evidence="tree_enumeration_unavailable"
   fi
 fi
-
-# ---- observation window: events.jsonl must stay still ------------------------------------
+[ -n "$survivors" ] || survivors="$direct_survivors"
 
 before="$(mtime "$events")"
 sleep "$WINDOW_S"
 after="$(mtime "$events")"
-
-if [ "$ended" = 0 ]; then
-  if [ -n "$survivors" ]; then
-    echo "stop.sh: processes still alive after the kill: $survivors" >&2
-    report "process tree NOT confirmed — pids $survivors"
-  else
-    echo "stop.sh: pid $pid is not visible from here and run.sh gave no answer within ${RESULT_WAIT_S}s" >&2
-    report "process tree NOT confirmed — pids $pid (not running)"
-    exit 3
-  fi
-  exit 1
-fi
 if [ "$before" != "$after" ]; then
-  echo "stop.sh: events.jsonl changed during the ${WINDOW_S}s observation window" >&2
-  report "process tree NOT confirmed — pids $pid (events.jsonl still changing)"
-  exit 1
+  confirmed=0; evidence="events_still_changing"
+  [ -n "$survivors" ] || survivors="$pid"
 fi
-report "process tree ended"
-exit 0
+
+if [ "$confirmed" = 1 ]; then
+  write_status confirmed_stop true "$evidence" ""
+  report "termination confirmed"
+  exit 0
+fi
+
+[ -n "$survivors" ] || survivors="$pid (verification unavailable)"
+echo "stop.sh: process-tree termination is not confirmed: $survivors" >&2
+write_status unconfirmed_stop false "$evidence" "$survivors"
+report "termination unconfirmed"
+exit 1

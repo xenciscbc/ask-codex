@@ -49,6 +49,6 @@ Content (JSON): `{"mcp_policy": "allowlist" | "minimal-deny", "mcp_allow": ["<se
    - `MCP: allowed — <names>; all other servers disabled.`
    - `MCP: minimal-deny — only node_repl and cua_repl disabled; other servers stay usable outside the sandbox.`
 
-   Remind the user that allowed servers run outside Codex's sandbox and may include tools that write or execute, and — for project scope — that `.claude/ask-codex.local.json` is meant to stay out of version control.
+   Report in the conversation language; the statements above describe the required information, not mandatory English wording. Remind the user that allowed servers run outside Codex's sandbox and may include tools that write or execute, and — for project scope — that `.claude/ask-codex.local.json` is meant to stay out of version control. Confirming a project definition does not itself authorize its use; consultations separately enforce the policy and definition-bound use authorization. An existing invalid policy file aborts consultation preflight instead of silently falling back.
 
 7. If the same message also asks to consult Codex, continue with the `ask` skill (`/ask-codex:ask`) for that question.

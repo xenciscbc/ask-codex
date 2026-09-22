@@ -23,6 +23,10 @@
 # to the stop path one interval later.
 set -u
 
+if [ -x /usr/bin/uname ] && case "$(/usr/bin/uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) true ;; *) false ;; esac; then
+  PATH="/usr/bin:/bin:$PATH"; export PATH
+fi
+
 usage() { echo "usage: wait.sh <run directory> [<run directory> …] --seconds <n>" >&2; exit 2; }
 
 argv=("$@")

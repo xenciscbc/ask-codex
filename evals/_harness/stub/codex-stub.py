@@ -34,6 +34,8 @@ import os
 import re
 import sys
 import time
+import uuid
+import tomllib
 
 
 def server(name, command, args, env):
@@ -88,10 +90,24 @@ DEFAULT_REPLY = {
 }
 
 # -c mcp_servers.<name>={command="ask-codex-disabled",enabled=false}
-DISABLE_RE = re.compile(r'^mcp_servers\.([A-Za-z0-9_.-]+)=\{\s*command\s*=\s*"ask-codex-disabled"\s*,\s*enabled\s*=\s*false\s*\}$')
+DISABLE_RE = re.compile(r'^mcp_servers\.([A-Za-z0-9_-]+)=\{\s*command\s*=\s*"ask-codex-disabled"\s*,\s*enabled\s*=\s*false\s*\}$')
 # Consultation effort is never below medium; `ultra` only when the user asks for it.
 EFFORT_RE = re.compile(r'^model_reasoning_effort="(medium|high|xhigh|max|ultra)"$')
 SLUG_RE = re.compile(r'^[A-Za-z0-9._-]+$')
+
+
+def disabled_names(value):
+    match = DISABLE_RE.fullmatch(value)
+    if match:
+        return [match.group(1)]
+    if value.startswith("mcp_servers={"):
+        try:
+            table = tomllib.loads(value)["mcp_servers"]
+            if all(SLUG_RE.fullmatch(name) and definition == {"enabled": False} for name, definition in table.items()):
+                return list(table)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return None
 
 
 def load_scenario(directory):
@@ -146,19 +162,20 @@ def mcp_list(args):
                     deep_merge(s, patch)
     overrides = config_overrides(args)
     for kv in overrides:
-        m = DISABLE_RE.match(kv)
-        if not m:
+        names = disabled_names(kv)
+        if names is None:
             violation(scenario, f"mcp list: unexpected -c {kv}")
             continue
         if data.get("guard_fails"):
             continue
-        match = [s for s in servers if s["name"] == m.group(1)]
-        if match:
-            match[0]["enabled"] = False
-        else:
-            disabled = server(m.group(1), "ask-codex-disabled", [], None)
-            disabled["enabled"] = False
-            servers.append(disabled)
+        for name in names:
+            match = [s for s in servers if s["name"] == name]
+            if match:
+                match[0]["enabled"] = False
+            else:
+                disabled = server(name, "ask-codex-disabled", [], None)
+                disabled["enabled"] = False
+                servers.append(disabled)
     if scenario:
         append(os.path.join(stub_dir(scenario), "mcp-list.log"),
                json.dumps({"argv": args, "cwd": os.getcwd(), "overrides": len(overrides)}) + "\n")
@@ -210,6 +227,11 @@ def exec_(args):
         exec_cfg.update(by_model[slug])
     data = {**data, "exec": exec_cfg}
     records = stub_dir(scenario)
+    # Separate files remain reliable under concurrent appends on Windows/WSL mounts.
+    calls = os.path.join(records, "exec-calls")
+    os.makedirs(calls, exist_ok=True)
+    with open(os.path.join(calls, str(uuid.uuid4()) + ".json"), "x", encoding="utf-8") as record:
+        json.dump({"argv": args, "model": slug}, record)
 
     problems = []
     if opts.get("sandbox") != "read-only":
@@ -234,14 +256,14 @@ def exec_(args):
         if EFFORT_RE.match(kv):
             effort_seen = True
             continue
-        m = DISABLE_RE.match(kv)
-        if not m:
+        names = disabled_names(kv)
+        if names is None:
             problems.append(f"unexpected -c {kv}")
-        elif m.group(1) in disabled_seen:
-            # With a count of disable definitions, this proves they name distinct servers.
-            problems.append(f"repeated disable definition for {m.group(1)}")
         else:
-            disabled_seen.add(m.group(1))
+            for name in names:
+                if name in disabled_seen:
+                    problems.append(f"repeated disable definition for {name}")
+                disabled_seen.add(name)
     if not effort_seen:
         problems.append("missing effort override")
     for u in opts["unknown"]:
