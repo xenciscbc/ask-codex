@@ -2,17 +2,21 @@
 
 *[English version](./README.md)*
 
-ask-codex 是 Claude Code 外掛，讓 Claude 透過本機 Codex CLI 向 OpenAI Codex 進行**諮詢**，取得獨立意見後由 Claude 自己逐點判斷。Codex 只回答，本身不會修改任何東西，但有一個例外值得先看下面的說明：MCP server 在 Codex 的唯讀 sandbox 之外執行。決策與所有改動都留在 Claude 與你身上——這是諮詢，不是**委派**。
+ask-codex 是 Claude Code 外掛，透過本機 OpenAI Codex CLI 取得獨立意見。Claude 準備問題、判斷回覆，並對每個實質論點給出**採納、不採納或待查**的處置及理由。實作決策仍由你與 Claude 負責。
 
-Codex 以結構化的**論點**回覆，Claude 對每個論點給出**處置**——採納、不採納或待查——並附理由。
+## 目前能力
 
-## 你可以依賴的範圍
+- 五種諮詢類型：第二意見、診斷、實作疑點審查、技術問答與接續諮詢。診斷與技術問答不透露假設，降低答案被錨定的機會。
+- 支援模型簡稱與明確的 reasoning effort；最多兩個不同模型各自回答。接續諮詢會開啟新 session，攜帶前次論點與處置。
+- 腳本負責設定解析、MCP 授權檢查、執行、有時間上限的等待、行程追蹤與結構化結果。
+- 安全傳遞 Unicode 回覆；輸出失敗可重新收集結果，並分開回報交付與清理失敗。
+- 目前實作目標為 Windows 搭配 Git Bash，以及 Linux。兩者皆有離線測試；真實 Claude 的驗證目前僅涵蓋 WSL 上兩個搭配 stub Codex 的 headless 案例。此版完整的真實 Codex 諮詢與互動流程尚未驗證。
 
-原文（安全宣告以英文原句為準）：
+## 執行邊界
 
-> Codex's shell commands run read-only (writes denied, shell network blocked). MCP servers run outside that sandbox: by default all are disabled per consultation; servers you allow (or, in minimal-deny mode, all except node_repl/cua_repl) remain usable and may include tools that write or execute, limited only by instruction.
+諮詢以 Codex 的唯讀 shell sandbox 執行，並封鎖 shell 網路存取。MCP server 在該 sandbox 之外執行，預設全部停用。你允許的 server 可能提供寫入或執行工具；外掛不會讓這些工具變成唯讀。
 
-中文說明：Codex 的 shell 指令以唯讀執行（寫入被拒、shell 網路被擋）。MCP server 在該 sandbox 之外執行：預設每次諮詢全部停用；你開放的 server（或在最小停用模式下，除 `node_repl`／`cua_repl` 以外的全部）仍可使用，其中可能包含會寫入或執行的工具，只受指示限制。
+Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為資料。這是模型指示，並非 hook 或工具層的授權屏障。行程停止也依賴可觀測的行程身份與快照，限制詳見下文。
 
 ## 安裝
 
@@ -33,10 +37,11 @@ claude -p --plugin-dir /path/to/ask-codex \
 
 headless 執行必須明確給出工具權限。腳本主導流程已透過 WSL Ubuntu 上的真實 Claude headless 搭配 stub Codex CLI 執行；這個範例尚未以真實 Codex CLI 完成端對端驗收。
 
-從 GitHub 以 marketplace 外掛安裝的方式尚未實測——分支已經推送，但那條路徑從未被執行過，因此目前只有上面這個指令是已知可行的。
+WSL headless 檢查使用的是本機 `--plugin-dir` 載入方式。Marketplace 安裝尚未測試。
 
 ## 先決條件
 
+- 支援本機外掛載入的 Claude Code，並允許使用所需的檔案與 Bash 工具。
 - Python 3.11 以上版本。諮詢腳本使用標準函式庫的 `tomllib` 讀取 Codex 設定。
 - Bash。Linux 直接使用 Bash；Windows 必須使用 Git Bash。
 - 已安裝並登入的 Codex CLI。未登入時 Claude 會告訴你執行 `! codex login`。
@@ -44,57 +49,87 @@ headless 執行必須明確給出工具權限。腳本主導流程已透過 WSL 
 
 ## 使用方式
 
-**手動諮詢。** 輸入 `/ask-codex:ask`（可附問題，也可不附），或直接用自己的話說「問一下 Codex」「聽聽 Codex 的看法」。提出要求本身即視為同意。沒有附問題時，Claude 會從對話推論出問題，並在送出前以一行揭示。ask-codex 不會自行諮詢 Codex：每一次諮詢都由你的要求開始。
+```text
+/ask-codex:ask 為什麼 fetchUser 逾時時會回傳空物件？
+/ask-codex:ask sol:high 檢查這份 diff 的重試邏輯。
+/ask-codex:ask astra, sol 對這份計畫提供第二意見。
+/ask-codex:setup
+```
+
+簡稱會對照本機 Codex 模型清單解析；範例不代表你的帳號一定可使用這些模型。
+
+**手動諮詢。** 輸入 `/ask-codex:ask`（可附問題，也可不附），或直接用自己的話說「問一下 Codex」「聽聽 Codex 的看法」。提出要求本身即視為同意。沒有附問題時，Claude 會從對話推論出問題，並在送出前以一行揭示。Skill 要求每次諮詢都必須來自你的要求；實際約束範圍如上所述。
 
 **諮詢類型。** Claude 依上下文判斷：第二意見（檢驗並挑戰一份 Plan 或決策）、診斷（卡關時找出 root cause）、實作疑點審查（帶著具體疑點檢查某段實作或 diff）、技術問答，以及接續諮詢。診斷與技術問答採**盲測**送出——不透露 Claude 自己的假設，以免答案被錨定。
 
-**模型與 effort。** 可用**模型簡稱**指定（`sol`、`astra`、`5.6 sol`），或連同 effort 一起指定（`sol:high`）；簡稱有歧義時 Claude 會列出候選並詢問。未指定模型時，Claude 會先用本 session 先前選定的模型，其次是 Codex 設定中的 `model`，再其次是 Codex 列出的模型中優先序最高的那一個。**諮詢 effort** 永遠不低於 `medium` 且一律明確傳入，不會沿用 Codex 設定裡的 effort。當你的**模型指定**與目前設定不同時，互動 session 會問這次指定只限這一次，還是延續本 session 其餘；headless 執行無法詢問，因此只套用於該次諮詢，並以對話語言在報告中揭露適用範圍，不要求固定句子或行位置。模型與 effort 和本 session 現行設定相同時，不需另加範圍說明。
+**模型與 effort。** 可用**模型簡稱**指定（`sol`、`astra`、`5.6 sol`），或連同 effort 一起指定（`sol:high`）；簡稱有歧義時 Claude 會列出候選並詢問。未指定模型時，Claude 會先用本 session 先前選定的模型，其次是 Codex 設定中的 `model`，再其次是本機快取中可見且優先序最高的模型；這些來源都沒有模型時，交由 CLI 使用預設值。**諮詢 effort** 永遠不低於 `medium` 且一律明確傳入，不會沿用 Codex 設定裡的 effort；`ultra` 需要使用者明確要求且模型支援。當你的**模型指定**與目前設定不同時，互動 session 會問這次指定只限這一次，還是延續本 session 其餘；headless 執行無法詢問，因此只套用於該次諮詢，並以對話語言在報告中揭露適用範圍，不要求固定句子或行位置。模型與 effort 和本 session 現行設定相同時，不需另加範圍說明。
 
 **並行諮詢。** 指定兩個不同模型（`astra, sol`）可讓兩者回答同一個問題並各自給出**獨立意見**，再合併為**共識**、**單獨提出**與**分歧**三類，每個論點標註來源模型，每個分歧都說明採納哪一方及理由。最多兩個模型，且不可重複。
 
 **接續諮詢。** 接續諮詢在全新的 Codex session 進行，附上前一次的論點與 Claude 的處置，並要求 Codex 逐項回報狀態；不會 resume 先前的 Codex session。
 
-**腳本主導執行與長時間執行。** Claude 準備問題並判斷答案；`scripts/consult.py` 負責政策解析、事前檢查、安全組合指令、行程生命週期與結構化狀態。啟動前，它會提供可檢視的摘要，列出模型與 effort、專案目錄、允許的 MCP server 與生效政策。狀態會區分待確認、事前檢查失敗、執行中、完成、執行失敗、已確認停止與停止未確認；執行錯誤不會被當成 Codex 意見。
+**腳本主導執行與長時間執行。** Claude 準備問題並判斷答案；[`skills/ask/scripts/consult.py`](skills/ask/scripts/consult.py) 負責政策解析、事前檢查、安全組合指令、行程生命週期與結構化狀態。啟動前，它會提供可檢視的摘要，列出模型與 effort、專案目錄、允許的 MCP server 與生效政策。狀態會區分待確認、事前檢查失敗、執行中、完成、執行失敗、已確認停止與停止未確認；執行錯誤不會被當成 Codex 意見。
 
-Claude 預設每 30 分鐘檢查一次進行中的諮詢；每段前景等待最多 60 秒，也不會超過該次檢查區間的剩餘時間。看起來停滯時，互動 session 會顯示已經過時間與最後事件，詢問要再等一輪還是停止；headless 執行會回報相同資訊並依既有停止路徑處理。只有在整棵行程樹經驗證已結束後，才會回報停止已確認。停止若無法確認，控制檔與診斷資料會保留，包含仍存活行程可能正在使用的檔案，並回報其位置。這些診斷資料沒有自動到期機制，只會在使用者明確要求清理後移除；log 仍可能含有專案內容。行程確認結束後，prompt 與 reply 會移除，不作為長期診斷資料保留。
+Claude 預設每 30 分鐘檢查一次進行中的諮詢；每段前景等待最多 60 秒，也不會超過該次檢查區間的剩餘時間。看起來停滯時，互動 session 會顯示已經過時間與最後事件，詢問要再等一輪還是停止；headless 執行會回報相同資訊並依既有停止路徑處理。腳本的行程身份與行程樹檢查通過後，才會回報停止已確認；此判斷仍受下文的快照限制影響。停止若無法確認，控制檔與診斷資料會保留，包含仍存活行程可能正在使用的檔案，並回報其位置。這些診斷資料沒有自動到期機制，只會在使用者明確要求清理後移除；log 仍可能含有專案內容。行程確認結束後，prompt 與 reply 會移除，不作為長期診斷資料保留。
+
+**回覆交付與恢復。** 收集結果時，腳本先以 ASCII-safe JSON 完整輸出並 flush 回覆，再刪除成功執行的檔案，因此即使 Windows 使用舊式輸出編碼，也能保留 Unicode 內容。輸出失敗時檔案會保留，Claude 可以重新收集同一份結果，不必重新諮詢。回覆交付後若清理失敗，會分別回報有效回覆與保留位置。模型啟動後不會自動重試諮詢。
 
 **MCP 政策。** 預設每次諮詢停用所有 MCP server（**白名單模式**、空清單）。你可以開放特定 server，或改用**最小停用模式**，只停用 `node_repl` 與 `cua_repl`。設定記錄在使用者層與專案層的 **ask-codex 設定檔**，專案層覆蓋使用者層；`/ask-codex:setup` 會協助建立。政策檔不存在時採用文件記載的 fallback；既有政策檔若有無效 JSON、型別、政策值或 server 名稱，會在 Codex 啟動前採 fail-closed 中止。腳本在執行前檢查實際生效的 MCP 狀態，並把含點號的 server 名稱視為完整名稱處理。
+
+政策檔逐欄位合併：
+
+| 範圍 | 檔案 |
+|---|---|
+| 使用者 | `~/.claude/ask-codex.json` |
+| 專案 | `<project>/.claude/ask-codex.local.json` |
+
+例如，下列政策只允許名為 `docs`、且已在 Codex 啟用的 server：
+
+```json
+{"mcp_policy": "allowlist", "mcp_allow": ["docs"]}
+```
+
+Setup skill 只寫入 ask-codex 政策檔，不會修改 Codex 的 `config.toml`。專案本機政策應排除於版本控制之外。準備階段可能要求對專案政策或 server 使用權限進行 session 確認；headless 若仍有待確認事項，就不會執行諮詢。
 
 專案定義的 server 必須取得明確的來源確認，而且確認綁定該次定義內容；command、argument、endpoint、environment 或其他定義欄位一旦改變，先前確認即失效。來源確認只表示認可該定義，允許使用 server 是另一個決定；Claude 可以在同一個問題中清楚分別詢問兩者。確認 ID 由準備完成的定義產生，本身不能構成同意。
 
 ## 驗證狀態
 
-公開的 stub CLI 整合測試已在 Windows 與 Linux 執行：
+以下驗證記錄於 **2026-09-22**，涵蓋至實作提交 `7381fdc`：
+
+| 檢查 | Windows／Git Bash | Linux／Ubuntu WSL |
+|---|---|---|
+| 公開 CLI 整合測試，使用 stub Codex | 25 項通過 | 25 項通過 |
+| 行程生命週期檢查 | 39 項斷言通過（提高權限執行） | 46 項斷言通過 |
+| 完整離線 Node 測試集 | 18 個測試檔通過 | 最後一次修正未重跑完整測試集 |
+| 真實 Claude headless，使用 stub Codex | 未驗證 | 兩個聚焦案例通過，各執行一次 |
+| 完整真實 Codex 諮詢 | 未驗證 | 未驗證 |
+| 互動式 Claude 流程 | 未驗證 | 未驗證 |
+
+使用 Python 3.11+ 與 Node.js 執行公開 CLI 及生命週期測試：
 
 ```bash
 python evals/_harness/consultation_test.py
+node evals/_harness/process-lifecycle.test.mjs
 ```
 
-2026-09-22，WSL Ubuntu 上的真實 Claude headless 各執行一次新的聚焦 eval，並使用 stub Codex CLI。`script-consultation` 的 3 個 grader 全部通過、score 為 1；`script-confirmation` 的 2 個 grader 全部通過、score 為 1：
+Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試使用本機 stub 行程，不會呼叫 Codex 服務。生命週期測試會啟動與停止測試行程；Windows 的驗證結果取決於行程查詢權限。
 
-```bash
-evals/_harness/run-evals.sh --case script-consultation --runs 1 --allow-tools Bash Write
-evals/_harness/run-evals.sh --case script-confirmation --runs 1 --allow-tools Bash Write
-```
+兩個真實 Claude WSL 案例為 `script-consultation`（3/3 grader）與 `script-confirmation`（2/2 grader），各得分 1.00。它們在初版腳本主導實作期間執行，未在後續生命週期修正後重跑。另以真實 `codex mcp list` 獨立檢查過含點號 server 名稱的停用方式；該檢查沒有執行諮詢。
 
-公開 CLI 測試在兩個平台各通過 25 項。程序生命週期結果、審查修正、指令載入量與剩餘缺口，見[驗證紀錄](.scratch/script-owned-consultation/evidence/validation.md)。較早的 eval 案例與歷史 Windows 實機結果只驗證舊版實作，不是目前的驗收證據。獨立使用真實 `codex mcp list` 的 probe 已驗證可停用含點號的 server 名稱，但尚未驗證使用真實 Codex CLI 的完整諮詢。互動式 Claude 流程也尚未驗證。macOS 不在目前支援的驗收範圍內。
+完整指令、報告、回歸歷程與待驗收項目見[驗證紀錄](.scratch/script-owned-consultation/evidence/validation.md)。舊版實作的歷史 eval 不能視為目前行為的證明。macOS 不在目前驗收範圍內。
 
-## 已知風險
+## 已知風險與限制
 
-- 上面那句安全宣告就是全部範圍：唯讀只適用於 Codex 的 **shell 指令**，不涵蓋 MCP server。
-- Codex 的 shell 讀得到你的帳號讀得到的任何檔案，範圍只由提示中的指示限制。
-- 任何你開放的 MCP server 都在 sandbox 之外執行，可能包含會寫入或執行的工具。
-- 誰可以發起諮詢，是 Claude 遵守的規則，不是外掛強制執行的：沒有 hook，也沒有工具層的阻擋。測試中，在加入「請求來源檢查」之前，曾有寫在檔案裡的文字讓 Claude 自行送出諮詢；加入檢查後，在少量的測試中沒有再出現，但這不能證明它不會發生。
-- 停止未確認時，仍可能有行程存活。ask-codex 會回報不確定性並保留診斷所需的執行檔案，不會宣稱諮詢已結束。
-- 每次諮詢在你的問題被考慮之前，大約就要 25k 輸入 token 的基本成本（此為設計文件的估算值，未實測）。
+- **MCP 存取：**允許的工具在 shell sandbox 之外執行，提示指示無法強制其唯讀。唯讀 shell 本身也不會將讀取範圍限制為與問題相關的檔案。
+- **請求來源：**Skill 規則要求諮詢與確認必須來自你的要求，但仍仰賴 Claude 遵循指示。早期測試曾在加入來源檢查前出現檔案文字觸發諮詢的情況；後續有限測試無法證明能完全抵禦提示注入。
+- **行程快照：**追蹤涵蓋已觀測的子行程，包括已捕捉身份、後來脫離原群組的子行程，個別發送訊號前會檢查身份。若子行程在被觀測前已脫離並重新掛到其他父行程，可能無法發現。若 PID／群組被重用，且替代群組首領在觀測前已退出，剩餘群組可能被誤認為原群組並收到終止訊號。外掛沒有核心層強制的行程歸屬隔離。
+- **停止未確認：**無法列舉或核對行程身份時，可能仍有行程存活，包含 Windows 行程查詢權限受限的情況。應保留回報的診斷資料；root 行程退出或 log 安靜，都不能單獨證明停止完成。
+- **保留內容：**停止未確認時，會保留存活行程可能仍需使用的檔案。錯誤 log 可能含專案內容；診斷資料須在明確要求且確認停止後才會清理，沒有自動到期機制。
+- **平台與設定：**歷史 Windows RAM disk 測試曾以 `os error 1` 失敗，但不能因此將所有 OS 錯誤都歸因於磁碟。長期信任專案的定義檢查尚未以真實 Codex CLI 完成端對端驗證。未選定 session 模型時，外部程式修改模型設定可能影響下一次諮詢。
+- **用量：**諮詢會消耗 Codex 用量，並行諮詢會啟動兩次執行。目前尚未量測每次諮詢的 token 基本成本。
 
-## 已知限制
-
-- 位於 Codex Windows sandbox 無法執行的磁碟上的工作目錄無法諮詢。已知情況：RAM disk，`codex exec -C R:\…` 會以 `os error 1` 失敗。Claude 會回報失敗，不會編造答案。
-- 被長期信任的專案仍仰賴腳本的專案定義檢查；此路徑尚未以真實 Codex CLI 完成端對端驗證。
-- 外部程式可能在你工作期間改寫 Codex 設定中的 `model` 行，而你未指定模型時 Claude 就是讀那一行——因此相隔數分鐘的兩次諮詢，可能在你沒有任何動作的情況下使用不同模型。
-
-報告可使用對話語言與自然措辭，不要求固定英文標題或固定行位置；但仍必須保留問題與諮詢類型、模型與 effort、生效 MCP 政策、相關計時與停止資訊，以及 Claude 對每個實質論點的處置。
+報告可使用對話語言，但必須保留問題與類型、模型與 effort、生效 MCP 政策、相關計時與停止資訊，以及 Claude 對每個實質論點的處置。執行失敗不會被當成 Codex 意見。
 
 ## 授權
 
