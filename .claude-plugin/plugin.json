@@ -1,6 +1,6 @@
 {
   "name": "ask-codex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself — Codex runs read-only for shell commands, with MCP servers disabled by default.",
   "author": {
     "name": "xenciscbc"
