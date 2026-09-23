@@ -20,7 +20,7 @@ const check = (ok, label) => { if (ok) pass++; else { fail++; console.log(`FAIL 
 const SERVERS = ["blender", "comfyui", "node_repl", "pencil", "cua_repl"];
 const argv = (slug, servers = SERVERS) => JSON.stringify(["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", "/w", "-m", slug,
   "-c", 'model_reasoning_effort="medium"', ...servers.flatMap((s) => ["-c", `mcp_servers.${s}={command="ask-codex-disabled",enabled=false}`]), "--disable", "apps", "-"], null, 2);
-for (const slug of ["gpt-6-astra", "gpt-5.6-sol"]) {
+for (const slug of ["gpt-6-astra", "gpt-6-sol"]) {
   check(count("parallel-two-models", `${slug}-disable-set`, argv(slug)) === 5, `${slug}: full disable set counts 5`);
   check(count("parallel-two-models", `${slug}-disable-set`, argv(slug, SERVERS.slice(1))) === 4, `${slug}: a missing disable definition counts 4 (grader count:5 fails)`);
   check(has("parallel-two-models", `${slug}-read-only`, argv(slug)), `${slug}: read-only present`);
@@ -29,7 +29,7 @@ for (const slug of ["gpt-6-astra", "gpt-5.6-sol"]) {
 }
 
 // Merged reply.
-const MERGED = "Asked Codex (gpt-6-astra medium, gpt-5.6-sol high)…\n\n**Consensus**\n- [both] fetchUser … — adopt\n\n**Solo claims**\n- [gpt-6-astra] circuit breaker … — investigate\n- [gpt-5.6-sol] AbortController … — adopt\n\n**Divergences**\n- Raising the timeout: [gpt-6-astra] fixes it vs [gpt-5.6-sol] hides it — Adopted: gpt-5.6-sol — the retry loop swallows the error.";
+const MERGED = "Asked Codex (gpt-6-astra medium, gpt-6-sol high)…\n\n**Consensus**\n- [both] fetchUser … — adopt\n\n**Solo claims**\n- [gpt-6-astra] circuit breaker … — investigate\n- [gpt-6-sol] AbortController … — adopt\n\n**Divergences**\n- Raising the timeout: [gpt-6-astra] fixes it vs [gpt-6-sol] hides it — Adopted: gpt-6-sol — the retry loop swallows the error.";
 const PARA = "Both models agree the empty object comes from swallowing timeouts. Astra also likes a circuit breaker; Sol prefers cancellation. They disagree about raising the timeout; I side with Sol.";
 for (const g of ["h-consensus", "h-solo", "h-divergences", "tag-astra", "tag-sol", "adopted"]) {
   check(has("parallel-two-models", g, MERGED), `${g} matches the merged reply`);
@@ -41,17 +41,17 @@ for (const c of ["parallel-three-refused", "parallel-duplicate-refused"]) {
   check(has(c, "refusal", "Parallel consultation takes at most two different models."), `${c}: refusal line`);
   check(!has(c, "refusal", "I can only compare two models at a time."), `${c}: paraphrase fails`);
 }
-check(has("parallel-one-fails", "failed-line", "Failed model: gpt-5.6-sol — The Codex run failed: stub failure requested by scenario"), "failed line");
-check(!has("parallel-one-fails", "failed-line", "gpt-5.6-sol failed."), "failed paraphrase fails");
+check(has("parallel-one-fails", "failed-line", "Failed model: gpt-6-sol — The Codex run failed: stub failure requested by scenario"), "failed line");
+check(!has("parallel-one-fails", "failed-line", "gpt-6-sol failed."), "failed paraphrase fails");
 // Markup seen in real replies is tolerated; a different model is not.
-check(has("parallel-one-fails", "failed-line", "**Failed model:** gpt-5.6-sol — the Codex run failed"), "bold failed line passes");
+check(has("parallel-one-fails", "failed-line", "**Failed model:** gpt-6-sol — the Codex run failed"), "bold failed line passes");
 check(!has("parallel-one-fails", "failed-line", "**Failed model:** gpt-6-astra — the Codex run failed"), "failed line naming the other model fails");
 check(has("parallel-shared-timer", "stopped-line", "**Failed model:** `gpt-6-astra` — stopped after ~81s with no progress"), "bold + backticked stopped line passes");
-check(has("parallel-shared-timer", "check-line", "Parallel check: done — `gpt-5.6-sol`; still running — `gpt-6-astra`."), "backticked slugs in the check line pass");
+check(has("parallel-shared-timer", "check-line", "Parallel check: done — `gpt-6-sol`; still running — `gpt-6-astra`."), "backticked slugs in the check line pass");
 check(!has("parallel-two-models", "tag-astra", "- **C2** `[astra]` A circuit breaker …"), "alias tag [astra] fails the full-slug tag grader");
-check(has("parallel-shared-timer", "check-line", "Parallel check: done — gpt-5.6-sol; still running — gpt-6-astra."), "check line");
+check(has("parallel-shared-timer", "check-line", "Parallel check: done — gpt-6-sol; still running — gpt-6-astra."), "check line");
 check(!has("parallel-shared-timer", "check-line", "Sol finished; Astra is still running."), "check paraphrase fails");
-check(!has("parallel-shared-timer", "check-line", "Parallel check: done — gpt-6-astra; still running — gpt-5.6-sol."), "swapped models fail");
+check(!has("parallel-shared-timer", "check-line", "Parallel check: done — gpt-6-astra; still running — gpt-6-sol."), "swapped models fail");
 check(has("parallel-shared-timer", "stopped-line", "Failed model: gpt-6-astra — stopped after 1 min without progress"), "stopped line");
 
 // Case-5 transcript excerpt (written after the green run): nothing claim-like before the check line.

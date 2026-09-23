@@ -1,7 +1,7 @@
 ---
 type: regex
-pattern: '"-m",\s*"gpt-5\.6-sol"'
+pattern: '"-m",\s*"gpt-6-sol"'
 target:
   source: file
-  path: .stub/exec-argv.gpt-5.6-sol.json
+  path: .stub/exec-argv.gpt-6-sol.json
 ---

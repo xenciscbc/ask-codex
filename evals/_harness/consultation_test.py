@@ -26,7 +26,7 @@ class ConsultationTest(unittest.TestCase):
                     "CODEX_HOME": str(self.home / ".codex"), "TMP": str(self.root), "TEMP": str(self.root),
                     "PATH": str(REPO / "evals/_harness/stub") + os.pathsep + os.environ["PATH"]}
         self.request = {"project": str(self.project), "prompt": "Consultation question: $(touch never) ' evidence",
-                        "models": [{"model": "gpt-5.6-sol", "effort": "high"}], "confirmations": {}}
+                        "models": [{"model": "gpt-6-sol", "effort": "high"}], "confirmations": {}}
 
     def scenario(self, value):
         (self.project / ".stub/scenario.json").write_text(json.dumps(value), encoding="utf-8")
@@ -360,10 +360,10 @@ runpy.run_path(sys.argv[0], run_name='__main__')
 
     def test_invalid_models_and_policy_types_do_not_execute(self):
         for models in ([], [{"model": "sol;echo pwned", "effort": "high"}],
-                       [{"model": "gpt-5.6-sol", "effort": "ultra"}], self.request["models"] * 2):
+                       [{"model": "gpt-6-sol", "effort": "ultra"}], self.request["models"] * 2):
             self.request["models"] = models
             self.assertEqual(self.prepare()["state"], "failed")
-        self.request["models"] = [{"model": "gpt-5.6-sol", "effort": "high"}]
+        self.request["models"] = [{"model": "gpt-6-sol", "effort": "high"}]
         (self.project / ".claude").mkdir()
         for value in ('[]', '{"mcp_allow":"comfyui"}', '{"mcp_allow":[2]}', '{"mcp_policy":"unknown"}'):
             (self.project / ".claude/ask-codex.local.json").write_text(value)

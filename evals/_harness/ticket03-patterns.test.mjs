@@ -27,10 +27,10 @@ const listed = (c) => {
 
 // 1. Token readings
 const READ = {
-  "alias-sol": (r) => r.kind === "model" && r.matches.join() === "gpt-5.6-sol" && !r.effort,
+  "alias-sol": (r) => r.kind === "model" && r.matches.join() === "gpt-6-sol" && !r.effort,
   "alias-astra": (r) => r.matches?.join() === "gpt-6-astra",
-  "alias-sol-low": (r) => r.matches?.join() === "gpt-5.6-sol" && r.effort === "low",
-  "alias-ambiguous": (r) => r.matches?.length === 3,
+  "alias-sol-low": (r) => r.matches?.join() === "gpt-6-sol" && r.effort === "low",
+  "alias-ambiguous": (r) => r.matches?.length === 4,
   "alias-unknown": (r) => r.kind === "model" && !r.invalid && r.matches.length === 0,
   "alias-metachar": (r) => r.kind === "model" && r.invalid,
   "effort-unsupported": (r) => r.matches?.join() === "gpt-5.5" && r.effort === "max",
@@ -55,8 +55,8 @@ const expectArgv = (c, g, slug, effort, want, label) => {
   check(re.test(argvSample(slug, effort)) === want, `${c}/${g} ${label}`);
 };
 const pairs = [
-  ["alias-sol", "model-sol", "gpt-5.6-sol", "gpt-5.6-terra"], ["alias-astra", "model-astra", "gpt-6-astra", "gpt-5.6-sol"],
-  ["effort-unsupported", "model-55", "gpt-5.5", "gpt-5.6-sol"], ["default-model-config", "model-terra", "gpt-5.6-terra", "gpt-5.6-luna"],
+  ["alias-sol", "model-sol", "gpt-6-sol", "gpt-5.6-terra"], ["alias-astra", "model-astra", "gpt-6-astra", "gpt-6-sol"],
+  ["effort-unsupported", "model-55", "gpt-5.5", "gpt-6-sol"], ["default-model-config", "model-terra", "gpt-5.6-terra", "gpt-6-luna"],
   ["session-override-persists", "model-astra", "gpt-6-astra", "gpt-5.6-terra"], ["override-restated-no-prompt", "model-astra", "gpt-6-astra", "gpt-5.6-terra"],
 ];
 for (const [c, g, good, bad] of pairs) {
@@ -65,15 +65,15 @@ for (const [c, g, good, bad] of pairs) {
 }
 for (const [c, g, good, bad] of [["alias-sol", "effort-high", "high", "medium"], ["alias-astra", "effort-medium", "medium", "high"], ["alias-sol-low", "effort-medium", "medium", "low"],
   ["effort-unsupported", "effort-xhigh", "xhigh", "max"], ["default-model-config", "effort-medium", "medium", "low"], ["session-override-persists", "effort-medium", "medium", "high"]]) {
-  expectArgv(c, g, "gpt-5.6-sol", good, true, `accepts effort ${good}`);
-  expectArgv(c, g, "gpt-5.6-sol", bad, false, `rejects effort ${bad}`);
+  expectArgv(c, g, "gpt-6-sol", good, true, `accepts effort ${good}`);
+  expectArgv(c, g, "gpt-6-sol", bad, false, `rejects effort ${bad}`);
 }
 // not_contains graders: must fire (match) on the forbidden effort and stay quiet otherwise.
 for (const [c, g, forbidden, ok] of [["alias-sol-low", "no-effort-low", "low", "medium"], ["effort-unsupported", "no-effort-max", "max", "xhigh"], ["default-model-config", "no-effort-low", "low", "medium"]]) {
   const { re, match } = graderOf(c, g);
   check(match === "not_contains", `${c}/${g} is not_contains`);
-  check(re.test(argvSample("gpt-5.6-sol", forbidden)), `${c}/${g} matches ${forbidden}`);
-  check(!re.test(argvSample("gpt-5.6-sol", ok)), `${c}/${g} ignores ${ok}`);
+  check(re.test(argvSample("gpt-6-sol", forbidden)), `${c}/${g} matches ${forbidden}`);
+  check(!re.test(argvSample("gpt-6-sol", ok)), `${c}/${g} ignores ${ok}`);
 }
 
 // 3. Scaffold guard: the refusal comes before any write to $HOME.
@@ -93,11 +93,11 @@ for (const f of walk(path.join(repo, "skills"))) {
 }
 
 // 5. Two-model lists (slice 08) through the same reference rule.
-const LISTED_ALL = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"];
+const LISTED_ALL = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-terra", "gpt-6-luna", "gpt-5.5"];
 const Qx = "Why does fetchUser in src/user.js return an empty object when the API times out?";
 check(readModels(`astra, sol ${Qx}`, LISTED_ALL).kind === "parallel", "two models → parallel");
 check(readModels(`astra, sol, terra ${Qx}`, LISTED_ALL).reason === "too-many", "three models → refused");
-check(readModels(`sol, 5.6-sol ${Qx}`, LISTED_ALL).reason === "duplicate", "same model twice → refused");
+check(readModels(`sol, 6-sol ${Qx}`, LISTED_ALL).reason === "duplicate", "same model twice → refused");
 check(readModels(`astra, sol;touch ${Qx}`, LISTED_ALL).kind === "invalid", "metacharacter in a listed token → invalid");
 check(readModels(Qx, LISTED_ALL).reading.kind === "none", "a plain question stays a question");
 

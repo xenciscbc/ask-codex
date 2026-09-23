@@ -42,7 +42,7 @@ const project = (name, scenario) => {
 const q = (s) => `'${toBash(s)}'`;
 // The skill's step-8 line, with run.sh as its prefix; redirections stay on the caller's line.
 const launch = ({ dir, run }) => {
-  const cmd = `bash ${q(path.join(scripts, "run.sh"))} ${q(run)} -- ${q(stubCodex)} exec -s read-only --ephemeral --skip-git-repo-check --json -C ${q(dir)} -m gpt-5.6-sol -c 'model_reasoning_effort="high"' --disable apps --output-schema ${q(schema)} -o ${q(path.join(run, "last-message.json"))} - < ${q(path.join(run, "prompt.md"))} > ${q(path.join(run, "events.jsonl"))} 2> ${q(path.join(run, "stderr.log"))}`;
+  const cmd = `bash ${q(path.join(scripts, "run.sh"))} ${q(run)} -- ${q(stubCodex)} exec -s read-only --ephemeral --skip-git-repo-check --json -C ${q(dir)} -m gpt-6-sol -c 'model_reasoning_effort="high"' --disable apps --output-schema ${q(schema)} -o ${q(path.join(run, "last-message.json"))} - < ${q(path.join(run, "prompt.md"))} > ${q(path.join(run, "events.jsonl"))} 2> ${q(path.join(run, "stderr.log"))}`;
   const child = spawn("bash", ["-c", cmd], { stdio: "ignore" });
   const state = { exited: false, code: null };
   child.on("exit", (code) => { state.exited = true; state.code = code; });
@@ -131,10 +131,10 @@ try {
   // NOT confirmed: no pid file at all; parallel fields appended when given.
   {
     const p = project("nopid", {});
-    const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "gpt-6-astra", "--still-running", "gpt-5.6-sol"]);
+    const r = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "gpt-6-astra", "--still-running", "gpt-6-sol"]);
     check(r.status !== 0, `no pid file: non-zero exit (got ${r.status})`);
-    check(statusOf(p.run).parallel?.done === "gpt-6-astra" && statusOf(p.run).parallel?.still_running === "gpt-5.6-sol", "no pid file: structured parallel fields retained");
-    const r2 = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "none", "--still-running", "gpt-5.6-sol"]);
+    check(statusOf(p.run).parallel?.done === "gpt-6-astra" && statusOf(p.run).parallel?.still_running === "gpt-6-sol", "no pid file: structured parallel fields retained");
+    const r2 = stop(p.run, ["--interval", "30", "--interval-source", "default", "--recommended", "stop", "--done", "none", "--still-running", "gpt-6-sol"]);
     check(r2.status !== 0 && statusOf(p.run).parallel?.done === "none", "parallel fields: 'done — none' passes through structured status");
     check(!fs.existsSync(path.join(p.run, "stop-report")), "parallel: obsolete stop-report remains absent");
   }
@@ -147,7 +147,7 @@ try {
   // not an infinite loop (there is no `set -e` and every branch used to `shift 2`).
   {
     const flagsOrder = ["--interval", "--interval-source", "--recommended", "--done", "--still-running"];
-    const valuesFor = { "--interval": "30", "--interval-source": "default", "--recommended": "stop", "--done": "gpt-6-astra", "--still-running": "gpt-5.6-sol" };
+    const valuesFor = { "--interval": "30", "--interval-source": "default", "--recommended": "stop", "--done": "gpt-6-astra", "--still-running": "gpt-6-sol" };
     for (let i = 0; i < flagsOrder.length; i++) {
       const flag = flagsOrder[i];
       const args = [];

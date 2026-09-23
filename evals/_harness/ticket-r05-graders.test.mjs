@@ -23,7 +23,7 @@ for (const [label, text, want] of [
   ["whole line in backticks", "`Model choice applies to this consultation only: gpt-6-astra, effort medium.`", true],
   ["alias instead of the full slug", "Model choice applies to this consultation only: astra, effort medium.", false],
   ["effort missing", "Model choice applies to this consultation only: gpt-6-astra.", false],
-  ["wrong model", "Model choice applies to this consultation only: gpt-5.6-sol, effort medium.", false],
+  ["wrong model", "Model choice applies to this consultation only: gpt-6-sol, effort medium.", false],
   ["rewritten as a sentence", "The model you chose (gpt-6-astra, medium effort) applies only to this consultation.", false],
   ["translated", "模型選擇只適用於這次諮詢：gpt-6-astra，effort medium。", false],
 ]) expect(line, text, want, `scope-line: ${label} → ${want ? "pass" : "fail"}`);

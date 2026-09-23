@@ -3,7 +3,7 @@ set -euo pipefail
 case "$HOME" in *claude-eval*) ;; *) echo "refusing to seed a Codex home outside the eval sandbox: HOME=$HOME" >&2; exit 1;; esac
 mkdir -p .stub src/pages "$HOME/.codex"
 cat > .stub/scenario.json <<'EOF'
-{"exec":{"by_model":{"gpt-6-astra":{"reply":{"summary":"Timeouts are swallowed into an empty object; a circuit breaker would keep the page honest.","claims":[{"id":"C1","statement":"fetchUser catches TimeoutError and returns an empty object instead of rethrowing.","kind":"fact","confidence":"high","evidence":["src/user.js:7"],"followup_status":null},{"id":"C2","statement":"A circuit breaker around api.get would stop repeated slow calls from piling up.","kind":"inference","confidence":"low","evidence":[],"followup_status":null},{"id":"C3","statement":"Raising the timeout to 10s would fix the user-not-found reports.","kind":"inference","confidence":"medium","evidence":[],"followup_status":null}],"open_questions":[]}},"gpt-5.6-sol":{"mode":"fail"}}}}
+{"exec":{"by_model":{"gpt-6-astra":{"reply":{"summary":"Timeouts are swallowed into an empty object; a circuit breaker would keep the page honest.","claims":[{"id":"C1","statement":"fetchUser catches TimeoutError and returns an empty object instead of rethrowing.","kind":"fact","confidence":"high","evidence":["src/user.js:7"],"followup_status":null},{"id":"C2","statement":"A circuit breaker around api.get would stop repeated slow calls from piling up.","kind":"inference","confidence":"low","evidence":[],"followup_status":null},{"id":"C3","statement":"Raising the timeout to 10s would fix the user-not-found reports.","kind":"inference","confidence":"medium","evidence":[],"followup_status":null}],"open_questions":[]}},"gpt-6-sol":{"mode":"fail"}}}}
 EOF
 cat > src/user.js <<'EOF'
 export async function fetchUser(id, { retries = 2 } = {}) {
@@ -42,11 +42,11 @@ cat > "$HOME/.codex/models_cache.json" <<'EOF'
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}, {"effort": "max"}, {"effort": "ultra"}]},
     {"slug": "gpt-reserve", "display_name": "Reserve", "priority": 3, "visibility": "hide", "default_reasoning_level": "medium",
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}, {"effort": "max"}]},
-    {"slug": "gpt-5.6-sol", "display_name": "GPT-5.6 Sol", "priority": 4, "visibility": "list", "default_reasoning_level": "low",
+    {"slug": "gpt-6-sol", "display_name": "GPT-6 Sol", "priority": 4, "visibility": "list", "default_reasoning_level": "low",
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}, {"effort": "max"}, {"effort": "ultra"}]},
     {"slug": "gpt-5.6-terra", "display_name": "GPT-5.6 Terra", "priority": 7, "visibility": "list", "default_reasoning_level": "medium",
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}, {"effort": "max"}, {"effort": "ultra"}]},
-    {"slug": "gpt-5.6-luna", "display_name": "GPT-5.6 Luna", "priority": 8, "visibility": "list", "default_reasoning_level": "medium",
+    {"slug": "gpt-6-luna", "display_name": "GPT-6 Luna", "priority": 8, "visibility": "list", "default_reasoning_level": "medium",
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}, {"effort": "max"}]},
     {"slug": "gpt-5.5", "display_name": "GPT-5.5", "priority": 12, "visibility": "list", "default_reasoning_level": "medium",
      "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"effort": "xhigh"}]},

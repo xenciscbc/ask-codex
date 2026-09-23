@@ -4,5 +4,5 @@ pattern: 'mcp_servers\.(blender|comfyui|node_repl|pencil|cua_repl)=\{\s*command\
 match: "count:5"
 target:
   source: file
-  path: .stub/exec-argv.gpt-5.6-sol.json
+  path: .stub/exec-argv.gpt-6-sol.json
 ---

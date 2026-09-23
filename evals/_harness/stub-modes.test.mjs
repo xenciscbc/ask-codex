@@ -27,7 +27,7 @@ const project = (name, scenario) => {
 const run = (args, cwd, env = {}, input = "prompt") =>
   spawnSync(python, [stub, ...args], { cwd, input, env: { ...process.env, ...env }, encoding: "utf-8" });
 const execArgs = (dir, out) => ["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", dir,
-  "-m", "gpt-5.6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "--output-schema", "schema.json", "-o", out, "-"];
+  "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "--output-schema", "schema.json", "-o", out, "-"];
 
 try {
   // Missing CLI: every command exits 127, nothing else happens.
@@ -119,14 +119,14 @@ try {
   // Parallel consultations (ticket 08): by_model and per-model records.
   {
     const replyA = { summary: "astra says", claims: [], open_questions: [] };
-    const dir = project("by-model", { exec: { by_model: { "gpt-6-astra": { reply: replyA }, "gpt-5.6-sol": { mode: "fail" } } } });
-    const argsFor = (slug, out) => execArgs(dir, out).map((a) => (a === "gpt-5.6-sol" ? slug : a));
+    const dir = project("by-model", { exec: { by_model: { "gpt-6-astra": { reply: replyA }, "gpt-6-sol": { mode: "fail" } } } });
+    const argsFor = (slug, out) => execArgs(dir, out).map((a) => (a === "gpt-6-sol" ? slug : a));
     const outA = path.join(dir, "a.json"), outS = path.join(dir, "s.json");
     const rA = run(argsFor("gpt-6-astra", outA), dir, {}, "prompt for both");
-    const rS = run(argsFor("gpt-5.6-sol", outS), dir, {}, "prompt for both");
+    const rS = run(argsFor("gpt-6-sol", outS), dir, {}, "prompt for both");
     check(rA.status === 0 && JSON.parse(fs.readFileSync(outA, "utf-8")).summary === "astra says", "by_model: astra gets its own reply");
     check(rS.status === 1 && /stub failure/.test(rS.stderr), "by_model: sol gets its own mode (fail)");
-    for (const slug of ["gpt-6-astra", "gpt-5.6-sol"]) {
+    for (const slug of ["gpt-6-astra", "gpt-6-sol"]) {
       const argvFile = path.join(dir, ".stub", `exec-argv.${slug}.json`);
       check(fs.existsSync(argvFile) && JSON.parse(fs.readFileSync(argvFile, "utf-8")).includes(slug), `by_model: exec-argv.${slug}.json records its -m`);
       check(fs.readFileSync(path.join(dir, ".stub", `exec-stdin.${slug}.txt`), "utf-8") === "prompt for both", `by_model: exec-stdin.${slug}.txt records its prompt`);
@@ -146,7 +146,7 @@ try {
   {
     const { r, dir } = execCase("valid");
     const files = fs.readdirSync(path.join(dir, ".stub"));
-    check(r.status === 0 && files.includes("exec-argv.gpt-5.6-sol.json") && files.includes("exec-argv.json"), "single run: -m copy plus the single-run file");
+    check(r.status === 0 && files.includes("exec-argv.gpt-6-sol.json") && files.includes("exec-argv.json"), "single run: -m copy plus the single-run file");
   }
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

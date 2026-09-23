@@ -1,5 +1,5 @@
 ---
-description: "Alias sol resolves to gpt-5.6-sol with default effort high."
+description: "Alias sol resolves to gpt-6-sol with default effort high."
 max_turns: 30
 timeout_seconds: 900
 allowed_tools: [Skill, Bash, Read, Glob, Grep, Write]
