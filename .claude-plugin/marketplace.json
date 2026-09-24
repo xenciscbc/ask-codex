@@ -7,7 +7,10 @@
   "plugins": [
     {
       "name": "ask-codex",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "xenciscbc/ask-codex"
+      },
       "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself.",
       "category": "engineering",
       "keywords": [
