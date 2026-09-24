@@ -19,20 +19,22 @@ A consultation obtains an independent opinion; Claude prepares the question and 
 
 ## Prepare the question and model choices
 
-Resolve the model and effort first. Write a temporary **resolve file** with the Write tool in a file-tool-readable scratch location: `text` is the request text (the skill arguments, or the user's own words asking for the consultation) and `session` holds this session's model/effort choice (`model`, `effort`; null when none). Then run:
+Read model choices off the start of the request (the skill arguments, or the user's own words asking for the consultation). A model token is `model <x>` or `use <x>`, a name with an effort such as `sol:high`, or a model name or slug parts such as `sol`, `6 sol` or `gpt-5.5`. Two tokens separated by a comma request a parallel consultation; neither model sees the other's output. A leading `effort <level>` names an effort alone. Take words as a model token only when the user wrote them as one: "Use Redis or Postgres?" names no model. The rest of the request is the question.
+
+Write a temporary **resolve file** with the Write tool in a file-tool-readable scratch location: `models` is the list of model tokens exactly as written (empty when none), `effort` is a level named alone (or null), and `session` holds this session's model/effort choice (`model`, `effort`; null when none). Then run:
 
 `python '<skill>/scripts/consult.py' resolve '<resolve-file>'`
 
 Delete the resolve file afterwards. The script reads the Codex model cache and configuration and applies every selection rule; act on its result instead of re-deriving it:
 
-- `resolved`: `question` is the request without its model tokens. `models` holds one choice, or two for a leading comma-separated pair (parallel consultation; neither model sees the other's output). Disclose every `notes` entry.
-- `ambiguous`: ask the user to pick one of `candidates` (for pair member `member`), then resolve again with that full slug in place of the token.
+- `resolved`: `models` holds one choice per token (or one default choice). Disclose every `notes` entry.
+- `ambiguous`: ask the user to pick one of `candidates` for the token at position `member`, then resolve again with `<chosen slug>:<effort>` (or the slug alone when `effort` is null) in its place. Without an interactive question tool, ask in your final message and stop.
 - `invalid` or `unavailable`: report the reason and any `choices`, and stop before any Codex command.
 - `failed`: report that the Codex configuration or model cache could not be read. Never invent a model or effort.
 
-When a choice has `differs_from_baseline`, ask whether it applies to this consultation only or to the rest of the session, unless the user already said. If asking is unavailable, apply it to this consultation only and disclose that scope in the final report. For the rest of the session, record only what the user named (the resolved slug of a named model, the effort of a named effort) as `session` for later resolves.
+When a choice has `differs_from_baseline` and the user has not said how long it applies, ask with an interactive question tool whether it applies to this consultation only or to the rest of the session. Without such a tool, do not ask in text: apply it to this consultation only, continue, and disclose that scope in the final report. For the rest of the session, record only what the user named (the resolved slug of a named model, the effort of a named effort) as `session` for later resolves.
 
-If the question is empty, infer it from the current conversation and briefly disclose it; if nothing sensible can be inferred, ask and stop before creating artifacts. Pick one type:
+If no question was given, infer it from the current conversation and briefly disclose it; if nothing sensible can be inferred, ask and stop before creating artifacts. Pick one type:
 
 | Type | Context | Framing file |
 |---|---|---|

@@ -1,4 +1,4 @@
-"""Deterministic model and effort selection from the user's request text and the Codex home."""
+"""Deterministic model and effort selection from the model tokens Claude read off the request."""
 import json
 import os
 from pathlib import Path
@@ -9,9 +9,8 @@ LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")
 # The only per-model defaults; matched against a slug's -/. parts. Every other model uses its listed default.
 DEFAULT_EFFORT = {"sol": "high", "astra": "medium"}
 SLUG = re.compile(r"^[A-Za-z0-9._-]+$")
-TOKEN = re.compile(r"^[A-Za-z0-9._:-]+( [A-Za-z0-9._-]+)?$")
+TOKEN = re.compile(r"^(?P<alias>[A-Za-z0-9._-]+(?: [A-Za-z0-9._-]+)?)(?::(?P<effort>[a-z]+))?$")
 EFFORT = re.compile(r"^[a-z]+$")
-PAIR = re.compile(r"^((?:[^\s,]+\s*,\s*)+[^\s,]+)(?:\s+([\s\S]*))?$")
 
 
 class Stop(Exception):
@@ -23,6 +22,7 @@ class Stop(Exception):
 
 
 def codex_home():
+    # The Codex CLI resolves its home from the OS home directory, not from Git Bash's HOME.
     home = os.environ.get("CODEX_HOME")
     return Path(home) if home else Path.home() / ".codex"
 
@@ -43,9 +43,12 @@ def read_listing(home):
         if m.get("visibility") != "list" or not isinstance(m.get("slug"), str) or not SLUG.fullmatch(m["slug"]):
             continue
         levels = [e.get("effort") for e in m.get("supported_reasoning_levels") or [] if isinstance(e, dict)]
+        levels = [e for e in levels if e in LEVELS]
         priority = m.get("priority")
         listed.append({"slug": m["slug"], "priority": priority if isinstance(priority, (int, float)) else float("inf"),
-                       "default": m.get("default_reasoning_level"), "levels": [e for e in levels if e in LEVELS]})
+                       "default": m.get("default_reasoning_level"),
+                       # No listed levels means support is unknown, not that nothing is supported.
+                       "levels": levels or None})
     return sorted(listed, key=lambda m: m["priority"])
 
 
@@ -62,53 +65,19 @@ def read_configured_model(home):
     return value
 
 
+def split_parts(value):
+    return re.split(r"[-.]", value.lower())
+
+
 def contiguous(needle, haystack):
     return any(haystack[i:i + len(needle)] == needle for i in range(len(haystack) - len(needle) + 1))
-
-
-def slug_like(head, slugs):
-    head = head.lower()
-    return bool(head) and (head in (s.lower() for s in slugs) or
-                           any(contiguous(re.split(r"[-.]", head), re.split(r"[-.]", s.lower())) for s in slugs))
-
-
-def consume(text, count):
-    for _ in range(count):
-        text = re.sub(r"^\S+(?:\s+|$)", "", text, count=1)
-    return text
-
-
-def read_request(text, slugs):
-    """Read a leading model token, `<alias>:<effort>`, `model|use <x>` or `effort <level>`."""
-    text = text.strip()
-    words = text.split()
-    if not words:
-        return {"kind": "none", "question": ""}
-    head = re.sub(r"[^A-Za-z0-9._-].*", "", words[0], flags=re.S)
-    if words[0].lower() in ("model", "use") and len(words) > 1:
-        token, used = words[1], 2
-    elif words[0].lower() == "effort" and len(words) > 1:
-        if not EFFORT.fullmatch(words[1]):
-            return {"kind": "invalid", "token": words[1]}
-        return {"kind": "effort", "effort": words[1], "question": consume(text, 2)}
-    elif ":" in words[0] or slug_like(head, slugs):
-        token, used = words[0], 1
-        if ":" not in token and len(words) > 1 and SLUG.fullmatch(words[1]) and slug_like(words[1], slugs):
-            token, used = f"{token} {words[1]}", 2
-    else:
-        return {"kind": "none", "question": text}
-    alias, _, effort = token.partition(":")
-    if not TOKEN.fullmatch(token) or ":" in effort or (":" in token and not EFFORT.fullmatch(effort)):
-        return {"kind": "invalid", "token": token}
-    return {"kind": "model", "token": token, "alias": alias, "effort": effort or None, "question": consume(text, used)}
 
 
 def match(alias, slugs):
     exact = [s for s in slugs if s.lower() == alias.lower()]
     if exact:
         return exact
-    words = alias.lower().split()
-    return [s for s in slugs if all(contiguous(re.split(r"[-.]", w), re.split(r"[-.]", s.lower())) for w in words)]
+    return [s for s in slugs if all(contiguous(split_parts(w), split_parts(s)) for w in alias.split())]
 
 
 def rank(level):
@@ -130,8 +99,6 @@ def settle_requested(requested, slug, levels):
         if effort == "ultra":
             notes.append("ultra needs confirmed model support, which is unknown here; using max.")
             return "max", False, notes
-        if effort not in LEVELS:
-            raise Stop({"state": "unavailable", "reason": f"Effort {effort} is not a known level", "choices": []})
         return effort, False, notes
     if effort in levels:
         return effort, effort == "ultra", notes
@@ -146,7 +113,7 @@ def settle_default(slug, entry):
     levels = entry["levels"] if entry else None
     if slug:
         for key, value in DEFAULT_EFFORT.items():
-            if key in re.split(r"[-.]", slug.lower()) and (levels is None or value in levels):
+            if key in split_parts(slug) and (levels is None or value in levels):
                 return value
     if levels is None:
         return "medium"
@@ -173,58 +140,56 @@ def choose(named_model, named_effort, session, listed, configured):
     return {"model": slug, "effort": effort, "explicit_ultra": ultra, "notes": notes}
 
 
+def known_effort(value, what):
+    if value is not None and (not isinstance(value, str) or not EFFORT.fullmatch(value) or value not in LEVELS):
+        raise Stop({"state": "invalid", "reason": f"{what} is not a known effort level: {value!r}"})
+    return value
+
+
 def validate(request):
-    if not isinstance(request, dict) or not isinstance(request.get("text"), str):
-        raise ValueError("A resolve request needs the request text")
+    if not isinstance(request, dict):
+        raise ValueError("A resolve request must be a JSON object")
+    tokens = request.get("models") or []
     session = request.get("session") or {}
-    if not isinstance(session, dict):
-        raise ValueError("The session choice must be an object")
+    if not isinstance(tokens, list) or any(not isinstance(t, str) for t in tokens) or not isinstance(session, dict):
+        raise ValueError("A resolve request has a list of model tokens and a session object")
     if session.get("model") is not None and (not isinstance(session["model"], str) or not SLUG.fullmatch(session["model"])):
         raise ValueError("Invalid session model")
-    if session.get("effort") is not None and (not isinstance(session["effort"], str) or not EFFORT.fullmatch(session["effort"])):
-        raise ValueError("Invalid session effort")
-    return request["text"], {k: session.get(k) for k in ("model", "effort")}
-
-
-def readings_of(text, slugs):
-    pair = PAIR.match(text.strip())
-    if pair:
-        items = re.split(r"\s*,\s*", pair.group(1))
-        readings = [read_request(f"{item} x", slugs) for item in items]
-        if all(r["kind"] in ("model", "invalid") for r in readings):
-            if len(items) > 2:
-                raise Stop({"state": "invalid", "reason": "A parallel consultation takes at most two models"})
-            return readings, pair.group(2) or ""
-    reading = read_request(text, slugs)
-    return [reading], reading.get("question", "")
+    return tokens, request.get("effort"), {"model": session.get("model"), "effort": session.get("effort")}
 
 
 def resolve(request):
-    text, session = validate(request)
+    tokens, effort, session = validate(request)
     home = codex_home()
     listed = read_listing(home) or []
     configured = read_configured_model(home)
     slugs = [m["slug"] for m in listed]
     try:
-        readings, question = readings_of(text, slugs)
+        known_effort(session["effort"], "The session effort")
+        known_effort(effort, "The named effort")
+        if len(tokens) > 2:
+            raise Stop({"state": "invalid", "reason": "A parallel consultation takes at most two models"})
         named = []
-        for index, reading in enumerate(readings):
-            if reading["kind"] == "invalid":
-                raise Stop({"state": "invalid", "reason": f"Invalid model or effort token: {reading['token']!r}"})
-            if reading["kind"] == "model":
-                found = match(reading["alias"], slugs)
-                if len(found) > 1:
-                    raise Stop({"state": "ambiguous", "member": index, "token": reading["token"], "candidates": found})
-                if not found:
-                    reason = (f"No listed Codex model matches {reading['alias']!r}" if slugs
-                              else "No Codex model list is available to resolve a named model")
-                    raise Stop({"state": "unavailable", "reason": reason, "choices": slugs})
-                named.append((found[0], reading["effort"]))
-            else:
-                named.append((None, reading.get("effort")))
+        for index, token in enumerate(tokens or [None]):
+            if token is None:
+                named.append((None, effort))
+                continue
+            parsed = TOKEN.fullmatch(token.strip())
+            if not parsed:
+                raise Stop({"state": "invalid", "reason": f"Invalid model token: {token!r}"})
+            alias, token_effort = parsed["alias"], known_effort(parsed["effort"], f"The effort in {token!r}")
+            found = match(alias, slugs)
+            if len(found) > 1:
+                raise Stop({"state": "ambiguous", "member": index, "alias": alias, "effort": token_effort,
+                            "candidates": found})
+            if not found:
+                reason = (f"No listed Codex model matches {alias!r}" if slugs
+                          else "No Codex model list is available to resolve a named model")
+                raise Stop({"state": "unavailable", "reason": reason, "choices": slugs})
+            named.append((found[0], token_effort or effort))
         if len(named) == 2 and named[0][0] == named[1][0]:
             raise Stop({"state": "invalid", "reason": "A parallel consultation needs two different models"})
-        choices = [choose(model, effort, session, listed, configured) for model, effort in named]
+        choices = [choose(model, level, session, listed, configured) for model, level in named]
     except Stop as stop:
         return stop.result
     try:
@@ -232,7 +197,7 @@ def resolve(request):
         baseline = {"model": base["model"], "effort": base["effort"]}
     except Stop:
         baseline = None
-    for (model, effort), choice in zip(named, choices):
-        choice["differs_from_baseline"] = bool(model or effort) and (
+    for (model, level), choice in zip(named, choices):
+        choice["differs_from_baseline"] = bool(model or level) and (
             baseline is None or (choice["model"], choice["effort"]) != (baseline["model"], baseline["effort"]))
-    return {"state": "resolved", "question": question, "models": choices, "baseline": baseline}
+    return {"state": "resolved", "models": choices, "baseline": baseline}
