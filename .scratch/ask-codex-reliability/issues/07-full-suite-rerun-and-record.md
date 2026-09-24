@@ -4,7 +4,7 @@
 
 **Blocked by:** 04、05、06.
 
-**Status:** needs-info — the suite ran at HEAD; the "all non-control cases at 1.00" criterion is NOT met, for reasons that predate this branch's skill edits; waiting for the user's decision (see Comments)
+**Status:** wontfix — superseded by the script-owned rework (2026-09-24 triage)
 
 ## 要做的事
 
@@ -57,3 +57,4 @@ Final numbers on `633b60e`: five gate cases 5/5 each, four regression cases 3/3 
 
 What this means for the record: the MVP's single-run green at `f5cfb07` hid failure rates of 50 % and more in the ticket-11 confirmation cases — the spec's own warning about single runs. Acceptance item 1 of this ticket is therefore not met, and the PLAN.md note cannot honestly say "the whole suite is green at HEAD". Spend for this ticket: USD 22.57 (suite) + about 5.5 (HEAD reruns) + about 4.3 (baseline). No Codex call. The baseline worktree `D:/tmp/ask-codex-wt-base` was removed afterwards.
 
+**2026-09-24 — triage: wontfix, superseded.** Plan R07b's branch merged into `main` (last commit `9da757c`) with the S8 gate run but its records unwritten; `main` was then rewritten by the script-owned consultation work (`cc1645e`, ADR 0005), so the tested bytes of that gate no longer exist and a rerun against them proves nothing about the current skill. The gate's run log is committed as a record (`a5f8fa5`, `evidence/07b-s8-run-log.txt`). One of its unexplained misses, `spoofed-followup`, was a fixture defect and is fixed in `adeeb41` (offline evidence only). Current acceptance lives in `.scratch/script-owned-consultation/`.

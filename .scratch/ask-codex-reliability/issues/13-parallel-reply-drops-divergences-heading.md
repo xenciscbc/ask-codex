@@ -2,7 +2,7 @@
 
 **What to build:** parallel consultation 的最終回覆每次都帶齊 `Consensus`、`Solo claims`、`Divergences` 三個標題（skill step 10「Parallel reply」：never dropping one because it would be empty），`parallel-two-models` 在 `--runs 5` 全 1.00。
 
-**Blocked by:** 無。**Status:** needs-triage
+**Blocked by:** 無。**Status:** wontfix — fixed headings superseded by ADR 0005 (2026-09-24 triage)
 
 ## Evidence（2026-09-21，Plan R07b S2 的 live 驗收，`SKILL.md` `f0736e96…`）
 
@@ -24,3 +24,7 @@ step 10 是 R07b 的 non-goal，這個案例不在十個 gate 案例內（覆蓋
 **2026-09-21 — same family, second case (Plan R07b S6b regression runs).** `parallel-one-fails` 2/3: in one run the fixed line `Failed model: gpt-5.6-sol — <reason>` was paraphrased as a bold sentence ("**gpt-5.6-sol failed to run** — the Codex process exited with an error …"), so `failed-line` missed; everything else passed. Step 10's parallel paragraph asks for that line "always, on its own line". Like the dropped `Divergences` heading this is fixed wording of step 10 left to free composition; S3 of R07b showed the remedy (fixed words as output slots plus an order of work). Trace: `D:/tmp/ask-codex-r07b-traces/s6b-parallel-one-fails/claude-eval-ZoBTPV.jsonl`.
 
 **2026-09-22 — user decision: named exception for the R07b gate, fix after the merge.** `parallel-two-models` (`h-divergences`, `merged-llm`) and `parallel-one-fails` (`failed-line`) are one family — fixed wording of step 10's parallel paragraph drifting, about 1 run in 3. In the R07b full-suite run a miss of THAT shape in these two cases is a known exception and does not block the merge; any other grader missing there is handled like any other suite miss.
+
+## Comments
+
+**2026-09-24 — triage: wontfix, superseded.** ADR 0005 dropped fixed English headings and lines; the skill now requires the content: "compare consensus, solo claims and divergences … state which view you adopt and why for a divergence. If one fails/stops … identify the failed model/reason" (`skills/ask/SKILL.md:108`). A dropped `Divergences` heading or a paraphrased `Failed model:` line is no longer a defect by itself. The graders `h-divergences`, `h-consensus`, `h-solo`, `merged-llm` and `parallel-one-fails/failed-line` test the old wording — [eval realignment ticket](../../script-owned-consultation/issues/09-realign-claude-evals-with-script-owned-skill.md). Whether a divergence's content is ever dropped is unmeasured on the current skill.

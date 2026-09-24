@@ -2,7 +2,7 @@
 
 **What to build:** follow-up 的最終回覆對「非 new-blocking 的新 claim」完全不提——不呈現、也不說它被省略（`SKILL.md` step 10「Follow-up reply」：omitted — not presented, and not mentioned at all (not even to say that it was omitted)）。`followup-new-blocking` `--runs 5` 全 1.00。
 
-**Blocked by:** 無。**Status:** needs-triage
+**Blocked by:** 無。**Status:** needs-info — the rule survives (`SKILL.md:107`); not measured on the script-owned skill
 
 ## Evidence（2026-09-21，Plan R07b S7，`SKILL.md` `830c6bd5…`，`evidence/07b-s7-run-log.txt`）
 
@@ -17,3 +17,7 @@ step 10 是 R07b 的 non-goal。使用者 2026-09-21 決定：列為具名例外
 ## Acceptance criteria
 
 - [ ] step 10 的 Follow-up reply 段落修到 `followup-new-blocking` `--runs 5` 全 1.00（S3 的經驗：自由措辭會飄、固定措辭不會；「不要提」這類否定規則可能需要改寫成正面的輸出清單）。
+
+## Comments
+
+**2026-09-24 — triage: needs-info.** The requirement is unchanged in the script-owned skill: "Omit and do not mention new nonblocking claims" (`skills/ask/SKILL.md:107`). The 1-in-5 rate was measured on the pre-rewrite skill; nobody has run `followup-new-blocking` since `cc1645e`. Its `c5-not-mentioned` grader still fits the requirement. Next step is a measurement, not a fix; the user chose (2026-09-24) to fix wording defects when real use shows them. Measuring belongs with [the eval realignment ticket](../../script-owned-consultation/issues/09-realign-claude-evals-with-script-owned-skill.md).

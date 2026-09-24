@@ -2,7 +2,7 @@
 
 **What to build:** 把 S3 的 security review、slice review 與兩次 outcome verifier 指出、但不屬於 S3 claim 的項目逐項 triage；每一項要嘛修、要嘛以理由關掉。
 
-**Blocked by:** 無。**Status:** needs-triage
+**Blocked by:** 無。**Status:** resolved — every item has a disposition (2026-09-24 triage)
 
 ## 項目（來源都在 `evidence/07b-security-review.md` 與 `plan/slice-07b-s3.md`）
 
@@ -20,3 +20,15 @@
 
 - [ ] 每一項有 disposition（FIX／DEFER／REJECT）與理由。
 - [ ] 要修的項目各自有 `--runs 5` 或離線測試的證據；動到 Confirmations 一節的，先過 security review。
+
+## Comments
+
+**2026-09-24 — triage, per item.** The confirmation path moved into `scripts/policy.py` / `consult.py` (`cc1645e`, ADR 0005); the old steps 2–4 and line 41 no longer exist.
+
+1. **FIX (done by the rewrite).** Server names from both policy files and project definitions are validated by `NAME = ^[A-Za-z0-9_.-]+$` in `policy.py:9`, `:31`, `:49` before anything else uses them; `consultation_test.py` covers dotted names, guard mismatch and invalid types. The length cap was not added — no path now puts a name into a shell command.
+2. **REJECT (moot).** A confirmation answer is mapped to returned IDs and `prepare` runs again; "Definition changes invalidate old IDs" (`SKILL.md:62`). No listing is reused from memory.
+3. **REJECT (moot).** The fixed decline sentences are gone; `SKILL.md:65` says to report the actual outcome without repeated solicitation.
+4. **DEFER.** Confirmations: `SKILL.md:65` puts pending questions in the final answer. Alias-ambiguity and nothing-to-infer questions still have no grader — [eval realignment ticket](../../script-owned-consultation/issues/09-realign-claude-evals-with-script-owned-skill.md).
+5. **REJECT (moot).** Step 4's two-listing comparison is now `policy.py`'s definition check.
+6., 8., 9. **DEFER** — grader precision and remaining LLM judges belong to [the eval realignment ticket](../../script-owned-consultation/issues/09-realign-claude-evals-with-script-owned-skill.md).
+7. **DEFER** — `gen-ticket11-cases.mjs` still regenerates deleted judges; same ticket.

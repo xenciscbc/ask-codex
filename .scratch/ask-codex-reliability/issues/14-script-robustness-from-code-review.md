@@ -2,7 +2,7 @@
 
 **What to build:** `/code-review main`（Plan R07b S8，2026-09-22，effort high，範圍 `main...reliability/stop-path`）對 `skills/ask/scripts/` 提出七項 findings。兩項屬本分支引入的 P2，已在 merge 前修掉（`stop.sh`：旗標缺值時參數解析無窮迴圈；`exit-code` 已存在時不再殺行程——見 ticket 07 的 S8 Comment）。其餘五項在這裡逐項 triage。
 
-**Blocked by:** 無。**Status:** needs-triage
+**Blocked by:** 無。**Status:** ready-for-agent — items 4, 5 (residual), 6 open; 1–3 dispositioned (2026-09-24 triage)
 
 ## 項目
 
@@ -18,3 +18,16 @@
 ## Acceptance criteria
 
 - [ ] 每一項有 disposition 與理由；要修的項目有離線測試（兩個平台），動到停止保證的有 live 的 `timeout-stalled-stop`／`headless-timer-stall` 回歸。
+
+## Comments
+
+**2026-09-24 — triage, per item against `main` 1.0.2.**
+
+1. **FIX (done).** Every kill is bound to a captured identity: `_tree.sh:2`, `tree_identity_matches` before each signal; POSIX identity is `ps -o lstart=` (`_tree.sh:80`), Windows is `StartTime` ticks (`_tree.sh:22-26`). PID reuse regressions in `7381fdc` (validation.md, "Root PID reuse follow-up").
+2. **FIX (done).** `win_tree` still reads `ParentProcessId`, but members are only signalled when their captured identity matches, so a dead-parent pid collision no longer reaches `taskkill`.
+3. **REJECT (out of scope).** POSIX traversal now uses `ps -axo pid=,ppid=,pgid=` (`_tree.sh:109`) instead of procps-only `--ppid`, and the old "Linux/macOS" header is gone; macOS stays outside ADR 0005's accepted scope and untested.
+4. **OPEN (P3).** Still no `trap` in `run.sh`; the watcher exits only on `stop-request` or `watcher-finish` (`run.sh:69-95`), so if `run.sh` is killed without either, the watcher polls forever and a `setsid` Codex keeps running. Fix as proposed; measure first (ticket 10 evidence).
+5. **Partly fixed, residual OPEN (P3).** `stop.sh:92-99` now always writes `stop-request` and reports `unconfirmed_stop` / `identity_unavailable` truthfully instead of failing silently. When the identity is missing the watcher still kills nothing (`run.sh:75`); the `kill "$child"` fallback is not implemented.
+6. **OPEN (P4).** `stop.sh:60` still uses the greedy `.*"type"` sed.
+
+Side note fixed: `ticket03-patterns.test.mjs` normalizes CRLF now (84/0 on this Windows checkout, 2026-09-24).
