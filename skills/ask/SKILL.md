@@ -19,7 +19,20 @@ A consultation obtains an independent opinion; Claude prepares the question and 
 
 ## Prepare the question and model choices
 
-If no question was given, infer it from the current conversation and briefly disclose it; if nothing sensible can be inferred, ask and stop before creating artifacts. Pick one type:
+Resolve the model and effort first. Write a temporary **resolve file** with the Write tool in a file-tool-readable scratch location: `text` is the request text (the skill arguments, or the user's own words asking for the consultation) and `session` holds this session's model/effort choice (`model`, `effort`; null when none). Then run:
+
+`python '<skill>/scripts/consult.py' resolve '<resolve-file>'`
+
+Delete the resolve file afterwards. The script reads the Codex model cache and configuration and applies every selection rule; act on its result instead of re-deriving it:
+
+- `resolved`: `question` is the request without its model tokens. `models` holds one choice, or two for a leading comma-separated pair (parallel consultation; neither model sees the other's output). Disclose every `notes` entry.
+- `ambiguous`: ask the user to pick one of `candidates` (for pair member `member`), then resolve again with that full slug in place of the token.
+- `invalid` or `unavailable`: report the reason and any `choices`, and stop before any Codex command.
+- `failed`: report that the Codex configuration or model cache could not be read. Never invent a model or effort.
+
+When a choice has `differs_from_baseline`, ask whether it applies to this consultation only or to the rest of the session, unless the user already said. If asking is unavailable, apply it to this consultation only and disclose that scope in the final report. For the rest of the session, record only what the user named (the resolved slug of a named model, the effort of a named effort) as `session` for later resolves.
+
+If the question is empty, infer it from the current conversation and briefly disclose it; if nothing sensible can be inferred, ask and stop before creating artifacts. Pick one type:
 
 | Type | Context | Framing file |
 |---|---|---|
@@ -31,16 +44,6 @@ If no question was given, infer it from the current conversation and briefly dis
 
 A consultation about earlier claims or a revised Plan they reviewed is a follow-up. Carry all investigate claims for a request to follow up on investigate items; carry all non-rejected claims for re-checking a revised Plan. Use a fresh session, never resume/fork. Blind types must exclude hypotheses from every prompt slot, including the question, while retaining evidence.
 
-Resolve model and effort before preparing a run:
-
-1. Read the Codex home from `CODEX_HOME`, defaulting to the user's `.codex` directory. Read its model cache (only models with visibility `list`) and the top-level `model` in its TOML config. Do not inherit configured effort. Missing files make that source unavailable; unreadable or malformed configuration must be reported rather than invented.
-2. At the start of the request, `model <x>` or `use <x>` names a model. Otherwise the first token names one if it contains `:` or its head matches a listed slug or contiguous hyphen/dot-separated slug parts. A next word matching slug parts joins it, as in `6 sol`. Other text is the question. Validate model tokens against `^[A-Za-z0-9._:-]+( [A-Za-z0-9._-]+)?$`; validate effort tokens as lowercase letters. Invalid tokens stop before Codex calls.
-3. Split `<alias>:<effort>` before alias resolution. A leading `effort <level>` selects effort without a model; consume those words rather than treating them as the question. Apply this parsing to each member of a parallel pair. Resolve aliases case-insensitively against listed models only: exact slug first, otherwise contiguous slug-part matches for each word. Ask on multiple matches; no matches means stop and show available choices. Never invent a model list.
-4. With no named model, use the session choice, else configured model, else listed model with lowest priority number, else omit the model. Final slugs match `^[A-Za-z0-9._-]+$`.
-5. Effort is always explicit and at least medium. Raise low/minimal/none to medium with a note. An unsupported requested level uses the highest supported level other than ultra with a note. Ultra requires explicit request and support. Otherwise use session effort, else sol high, astra medium, else the higher of the listed default and medium (never ultra by default), else medium if unknown. If no supported level satisfies these constraints, stop and explain.
-6. If the user named a model or effort, compare to the baseline without that choice, including any session setting. Same means no scope question. Different means ask whether this consultation only or the rest of the session; if asking is unavailable, apply only this consultation and disclose that scope in the final report. Honor a scope already stated by the user.
-7. A leading comma-separated pair requests parallel consultation; resolve each separately. More than two or duplicate resolved models stop before Codex calls. Each has its own effort; neither sees the other's output.
-
 Read `prompts/consultation.md` and the selected file under `prompts/framing/` in this skill directory. Fill the question, context, framing and extra-path slots. For follow-ups, include each carried claim's id, disposition, statement and Claude's reason. Remove credentials from every slot, including URLs and logs. Prefer file locations over whole-file copies.
 
 ## Script interface
@@ -51,7 +54,7 @@ Create one temporary **request file** with the Write tool in a file-tool-readabl
 
 - `project`: absolute current project directory.
 - `prompt`: the fully prepared prompt string.
-- `models`: one or two objects containing `model` (full slug or null for one default model) and `effort`. Include `explicit_ultra: true` only for the user's explicit ultra request.
+- `models`: the resolved choices, each with its `model` (full slug, or null for one default model), `effort` and `explicit_ultra`.
 - `confirmations`: an object mapping returned confirmation IDs to `allow` or `deny`. Initially empty, or containing only still-applicable decisions the user made in this session.
 
 `python '<skill>/scripts/consult.py' prepare '<request-file>' --base '<scratch-base>'`

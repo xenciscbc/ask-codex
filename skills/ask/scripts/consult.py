@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
 
@@ -445,7 +446,7 @@ def cleanup(directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "run", "collect", "wait", "continue", "stop", "cleanup"))
+    parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup"))
     parser.add_argument("path")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
@@ -455,7 +456,9 @@ def main():
     record_failure = True
     after_delivery = []
     try:
-        if args.action == "prepare":
+        if args.action == "resolve":
+            result = model_selection.resolve(read_json(args.path))
+        elif args.action == "prepare":
             result = prepare(args.path, args.base)
         elif args.action == "wait":
             result = wait_for(args.path, args.seconds)
