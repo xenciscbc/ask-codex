@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Run a single-model consultation through the script boundary.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Move user/project policy parsing, documented precedence, disable-set construction, and effective-policy guard checks into the script boundary.
 - [ ] Missing policy configuration uses the documented fallback. Existing malformed JSON, invalid types, unsupported policy values, or invalid server names abort before consultation execution and identify the file and useful non-sensitive reason.
@@ -28,3 +28,7 @@ Source: the parent specification, especially fail-closed policy handling and lit
 Policy resolution, strict invalid-file handling, literal MCP names, and effective-state guard are implemented. The public suite covers both modes, precedence, invalid values, dotted names, and guard mismatch. Isolated real CLI listing probes verify override syntax; real consultation remains unverified.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.

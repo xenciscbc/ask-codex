@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Run a single-model consultation through the script boundary.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Second opinions and targeted checks preserve their with-stance context; diagnosis and technical questions preserve blind framing, relevant evidence, failed attempts, and secret exclusion.
 - [ ] Follow-up consultations require a new user request and a fresh Codex session; neither resume nor fork is used. Carry the correct prior claims and Claude's dispositions and reasons.
@@ -28,3 +28,7 @@ Source: Q3, Q10 and the approved reply-compatibility slice. This ticket can prog
 English framing files are retained and the compact skill preserves fresh-session follow-up, per-claim dispositions and natural-language reporting. Structured/unstructured reply tests and the main headless report case pass. Broad follow-up/provenance Claude-facing acceptance remains open.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.

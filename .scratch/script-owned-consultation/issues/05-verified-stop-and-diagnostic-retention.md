@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — Wait reliably and perform timely liveness checks.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Reproduce and fix the launcher/watcher race: a promptly exiting root must not cancel an in-progress descendant termination or verification operation.
 - [ ] Cover whole-tree stopping on supported platforms, including resistant descendants and cooperative stopping when the caller cannot directly inspect the run's PID namespace.
@@ -30,3 +30,7 @@ Source: Q5, Q9 and ADR 0005. The goal is verified termination and useful retenti
 Identity-bound stopping, cooperative watcher shutdown, durable wrapper completion and conservative diagnostic retention are implemented. See validation.md for exact platform evidence and limitations; the checklist remains an acceptance record rather than a claim that every live branch ran.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.

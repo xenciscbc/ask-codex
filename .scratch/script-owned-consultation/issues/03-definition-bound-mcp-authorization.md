@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Resolve consultation policy and enforce the MCP guard.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Source confirmation and use authorization remain separate decisions. Confirming a definition alone leaves an otherwise disallowed server disabled.
 - [ ] One question may obtain multiple pending decisions only when it clearly names their kind, scope, and which servers would become usable. No generic confirmation silently grants broader access.
@@ -28,3 +28,7 @@ Source: Q6 and Q8 and ADR 0005. This ticket does not turn MCP servers into read-
 Definition-bound source and use decisions are implemented, with reuse/invalidation/decline/secret-output checks. The pending headless case passed; interactive combined decisions and full spoofed-confirmation acceptance remain open.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.

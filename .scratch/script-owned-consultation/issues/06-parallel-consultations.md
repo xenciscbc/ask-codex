@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Separate and bind MCP confirmations and use authorization; 05 — Confirm process-tree stops and retain unresolved diagnostics.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Preserve the maximum of two distinct resolved models, model and effort selection rules, and rejection of duplicate or excessive models before execution.
 - [ ] Each model receives the same prepared question independently, with its own model/effort, process identity, output, state, and run artifacts; neither receives the other's opinion.
@@ -28,3 +28,7 @@ Source: the approved parallel-consultation slice. Ticket 07 does not gate this w
 Two independent executions share guarded preparation and timing. Public tests cover mixed results, partial launch failure, a completed opinion during later launch failure, and a missing stop receipt with another successful opinion. Full paired Claude comparison acceptance remains open.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.

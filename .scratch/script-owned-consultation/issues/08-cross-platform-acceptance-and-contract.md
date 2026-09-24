@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 — Run parallel consultations through the new execution flow; 07 — Preserve consultation framing and reply dispositions.
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Inventory remaining consultation entry paths and migrate any legacy callers required for the accepted single-model, policy, parallel, and follow-up behaviors. Delete superseded orchestration only after no supported caller needs it.
 - [ ] Run the relevant offline execution integration scenarios on both Windows with Git Bash and Linux, including argument handling, policy guard, waiting, tree stopping, and diagnostic cleanup.
@@ -29,3 +29,16 @@ Source: the approved final migration and acceptance slice. This is the contract-
 Migration is implemented. Current acceptance evidence, size measurements, historical-test scope and remaining interactive/real-Codex gaps are recorded in ../evidence/validation.md. This ticket is not fully accepted and the parent specification is unchanged.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.
+
+Not verified, and not claimed by this closure:
+- Interactive Claude flows on either platform.
+- Real-Claude headless operation on native Windows.
+- Full consultations with the real Codex service.
+- A full Claude eval suite on the current bytes. Many graders still pin the pre-rewrite skill; see [09](09-realign-claude-evals-with-script-owned-skill.md).
+- macOS, which is outside the accepted scope.
+
+Known residual process-observation limits are in validation.md and reliability ticket 14 (items 4–6).

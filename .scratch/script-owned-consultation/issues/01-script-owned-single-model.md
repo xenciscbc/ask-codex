@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-Status: needs-triage
+Status: resolved — on a narrowed claim (2026-09-24, user decision; see Comments)
 
 - [ ] Introduce a cohesive execution boundary and structured status for this path, with preparation, running, completion, and failure distinguishable from Codex's opinion payload. Document the contract for later slices without requiring a particular programming language or helper layout.
 - [ ] The skill calls the new boundary for eligible consultations; routing must not discard or bypass existing policy configuration or pending project-definition confirmations. Noneligible scenarios retain their existing guarded route.
@@ -28,3 +28,7 @@ Source: the Reliable script-owned consultations specification and ADR 0005. The 
 Public CLI preparation, guarded execution, reply collection, and cleanup are implemented. Windows/Linux stub coverage and the script-consultation Claude headless case verify the main path.
 
 See [validation evidence](../evidence/validation.md). Unchecked items are retained for acceptance review; they are not silently declared complete.
+
+### 2026-09-24 — resolved on a narrowed claim (user decision)
+
+What this closes on: the implementation is in `main` (1.0.2), and the evidence in [validation.md](../evidence/validation.md) holds. That evidence is the public CLI suite on stub Codex (Windows and Ubuntu WSL), the lifecycle suites on both platforms, all Node offline tests, and two headless Claude cases on WSL. Unchecked boxes above remain unchecked: they are acceptance items this evidence does not reach. They are not claimed.
