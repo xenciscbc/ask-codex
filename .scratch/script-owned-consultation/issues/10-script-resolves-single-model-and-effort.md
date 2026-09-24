@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved — see Comments (2026-09-24)
 
 - [ ] The observable selection behavior does not change: every rule above resolves exactly as the skill's current prose does, with no invented model list.
 - [ ] The per-model default efforts (currently `sol` → high, `astra` → medium) move into the script unchanged, as data in one place (user decision 2026-09-24). No other fixed alias-to-model table is introduced.
@@ -16,3 +16,17 @@
 ## Notes
 
 Source: `/claude-api prompt-audit` finding F5 (2026-09-24). The prose does work whose output is fully determined by its inputs, and a hardcoded default table that has already rotted once lives in the skill. Parallel pairs and the scope comparison are ticket 11.
+
+## Comments
+
+### 2026-09-24 — implemented (`5a2942c`, `c5ead90`, `e0e8b73`)
+
+`consult.py resolve` (new `models.py`) takes the model tokens Claude reads off the request, reads the Codex model cache and configuration, and returns `resolved` / `ambiguous` / `invalid` / `unavailable` / `failed`. SKILL.md keeps the user interaction only; ADR 0005 records the move.
+
+One deviation from this ticket's first wording, and why. The first cut (`5a2942c`) parsed the user's whole text in the script. `/code-review high` showed that it applied the old prose too literally: "Context: …", "Use Redis or Postgres?" and "5 reasons …" were read as model tokens and stopped. Claude now decides which words are model tokens; the script validates and resolves them. The same review led to three more fixes: an unknown effort word is invalid (before, a typo became the model's highest level); a model with no listed levels means unknown support; and an ambiguous result keeps the named effort. Its finding 10 (Codex home from `Path.home()` vs `HOME`) was rejected: `policy.py` reads Claude's ask-codex config from `HOME`, not the Codex home, and the Codex CLI uses the OS home directory.
+
+Evidence:
+- `evals/_harness/resolve_test.py` 42/42 through the public CLI. All Node offline tests pass; `consultation_test.py` has one error (`test_partial_parallel_launch_failure_stops_started_consultation`, a Windows file lock during cleanup), which reproduces unchanged on `main`.
+- Claude evals, one run each, `claude-sonnet-5`, WSL. The first pass was all 14 model-selection cases on `c5ead90`. The second pass was five cases on `e0e8b73`, after two fixes the first pass forced: the session model is now resolved like a token (it had reached Codex as `-m astra`), and SKILL.md says to pass tokens unrepaired (Claude had repaired `sol;touch${IFS}pwned` to `sol`). On the final bytes every argv grader passes: `alias-sol`, `session-override-persists` and `parallel-two-models` model and effort; `alias-metachar` and `alias-ambiguous` make no Codex call. From the first pass, which touched no selection logic changed later: `alias-astra`, `alias-sol-low`, `default-model-config`, `effort-unsupported`, `parallel-one-fails`, and the two refusal cases (no Codex call).
+- Graders that still fail pin the pre-rewrite procedure or wording (`one-codex-exec`, `skill-fired`, `scope-line`, `*-disable-set`, `two-temp-dirs`, `two-background-runs`, `h-*`, `tag-*`, `refusal`, the timer graders of `parallel-shared-timer`) — ticket 09.
+- Seen once, not caused here: in the second `session-override-persists` run Claude ran the scripts as `cd '<skill>' && python3 scripts/consult.py …`, against the unchanged "never change the shell's working directory" rule (`no-bare-cd`). The first run of that case passed it.

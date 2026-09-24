@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 — The script resolves the model and effort of a single-model consultation.
 
-**Status:** ready-for-agent
+**Status:** resolved — implemented with ticket 10; see ticket 10's Comments (2026-09-24)
 
 - [ ] A pair resolves to two independent model/effort choices. A single ambiguous member returns its candidates without resolving the other one silently.
 - [ ] Three or more models, or a pair that resolves to the same model, stop before any Codex command with a reason.
@@ -12,3 +12,9 @@
 - [ ] Offline tests through the public script interface cover each of the above.
 - [ ] The parallel and session-override Claude-facing cases pass on their argv and behavior graders. Wording graders belong to ticket 09.
 - [ ] The skill's pair and scope prose is replaced by the script's status, and the ADR 0005 note from ticket 10 covers this too.
+
+## Comments
+
+### 2026-09-24 — implemented together with ticket 10
+
+Pair limits, per-member effort, per-member `differs_from_baseline` and the scope question are covered by the same commits and evidence; see [ticket 10](10-script-resolves-single-model-and-effort.md).
