@@ -8,8 +8,8 @@
     {
       "name": "ask-codex",
       "source": {
-        "source": "github",
-        "repo": "xenciscbc/ask-codex"
+        "source": "url",
+        "url": "https://github.com/xenciscbc/ask-codex.git"
       },
       "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself.",
       "category": "engineering",
