@@ -1,5 +1,7 @@
 evals/results/
 .eval-stub/
 evals/*/stubbin/
-# Resumed eval runs (context.history_file) write the child session transcript next to the history file.
+# Resumed eval runs (context.history_file) write the child session transcript next to the history file,
+# and a directory of the same name when the run spawned a subagent.
 evals/*/[0-9a-f]*-*-*-*-*.jsonl
+evals/*/[0-9a-f]*-*-*-*-*/
