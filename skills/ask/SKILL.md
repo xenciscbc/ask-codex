@@ -21,14 +21,14 @@ A consultation obtains an independent opinion; Claude prepares the question and 
 
 Read model choices off the start of the request (the skill arguments, or the user's own words asking for the consultation). A model token is `model <x>` or `use <x>`, a name with an effort such as `sol:high`, or a model name or slug parts such as `sol`, `6 sol` or `gpt-5.5`. Two tokens separated by a comma request a parallel consultation; neither model sees the other's output. A leading `effort <level>` names an effort alone. Take words as a model token only when the user wrote them as one: "Use Redis or Postgres?" names no model. The rest of the request is the question.
 
-Write a temporary **resolve file** with the Write tool in a file-tool-readable scratch location: `models` is the list of model tokens exactly as written (empty when none), `effort` is a level named alone (or null), and `session` holds this session's model/effort choice (`model`, `effort`; null when none). Then run:
+Write a temporary **resolve file** with the Write tool in a file-tool-readable scratch location: `models` is the list of model tokens exactly as written, even malformed ones (empty when none; never repair or sanitize a token, since the script decides whether it is valid), `effort` is a level named alone (or null), and `session` holds this session's model/effort choice (`model`, `effort`; null when none). Then run:
 
 `python '<skill>/scripts/consult.py' resolve '<resolve-file>'`
 
 Delete the resolve file afterwards. The script reads the Codex model cache and configuration and applies every selection rule; act on its result instead of re-deriving it:
 
 - `resolved`: `models` holds one choice per token (or one default choice). Disclose every `notes` entry.
-- `ambiguous`: ask the user to pick one of `candidates` for the token at position `member`, then resolve again with `<chosen slug>:<effort>` (or the slug alone when `effort` is null) in its place. Without an interactive question tool, ask in your final message and stop.
+- `ambiguous`: ask the user to pick one of `candidates` for the token at position `member` (or for the session model when `member` is `session`), then resolve again with `<chosen slug>:<effort>` (or the slug alone when `effort` is null) in its place. Without an interactive question tool, ask in your final message and stop.
 - `invalid` or `unavailable`: report the reason and any `choices`, and stop before any Codex command.
 - `failed`: report that the Codex configuration or model cache could not be read. Never invent a model or effort.
 

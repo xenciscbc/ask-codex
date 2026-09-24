@@ -170,6 +170,18 @@ class ResolveTest(unittest.TestCase):
         choice = self.single(session={"model": "gpt-6-astra", "effort": "high"})
         self.assertEqual((choice["model"], choice["effort"]), ("gpt-6-astra", "high"))
 
+    def test_session_model_given_as_an_alias_resolves_to_its_slug(self):
+        choice = self.single(session={"model": "astra"})
+        self.assertEqual((choice["model"], choice["effort"]), ("gpt-6-astra", "medium"))
+
+    def test_unresolvable_session_model_stops(self):
+        self.assertEqual(self.resolve(session={"model": "6"})["state"], "ambiguous")
+        self.assertEqual(self.resolve(session={"model": "nova"})["state"], "unavailable")
+
+    def test_session_model_is_kept_without_a_listing(self):
+        (self.codex / "models_cache.json").unlink()
+        self.assertEqual(self.single(session={"model": "gpt-6-astra"})["model"], "gpt-6-astra")
+
     def test_session_effort_is_used_for_a_named_model(self):
         self.assertEqual(self.single("astra", session={"effort": "xhigh"})["effort"], "xhigh")
 
@@ -196,7 +208,7 @@ class ResolveTest(unittest.TestCase):
 
     def test_invalid_request_file_is_reported(self):
         self.assertEqual(self.call({"models": "sol"})["state"], "failed")
-        self.assertEqual(self.call({"models": [], "session": {"model": "a b"}})["state"], "failed")
+        self.assertEqual(self.call({"models": [], "session": {"model": "a;b"}})["state"], "failed")
 
     # Parallel pairs (ticket 11).
 

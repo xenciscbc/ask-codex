@@ -11,6 +11,7 @@ DEFAULT_EFFORT = {"sol": "high", "astra": "medium"}
 SLUG = re.compile(r"^[A-Za-z0-9._-]+$")
 TOKEN = re.compile(r"^(?P<alias>[A-Za-z0-9._-]+(?: [A-Za-z0-9._-]+)?)(?::(?P<effort>[a-z]+))?$")
 EFFORT = re.compile(r"^[a-z]+$")
+ALIAS = re.compile(r"^[A-Za-z0-9._-]+(?: [A-Za-z0-9._-]+)?$")
 
 
 class Stop(Exception):
@@ -153,7 +154,8 @@ def validate(request):
     session = request.get("session") or {}
     if not isinstance(tokens, list) or any(not isinstance(t, str) for t in tokens) or not isinstance(session, dict):
         raise ValueError("A resolve request has a list of model tokens and a session object")
-    if session.get("model") is not None and (not isinstance(session["model"], str) or not SLUG.fullmatch(session["model"])):
+    if session.get("model") is not None and (not isinstance(session["model"], str) or
+                                             not ALIAS.fullmatch(session["model"])):
         raise ValueError("Invalid session model")
     return tokens, request.get("effort"), {"model": session.get("model"), "effort": session.get("effort")}
 
@@ -167,6 +169,16 @@ def resolve(request):
     try:
         known_effort(session["effort"], "The session effort")
         known_effort(effort, "The named effort")
+        if session["model"] and slugs:
+            # A session choice may have been recorded as the user's alias; it resolves like a token.
+            found = match(session["model"], slugs)
+            if len(found) > 1:
+                raise Stop({"state": "ambiguous", "member": "session", "alias": session["model"], "effort": None,
+                            "candidates": found})
+            if not found:
+                raise Stop({"state": "unavailable", "reason": f"No listed Codex model matches the session model "
+                            f"{session['model']!r}", "choices": slugs})
+            session["model"] = found[0]
         if len(tokens) > 2:
             raise Stop({"state": "invalid", "reason": "A parallel consultation takes at most two models"})
         named = []
