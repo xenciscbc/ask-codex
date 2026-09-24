@@ -21,3 +21,5 @@ This moves complexity from model instructions into code that needs cross-platfor
 The execution boundary uses Python 3.11+ for standard-library JSON and TOML parsing, with Bash retaining process-tree management. This adds an explicit Python prerequisite rather than implementing a partial TOML parser. Arguments cross the Windows/Git Bash boundary as NUL-delimited data, avoiding re-interpretation of embedded quotes.
 
 An isolated local Codex CLI probe showed that quoting a dotted name inside a command-line override path still splits the name. Disabled servers therefore use literal keys in a root MCP inline table, changing only their enabled flag so an HTTP transport is not merged with a conflicting stdio command. The same form handles ordinary names without changing transport; every resulting policy still passes the effective MCP guard before execution.
+
+A single `wait` call blocks for at most 60 seconds so that every call finishes within the Bash tool's default 120-second timeout, and the skill needs no timeout instruction for it. Raising that bound past the default timeout requires restoring a timeout instruction in `SKILL.md`.

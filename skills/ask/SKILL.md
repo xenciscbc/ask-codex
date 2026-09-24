@@ -31,7 +31,7 @@ If no question was given, infer it from the current conversation and briefly dis
 
 A consultation about earlier claims or a revised Plan they reviewed is a follow-up. Carry all investigate claims for a request to follow up on investigate items; carry all non-rejected claims for re-checking a revised Plan. Use a fresh session, never resume/fork. Blind types must exclude hypotheses from every prompt slot, including the question, while retaining evidence.
 
-Resolve model and effort before preparing a run; retain the existing selection semantics:
+Resolve model and effort before preparing a run:
 
 1. Read the Codex home from `CODEX_HOME`, defaulting to the user's `.codex` directory. Read its model cache (only models with visibility `list`) and the top-level `model` in its TOML config. Do not inherit configured effort. Missing files make that source unavailable; unreadable or malformed configuration must be reported rather than invented.
 2. At the start of the request, `model <x>` or `use <x>` names a model. Otherwise the first token names one if it contains `:` or its head matches a listed slug or contiguous hyphen/dot-separated slug parts. A next word matching slug parts joins it, as in `6 sol`. Other text is the question. Validate model tokens against `^[A-Za-z0-9._:-]+( [A-Za-z0-9._-]+)?$`; validate effort tokens as lowercase letters. Invalid tokens stop before Codex calls.
@@ -76,7 +76,7 @@ The script rechecks preflight before starting. If it returns a failure or new pe
 
 `python '<skill>/scripts/consult.py' wait '<directory>' --seconds 30`
 
-Wait is bounded to at most 60 seconds and the remaining check interval. Do not background a wait/timer, end your turn while a consultation is running, or start dependent work before the answer. Do not calculate a 30-minute tool timeout. The script preserves the default 30-minute interval, override validation and staleness policy.
+Wait is bounded to at most 60 seconds and the remaining check interval. Do not background a wait/timer, end your turn while a consultation is running, or start dependent work before the answer. The script owns the 30-minute check interval, its override validation and the staleness policy.
 
 - `running`: wait again. When `check` is true, briefly report elapsed time and each model's last event/age and state; the script has scheduled the next interval for active runs.
 - `decision_required`: show elapsed time, last event/age and per-model completion state; offer another interval or stopping, using the returned recommendation. User chooses wait: call `continue '<directory>'`, then wait again. Without an interactive question tool, explain the options and take the existing headless stop path.
@@ -99,7 +99,7 @@ Use the actual recommendation. Use `--offered none` if no options were presented
 
 For an explicit user request to remove retained diagnostics, use `cleanup '<directory>'`. It refuses an unsettled or unconfirmed run. A never-started prepared run may also be discarded with cleanup. Never manually delete run directories to bypass this check. Later confirmed termination allows prompt/reply removal; diagnostic removal still requires the user's explicit cleanup request. Logs may contain project content.
 
-Report in the conversation language; fixed English sentences, headings and first-line positions are not required. Preserve:
+Report in the conversation language, covering:
 
 1. Question, consultation type, model/effort and applicable choice scope; effective MCP policy and applicable timer/check outcomes.
 2. Each successful model's actual summary, every claim with evidence/kind/confidence and your adopt/reject/investigate disposition with a reason, plus open questions. Verify against code when inexpensive and say when unverified. Do not treat an opinion as implementation authorization.
