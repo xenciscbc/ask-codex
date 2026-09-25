@@ -96,18 +96,29 @@ EFFORT_RE = re.compile(r'^model_reasoning_effort="(medium|high|xhigh|max|ultra)"
 SLUG_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 
 
-def disabled_names(value):
+# Root-table disable entries: enabled=false, optionally with a placeholder transport.
+DISABLE_ENTRIES = ({"enabled": False}, {"enabled": False, "command": "ask-codex-disabled"},
+                   {"enabled": False, "url": "http://127.0.0.1:9/ask-codex-disabled"})
+
+
+def disabled_entries(value):
+    """{name: definition} for an allowed disable override, else None."""
     match = DISABLE_RE.fullmatch(value)
     if match:
-        return [match.group(1)]
+        return {match.group(1): {"enabled": False, "command": "ask-codex-disabled"}}
     if value.startswith("mcp_servers={"):
         try:
             table = tomllib.loads(value)["mcp_servers"]
-            if all(SLUG_RE.fullmatch(name) and definition == {"enabled": False} for name, definition in table.items()):
-                return list(table)
+            if all(SLUG_RE.fullmatch(name) and definition in DISABLE_ENTRIES for name, definition in table.items()):
+                return table
         except (ValueError, TypeError, AttributeError):
             pass
     return None
+
+
+def disabled_names(value):
+    entries = disabled_entries(value)
+    return None if entries is None else list(entries)
 
 
 def load_scenario(directory):
@@ -155,20 +166,27 @@ def mcp_list(args):
     servers = copy.deepcopy(GLOBAL_SERVERS)
     if scenario:
         for extra in data.get("project_extra", []):
-            servers.append(server(extra["name"], extra.get("command", "extra.exe"), extra.get("args", []), extra.get("env", {})))
+            added = server(extra["name"], extra.get("command", "extra.exe"), extra.get("args", []), extra.get("env", {}))
+            added["enabled"] = extra.get("enabled", True)
+            servers.append(added)
         for name, patch in data.get("project_overrides", {}).items():
             for s in servers:
                 if s["name"] == name:
                     deep_merge(s, patch)
     overrides = config_overrides(args)
     for kv in overrides:
-        names = disabled_names(kv)
-        if names is None:
+        entries = disabled_entries(kv)
+        if entries is None:
             violation(scenario, f"mcp list: unexpected -c {kv}")
             continue
         if data.get("guard_fails"):
             continue
-        for name in names:
+        for name, definition in entries.items():
+            # Codex 0.156 rejects an entry without transport for a plugin-provided server.
+            plugin = any(extra["name"] == name and extra.get("plugin") for extra in data.get("project_extra", []))
+            if plugin and definition == {"enabled": False}:
+                sys.stderr.write(f"Error: failed to load bootstrap configuration\n\nCaused by:\n    invalid transport\n    in `mcp_servers.{name}`\n")
+                sys.exit(1)
             match = [s for s in servers if s["name"] == name]
             if match:
                 match[0]["enabled"] = False

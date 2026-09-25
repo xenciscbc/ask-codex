@@ -155,6 +155,19 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.scenario({"guard_fails": True})
         self.assertEqual(self.prepare()["state"], "failed")
 
+    def test_plugin_provided_servers_are_disabled_with_valid_overrides(self):
+        self.scenario({"project_extra": [{"name": "codex_app", "enabled": False, "plugin": True},
+                                         {"name": "plugin_tool", "plugin": True}]})
+        ready = self.prepare()
+        self.assertEqual(ready["state"], "prepared", ready)
+        self.assertEqual(ready["summary"]["allowed_servers"], [])
+        self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
+        self.call("run", ready["directory"])
+        argv = json.loads((self.project / ".stub/exec-argv.json").read_text(encoding="utf-8"))
+        override = next(v for v in argv if v.startswith("mcp_servers={"))
+        self.assertIn('"plugin_tool"={command="ask-codex-disabled",enabled=false}', override)
+        self.assertNotIn("codex_app", override)
+
     def test_changed_definition_invalidates_session_use_authorization(self):
         (self.home / ".claude").mkdir()
         (self.home / ".claude/ask-codex.json").write_text('{"mcp_allow":["comfyui"]}')

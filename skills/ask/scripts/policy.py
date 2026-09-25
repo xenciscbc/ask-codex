@@ -7,6 +7,8 @@ import re
 import tomllib
 
 NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+PLACEHOLDERS = {"stdio": 'command="ask-codex-disabled"',
+                "streamable_http": 'url="http://127.0.0.1:9/ask-codex-disabled"'}
 
 
 class ConfirmationRequired(Exception):
@@ -107,17 +109,25 @@ def resolve(request, project, neutral, listing):
                               on_decline="Disable this server and continue", grants_use=True)
             if answer != "allow":
                 permitted = False
-        if not permitted:
+        # An already-disabled server needs no override; overriding a plugin-provided
+        # one creates a config entry without transport, which Codex rejects.
+        if not permitted and server["enabled"]:
             disabled.add(name)
     if pending:
         raise ConfirmationRequired(pending)
 
     overrides = []
     if disabled:
-        # A root-table inline value preserves literal dotted names. Change only
-        # enabled, retaining HTTP/stdio transport without conflicting keys.
-        entries = ",".join(f'{json.dumps(name)}={{enabled=false}}' for name in sorted(disabled))
-        overrides = ["-c", "mcp_servers={" + entries + "}"]
+        # A root-table inline value preserves literal dotted names. A plugin-provided
+        # server has no config entry to merge into, so each override carries a
+        # placeholder of the listed transport type (a different type's key conflicts).
+        transports = {s["name"]: s["transport"].get("type") for s in servers}
+        entries = []
+        for name in sorted(disabled):
+            if transports[name] not in PLACEHOLDERS:
+                raise ValueError(f"Cannot disable MCP server {name} with transport {transports[name]}; consultation not sent")
+            entries.append(f'{json.dumps(name)}={{{PLACEHOLDERS[transports[name]]},enabled=false}}')
+        overrides = ["-c", "mcp_servers={" + ",".join(entries) + "}"]
     guarded = listing(project, overrides)
     expected = {s["name"]: False if s["name"] in disabled else s["enabled"] for s in servers}
     expected.update({name: False for name in disabled})
