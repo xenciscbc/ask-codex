@@ -81,3 +81,15 @@ This corrects the reading in "the holder is not a leftover from the run": the ho
   - The bounded retry stays correct and covers the observed ~13 s. The comment in `remove_run` now names the notify hook instead of a file scanner.
   - `run.sh`'s completion receipt does not cover the hook processes. They escape the recorded tree and outlive the run. They are the user's own programs, not a leak of the consultation, but a consultation does trigger them.
   - A root fix would stop Codex from running the hook for a consultation, or stop the hook from inheriting run files. Either would be a separate ticket that needs its own decision; nothing here commits to one.
+
+### 2026-09-25 — decision: no root fix
+
+The user decided not to fix the root cause. The bounded retry is the whole remedy, and the README lists the behaviour under known limitations.
+
+- **Why.**
+  - The retry already covers the observed hold with room to spare: about 13 s against a 30 s window.
+  - When the window is exceeded, the reply is still delivered, and a later `cleanup` finishes the job.
+- **Options considered and not taken.**
+  - **`-c notify=[]` on `codex exec`.** This would keep the user's own hook (TokenTracker, computer-use `turn-ended`) from running for a consultation. It overrides a setting the user chose, and it was never verified that `codex exec` honours it.
+  - **Pipes instead of files for the worker's std handles, with the launcher copying them to disk.** This is a large change to the launcher's streams and completion logic. A pipe the hook still holds would delay EOF by the same seconds, so the wait would only move elsewhere.
+- **Reopen if** a hook holds the files longer than the window often enough to matter, or if running the user's hook for a consultation becomes a problem in its own right.

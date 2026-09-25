@@ -174,6 +174,7 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 - **停止未確認：**無法列舉或核對行程身份時，可能仍有行程存活，包含 Windows 行程查詢權限受限的情況。應保留回報的診斷資料；root 行程退出或 log 安靜，都不能單獨證明停止完成。
 - **保留內容：**停止未確認時，會保留存活行程可能仍需使用的檔案。錯誤 log 可能含專案內容；診斷資料須在明確要求且確認停止後才會清理，沒有自動到期機制。
 - **平台與設定：**歷史 Windows RAM disk 測試曾以 `os error 1` 失敗，但不能因此將所有 OS 錯誤都歸因於磁碟。長期信任專案的定義檢查尚未以真實 Codex CLI 完成端對端驗證。未選定 session 模型時，外部程式修改模型設定可能影響下一次諮詢。
+- **Codex `notify` hook（刻意不修）：**若 Codex 設定了 `notify`，諮詢時 Codex 也會執行該 hook。在 Windows 上，hook 會繼承這次執行的 prompt、事件與錯誤檔。hook 若比 Codex 活得久，就會一直鎖住這些檔案；曾觀察到一串 hook 鎖了約 13 秒。清理最多重試 30 秒（`ASK_CODEX_CLEANUP_WINDOW_S`），所以已完成的諮詢可能要等這麼久才回傳。鎖若超過這段時間，回覆仍會送達，並回報保留位置供之後清理。外掛不會停用你的 hook。詳見 [ticket 12](.scratch/script-owned-consultation/issues/12-cleanup-retries-transient-windows-lock.md)。
 - **用量：**諮詢會消耗 Codex 用量，並行諮詢會啟動兩次執行。目前尚未量測每次諮詢的 token 基本成本。
 
 報告可使用對話語言，但必須保留問題與類型、模型與 effort、生效 MCP 政策、相關計時與停止資訊，以及 Claude 對每個實質論點的處置。執行失敗不會被當成 Codex 意見。
