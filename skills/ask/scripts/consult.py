@@ -140,8 +140,9 @@ def plan_at(directory):
 
 
 def remove_run(directory, plan):
-    # On Windows another process (e.g. a file scanner) can briefly hold a just-written
-    # run file open; one bounded window covers the whole removal, then the error stands.
+    # On Windows a process can briefly hold a run file open after the run ends (e.g. a
+    # Codex notify hook that inherited the worker's std handles); one bounded window
+    # covers the whole removal, then the error stands.
     deadline = time.monotonic() + float(os.environ.get("ASK_CODEX_CLEANUP_WINDOW_S", "30"))
 
     def patiently(operation, path):

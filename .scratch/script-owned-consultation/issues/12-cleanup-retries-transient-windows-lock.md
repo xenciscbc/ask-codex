@@ -63,3 +63,21 @@ Status: resolved — bounded retry in remove_run plus harness fix (2026-09-25)
   - The full harness passes: 71 of 71, including the test that used to fail.
   - One live consultation after the fix was clean: exit 0, directory removed. The lock did not occur in that run, so the live fix itself is shown only by the offline tests.
 - **Open.** The holder's identity was never proven; see the Comments above. The R: `OSError` from the Evidence section was not investigated.
+
+### 2026-09-25 — the holder, identified
+
+This corrects the reading in "the holder is not a leftover from the run": the holder **is** a set of processes created during the run, and it inherited the handles.
+
+- **Method.** `handle.exe` (Sysinternals Handle 5.0), run as administrator. It was first self-tested on a file held by a known PID.
+  - One live consultation: gpt-6-sol high, trivial prompt, base `D:\tmp\ac-lock`, an empty neutral project, and the Git Bash grep replay.
+  - `collect` ran with `ASK_CODEX_CLEANUP_WINDOW_S=0`, so the lock would surface immediately. It did: `cleanup_failed`.
+- **Holder.** The user's Codex `notify` hook (`notify` in `$CODEX_HOME/config.toml`).
+  - The chain: `codex-computer-use.exe turn-ended`, then TokenTracker's `notify.cjs` as `--previous-notify`, then `node.exe tracker.js sync --auto --from-notify --source codex`, then `wsl.exe -d Ubuntu -e whoami` (two processes).
+  - The `node.exe` and both `wsl.exe` held `0/prompt.md`, `0/events.jsonl` and `0/stderr.log`. Their handle numbers were 2C0, 2C4 and 2C8, the inherited std handles. So Codex hands its stdin, stdout and stderr down to the hook.
+  - None of the holders were in the pre-`prepare` snapshot. The `node.exe` was created at 16:30:43, during the run.
+  - The lock lasted until the sync finished, which includes a WSL cold start. `cleanup` succeeded 12.9 s later.
+- **Why the earlier snapshots missed it.** Not re-examined. The likeliest explanation is timing: when the hook has already finished by the time `collect` runs, there is no lock and no survivor. That would also make the grep correlation a coincidence of timing.
+- **Consequences.**
+  - The bounded retry stays correct and covers the observed ~13 s. The comment in `remove_run` now names the notify hook instead of a file scanner.
+  - `run.sh`'s completion receipt does not cover the hook processes. They escape the recorded tree and outlive the run. They are the user's own programs, not a leak of the consultation, but a consultation does trigger them.
+  - A root fix would stop Codex from running the hook for a consultation, or stop the hook from inheriting run files. Either would be a separate ticket that needs its own decision; nothing here commits to one.
