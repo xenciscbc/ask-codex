@@ -140,18 +140,31 @@ def plan_at(directory):
 
 
 def remove_run(directory, plan):
+    # On Windows another process (e.g. a file scanner) can briefly hold a just-written
+    # run file open; one bounded window covers the whole removal, then the error stands.
+    deadline = time.monotonic() + float(os.environ.get("ASK_CODEX_CLEANUP_WINDOW_S", "30"))
+
+    def patiently(operation, path):
+        while True:
+            try:
+                return operation(path)
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.25)
+
     # Preserve the ownership receipt until deletion succeeds, so a locked log does
     # not leave an unmanageable half-deleted directory on Windows.
     for child in directory.iterdir():
         if child.name == "plan.json":
             continue
         if child.is_dir() and not child.is_symlink():
-            shutil.rmtree(child)
+            patiently(shutil.rmtree, child)
         else:
-            child.unlink()
+            patiently(Path.unlink, child)
     (directory / "plan.json").unlink()
     try:
-        directory.rmdir()
+        patiently(Path.rmdir, directory)
     except OSError:
         write_json(directory / "plan.json", plan)
         raise

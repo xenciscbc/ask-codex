@@ -103,7 +103,7 @@ sys.path.insert(0, str(pathlib.Path(sys.argv[0]).parent))
 runpy.run_path(sys.argv[0], run_name='__main__')
 """
         result = subprocess.run([sys.executable, "-c", bootstrap, str(CLI), "collect", ready["directory"]],
-                                env=self.env, capture_output=True, timeout=30)
+                                env={**self.env, "ASK_CODEX_CLEANUP_WINDOW_S": "0.5"}, capture_output=True, timeout=30)
         self.assertNotEqual(result.returncode, 0)
         collected = json.loads(result.stdout)
         self.assertEqual(collected["runs"][0]["state"], "completed", collected)
@@ -111,6 +111,43 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(failure["state"], "cleanup_failed", failure)
         self.assertEqual(failure["retained_location"], ready["directory"])
         self.assertEqual(self.call("cleanup", ready["directory"])["state"], "cleaned")
+
+    def hold(self, path, seconds):
+        # A plain Windows open lacks FILE_SHARE_DELETE, so unlink fails with WinError 32 until it closes.
+        holder = subprocess.Popen([sys.executable, "-c", "import pathlib, sys, time\n"
+                                   "f = open(sys.argv[1], 'rb'); pathlib.Path(sys.argv[3]).touch(); time.sleep(float(sys.argv[2]))",
+                                   str(path), str(seconds), str(self.root / "held")])
+        self.addCleanup(holder.wait)
+        while not (self.root / "held").exists():
+            time.sleep(0.05)
+        return holder
+
+    @unittest.skipUnless(os.name == "nt", "open files block deletion only on Windows")
+    def test_collect_waits_out_a_briefly_held_run_file(self):
+        ready = self.prepare()
+        self.call("run", ready["directory"])
+        self.hold(Path(ready["directory"]) / "0/events.jsonl", 2)
+        result = subprocess.run([sys.executable, str(CLI), "collect", ready["directory"]], env=self.env,
+                                capture_output=True, text=True, encoding="utf-8", timeout=75)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["runs"][0]["state"], "completed")
+        self.assertFalse(Path(ready["directory"]).exists())
+
+    @unittest.skipUnless(os.name == "nt", "open files block deletion only on Windows")
+    def test_cleanup_window_is_bounded_and_the_run_stays_recoverable(self):
+        ready = self.prepare()
+        self.call("run", ready["directory"])
+        holder = self.hold(Path(ready["directory"]) / "0/events.jsonl", 6)
+        result = subprocess.run([sys.executable, str(CLI), "collect", ready["directory"]],
+                                env={**self.env, "ASK_CODEX_CLEANUP_WINDOW_S": "1"},
+                                capture_output=True, text=True, encoding="utf-8", timeout=75)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["runs"][0]["state"], "completed")
+        self.assertEqual(json.loads(result.stderr)["state"], "cleanup_failed")
+        self.assertTrue((Path(ready["directory"]) / "plan.json").exists())
+        holder.wait()
+        self.assertEqual(self.call("cleanup", ready["directory"])["state"], "cleaned")
+        self.assertFalse(Path(ready["directory"]).exists())
 
     def test_invalid_project_policy_does_not_fall_back_to_wider_user_policy(self):
         (self.home / ".claude").mkdir()
@@ -265,6 +302,12 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(collected["runs"][1]["state"], "failed", collected)
         self.assertNotIn("reply", collected["runs"][0])
         self.assertEqual(len(list((self.project / ".stub/exec-calls").glob("*.json"))), 1)
+        # An unconfirmed stop returns before run.sh finishes verifying; let it settle before teardown.
+        receipt = Path(ready["directory"]) / "0/launcher-result.json"
+        deadline = time.monotonic() + 60
+        while not receipt.exists() and time.monotonic() < deadline:
+            time.sleep(0.2)
+        self.assertTrue(receipt.exists(), "launcher never settled after the stop")
 
     def test_missing_stop_receipt_retains_other_success_without_attributing_stopped_reply(self):
         self.request["models"].append({"model": "gpt-6-astra", "effort": "medium"})
