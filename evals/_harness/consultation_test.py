@@ -149,6 +149,33 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(self.call("cleanup", ready["directory"])["state"], "cleaned")
         self.assertFalse(Path(ready["directory"]).exists())
 
+    @unittest.skipUnless(os.name == "nt", "final-path lookup is a Windows API")
+    def test_run_base_on_volume_without_final_path_support(self):
+        # Simulates a RAM disk where GetFinalPathNameByHandle fails (WinError 1).
+        base = self.root / "ramdisk"
+        base.mkdir()
+        hook = self.root / "hook"
+        hook.mkdir()
+        (hook / "sitecustomize.py").write_text(
+            "import ntpath, os\n"
+            "_real = ntpath._getfinalpathname\n"
+            f"_base = os.path.normcase({str(base)!r})\n"
+            "def _fake(path):\n"
+            "    if os.path.normcase(os.fspath(path)).startswith(_base):\n"
+            "        raise OSError(22, 'Incorrect function', None, 1)\n"
+            "    return _real(path)\n"
+            "ntpath._getfinalpathname = _fake\n", encoding="utf-8")
+        self.env["PYTHONPATH"] = str(hook)
+        request = self.root / "request.json"
+        request.write_text(json.dumps(self.request), encoding="utf-8")
+        ready = self.call("prepare", request, "--base", base)
+        self.assertEqual(ready["state"], "prepared", ready)
+        self.assertEqual(self.call("wait", ready["directory"], "--seconds", "0")["state"], "prepared")
+        self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+        collected = self.call("collect", ready["directory"])
+        self.assertEqual(collected["runs"][0]["state"], "completed", collected)
+        self.assertFalse(Path(ready["directory"]).exists())
+
     def test_invalid_project_policy_does_not_fall_back_to_wider_user_policy(self):
         (self.home / ".claude").mkdir()
         (self.home / ".claude/ask-codex.json").write_text('{"mcp_policy":"minimal-deny"}')

@@ -132,7 +132,9 @@ def prepare(request_path, base):
 
 
 def plan_at(directory):
-    directory = Path(directory).resolve(strict=True)
+    # Non-strict, like prepare: some volumes (e.g. a RAM disk) cannot report a
+    # final path, and a strict resolve fails there with a bare OSError.
+    directory = Path(directory).resolve()
     plan = read_json(directory / "plan.json")
     if plan.get("version") != 1 or plan.get("directory") != str(directory) or directory.parent.name != "ask-codex" or not directory.name.startswith("run."):
         raise ValueError("Not an owned consultation run directory")
