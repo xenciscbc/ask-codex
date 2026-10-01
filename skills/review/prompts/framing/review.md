@@ -1,0 +1,3 @@
+Consultation type: review.
+
+Claude asks you to review one change. The context below gives its scope, the commits or base it covers, the changed files and how to inspect them. Inspect the change yourself, read-only — `git diff`, `git show` and `git log` (with `--no-ext-diff --no-textconv` where they apply) and reading the files — and review the whole scoped change for correctness defects and risks. The change intent in the context is Claude's stance: check whether the change really does that, and do not assume it does. If the context gives the user's focus, check it as well, but do not restrict the review to it or to any single concern. Make each defect or risk a separate claim with `file:line` evidence.
