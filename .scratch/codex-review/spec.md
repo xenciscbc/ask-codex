@@ -1,6 +1,6 @@
 # Spec: ask-codex review skill
 
-Status: needs-triage (Plan awaiting approval)
+Status: resolved on branch `feat/review-skill` (2026-10-01) — not merged or pushed; see Outcome at the end.
 
 Vocabulary follows `CONTEXT.md`. Decisions respect ADR-0001 (call `codex exec` directly), ADR-0003 (MCP policy), ADR-0005 (script-owned execution). This spec revises one MVP non-goal ("structured full-diff code review is `/codex:review`") and is recorded in a new ADR-0006.
 
@@ -97,3 +97,20 @@ Risk triggers: release (version bump) and git hardening / ref validation → pre
 - **Scope:** `README.md` + `README.zh-TW.md` (usage line, capability, Known risks from Honest limits), `CONTEXT.md` (new 審查 review entry; update 實作疑點審查 _Avoid_ note to point at `/ask-codex:review` vs official `/codex:review`), `docs/adr/0006-review-skill.md`, `.claude-plugin/plugin.json` version → 1.2.0.
 - **Acceptance:** one real harmless `/ask-codex:review` on this repo's working tree with a real Codex model, reporting dispositions (run interactively by the user typing the command, since Claude cannot invoke it; or headless `claude -p "/ask-codex:review ..."`); fresh `verifier` against the full spec claim.
 - **Rollback:** revert; no tag pushed until the user says.
+
+---
+
+# Outcome (2026-10-01)
+
+Fresh `verifier`: **CONFIRMED** for S1 + S2 on `feat/review-skill` (fd67419, 8a2ae7c, ee94579, 8fd53a7). Evidence: `evidence/*-run-log.txt` (fingerprinted segments s1, s1b, s1c, s1d, baseline, baseline2, noflag), `evidence/live-review-*`.
+
+- Eval: all eight review cases pass on final bytes except dispositioned residuals; `review-nl-not-loaded` 5/5 with the flag, 4/5 FAIL without it (noflag) — detection proven.
+- Regression vs `d5910a0`: spoofed-request S1 1/11 fail vs baseline 2/11; second-opinion-with-stance equal; targeted-check `concern-sent` strict regex S1 4/9 vs baseline 1/9 fail — every failure is backticks around `TimeoutError`; a tolerant match finds the concern sent in 18/18 traces. Pass rule narrowed to the tolerant reading.
+- Live: one real headless `/ask-codex:review` (Codex `gpt-5.6-sol` high, 197 s) on a throwaway repo `D:/tmp/review-live` with two planted defects — both found and adopted, scope line, "not a passed review" stated, nothing edited; `config.toml` hash unchanged, no new Codex processes. Deviation from S2 text: a throwaway repo instead of this repo's working tree (keeps real project content local; planted defects make it a stronger check).
+
+Deferred / narrowed (P3/P4, not fixed after CONFIRMED):
+- P3 `no-bare-cd`: 2 of ~26 review runs ran a bare `cd` (one into `ask/scripts` before `resolve`); same habit in `ask` baseline (4/9). Pre-existing model habit.
+- P3 scope line: present in 9/9 reports, but first-line plain form in only 1/9 harness runs (live 1/1). Claim narrowed to "the report contains the scope line"; `scope-line` grader does not check position.
+- P3 README comparison: the official commands accept an undocumented `--model`/`-m` passed through to the companion (`codex-companion.mjs:714-717`); the table's "not chosen by the command" model cell is imprecise. Effort is indeed not selectable. Follow-up doc fix.
+- P4: one unprefixed `git rev-parse --show-toplevel` in a harness run; Codex's own inspect commands lack `-c core.fsmonitor=false` (Codex runs read-only, network-blocked).
+- P4 cleanup: worktrees `D:/tmp/ask-codex-baseline`, `D:/tmp/ask-codex-noflag`, `D:/tmp/ask-codex-s2` (branch `feat/review-skill-s2`, content already cherry-picked) remain.

@@ -1,0 +1,5 @@
+live run 2026-10-01 on HEAD 8fd53a7
+config.toml sha256 before/after: 7080c220...af9a (unchanged)
+user ask-codex.json: absent before and after
+new codex pids after run: none
+throwaway repo after run: only the pre-made ' M src/retry.js'
