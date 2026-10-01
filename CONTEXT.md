@@ -133,7 +133,11 @@ _Avoid_: 讓使用者每次手動指定類型。
 
 **實作疑點審查**（targeted check）：
 Claude 帶著具體疑點請 Codex 檢查某段實作或 diff。
-_Avoid_: review、code review（那是官方 `/codex:review` 的全面結構化審查）。
+_Avoid_: review、code review（整份變更的審查是 `/ask-codex:review`；官方 `/codex:review` 則是逐字回傳 Codex 輸出的原生審查，兩者都不是針對具體疑點的檢查）。
 
 **技術問答**（technical question）：
 API 用法、做法比較等不綁定特定修改的一般技術問題。
+
+**審查**（review）：
+使用者輸入 `/ask-codex:review` 發起、針對一整份變更（working tree、與 base 比較的 branch，或 commit range）的諮詢；Claude 判斷範圍，Codex 唯讀檢視並回傳論點，Claude 對每個論點給出處置。只有使用者能發起，Claude 不能自行啟動；沒有論點不等於核可。
+_Avoid_: 與官方 `/codex:review` 混淆（後者逐字回傳 Codex 輸出、Claude 不加判斷）；英文避免把它稱為 code review 或 approval。

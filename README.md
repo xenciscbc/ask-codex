@@ -10,6 +10,7 @@ Claude Code skills, also available as a plugin, that ask the local OpenAI Codex 
 - Model aliases and explicit reasoning effort; up to two different models can answer independently. Follow-ups use fresh sessions with prior claims and dispositions.
 - Script-owned configuration, MCP authorization checks, execution, bounded waiting, process tracking and structured results.
 - Unicode-safe result collection, recoverable output failures, and separate reporting of reply delivery and cleanup failures.
+- Whole-change review: `/ask-codex:review` sends the working tree, a branch against a base, or a commit range to Codex; Claude judges every claim. Only you can start it, by typing the command.
 - Windows with Git Bash and Linux are the current implementation targets. Offline tests cover both; real-Claude validation is limited to two headless WSL cases using stub Codex. Full live Codex consultations and interactive flows are not yet validated for this implementation.
 
 ## Execution boundaries
@@ -31,7 +32,7 @@ In Claude Code, add this repository's marketplace and install its plugin:
 /plugin install ask-codex@ask-codex
 ```
 
-The first `ask-codex` is the plugin name; the second is the marketplace name defined in this repository. Then use `/ask-codex:ask` and `/ask-codex:setup`.
+The first `ask-codex` is the plugin name; the second is the marketplace name defined in this repository. Then use `/ask-codex:ask`, `/ask-codex:review` and `/ask-codex:setup`.
 
 Alternatively, install from your terminal at user scope:
 
@@ -58,11 +59,12 @@ Download or clone this repository, then copy these **entire directories**:
 | Source | Personal installation | Project-only installation |
 |---|---|---|
 | `skills/ask/` | `~/.claude/skills/ask/` | `<project>/.claude/skills/ask/` |
+| `skills/review/` | `~/.claude/skills/review/` | `<project>/.claude/skills/review/` |
 | `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
 
-On Windows, `~` is your user home, typically `C:\Users\<username>`. The `ask` directory must include `SKILL.md`, `prompts/`, `scripts/` and `consultation.schema.json`; copying only `SKILL.md` is insufficient. `setup` provides the MCP policy setup helper.
+On Windows, `~` is your user home, typically `C:\Users\<username>`. The `ask` directory must include `SKILL.md`, `prompts/`, `scripts/` and `consultation.schema.json`; copying only `SKILL.md` is insufficient. `setup` provides the MCP policy setup helper. `review` runs through the `ask` skill's scripts and prompts, which it finds as its sibling directory (`../ask`), so copy `review` only together with `ask`, into the same parent directory.
 
-With these directory names, use `/ask` and `/setup` instead of the plugin-prefixed commands shown elsewhere in this README. You can also explicitly ask Claude to consult Codex in natural language. See Claude Code's [skill locations and naming rules](https://code.claude.com/docs/en/skills).
+With these directory names, use `/ask`, `/review` and `/setup` instead of the plugin-prefixed commands shown elsewhere in this README. You can also explicitly ask Claude to consult Codex in natural language. See Claude Code's [skill locations and naming rules](https://code.claude.com/docs/en/skills).
 
 To update, download or pull the latest repository and replace the installed directories with the matching new copies, including their supporting files. Back up any local edits first. Manually copied skills are not managed by `claude plugin update`.
 
@@ -99,6 +101,9 @@ An installed plugin does not need `--plugin-dir`. Headless execution still needs
 /ask-codex:ask Why does fetchUser return an empty object on timeout?
 /ask-codex:ask sol:high Check the retry logic in this diff.
 /ask-codex:ask astra, sol Give a second opinion on this plan.
+/ask-codex:review
+/ask-codex:review --base main
+/ask-codex:review sol main..HEAD check error handling
 /ask-codex:setup
 ```
 
@@ -109,6 +114,8 @@ Aliases resolve against your local Codex model list; these examples do not guara
 **Consultation types.** Claude picks the type from context: a second opinion (challenge a plan or decision), a diagnosis (find a root cause when stuck), a targeted check (inspect a specific implementation or diff), a technical question, or a follow-up. Diagnoses and technical questions are sent **blind** — Claude's own hypothesis is withheld so the answer is not anchored.
 
 **Models and effort.** Name a model by alias (`sol`, `astra`, `6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority visible model in the local cache; if no model is available from these sources, the CLI selects its default. Consultation effort is never below `medium` and is always passed explicitly, rather than inherited from Codex configuration. `ultra` requires an explicit request and model support. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session. A headless run cannot ask, so the choice applies only to that consultation and the report discloses the scope in the conversation language; no fixed sentence or line position is required. Naming the model and effort already in use needs no scope note.
+
+**Review.** `/ask-codex:review [model tokens] [--base <ref> | A..B | A...B] [focus]` consults Codex about one whole change. The scope is the working tree by default (staged, unstaged and untracked files); `--base <b>` means the commits on `HEAD` since its merge base with `<b>` (committed changes only; uncommitted changes are not included); `A..B` and `A...B` name an explicit commit range. Any remaining text is your focus, passed to Codex verbatim. Model tokens work as in `ask`, including two models in parallel. Claude resolves each ref with hardened, read-only git commands (an option-like ref is rejected, and nothing runs when the scope is empty or rejected), gives Codex the scope and the change's intent as its stance, and lets Codex inspect the diff itself, read-only. The report begins with the scope line, then lists every claim with Claude's disposition. A review with no claims is not an approval. **It is user-only:** the skill disables model invocation, so Claude cannot start it and only typing the command does; natural-language review requests are not turned into reviews. Asked for a whole-change review, `ask` tells you the command exists instead. Claude never fixes anything because of a claim.
 
 **Parallel consultation.** Name two different models (`astra, sol`) to ask both the same question and get independent opinions, merged into consensus, solo claims and divergences, each tagged with the model that made it, and each divergence resolved with a stated reason. At most two models, never the same one twice.
 
@@ -138,6 +145,24 @@ For example, this policy permits only a server named `docs` if it is already ena
 The setup skill writes ask-codex policy files; it does not edit Codex's `config.toml`. Keep the project-local policy out of version control. Project policy and server-use changes can require session confirmation during preparation; unresolved confirmations prevent headless execution.
 
 A project-defined server needs explicit source confirmation, bound to that exact definition. Changing its command, arguments, endpoint, environment or other definition fields invalidates the earlier confirmation. Source confirmation only acknowledges the definition; permission to use the server is a separate decision, although Claude may ask for both clearly in one question. Confirmation IDs come from the prepared definition and cannot themselves grant consent.
+
+## Comparison with the official Codex plugin
+
+OpenAI's official Codex plugin has its own review commands. They are a different tool from `/ask-codex:review`:
+
+| | `/codex:review` | `/codex:adversarial-review` | `/ask-codex:review` |
+|---|---|---|---|
+| Started by | you only | you only | you only |
+| What Claude does with the output | returns it verbatim, no commentary | returns it verbatim, no commentary | judges every claim: adopt, reject or investigate, with a reason |
+| Reviewer | Codex's built-in native reviewer | Codex, challenging the approach and design choices | Codex through `codex exec`, structured claims |
+| Focus text | not supported | supported | supported, plus Claude's change intent as stance |
+| Scope | working tree or branch (`--base <ref>`) | working tree or branch (`--base <ref>`) | working tree, `--base <ref>` or a commit range |
+| Model and effort | not chosen by the command | not chosen by the command | aliases and effort, up to two models in parallel |
+| MCP servers | not controlled by the command | not controlled by the command | disabled by default (ask-codex MCP policy); Codex shell read-only |
+| Foreground and background | `--wait`, `--background`, `/codex:status` | `--wait`, `--background`, `/codex:status` | foreground, with a check interval and stop reporting owned by the script |
+| Runtime | plugin's shared companion script | plugin's shared companion script | `codex exec` called directly ([ADR 0001](docs/adr/0001-call-codex-exec-directly.md)) |
+
+Use the official commands when you want Codex's native review exactly as it wrote it, or a background run you check later. Use `/ask-codex:review` when you want an independent second-opinion review that Claude weighs before anything is acted on, with your choice of model and effort and control over MCP servers. Both can run on the same change.
 
 ## Verification
 
@@ -175,6 +200,9 @@ See the [validation record](.scratch/script-owned-consultation/evidence/validati
 - **Retained content:** unresolved stops retain files a process may still need. Error logs may contain project content. Diagnostic cleanup requires an explicit request and confirmed termination; there is no automatic expiry.
 - **Platform and configuration:** a historical Windows RAM-disk test failed with `os error 1`; that is not a diagnosis for every OS error. Persistently trusted project definitions have not been validated end to end with the real Codex CLI. When no session model is selected, an external change to the configured model can affect the next consultation.
 - **Codex `notify` hooks (not fixed by design):** if your Codex configuration sets `notify`, Codex runs that hook for a consultation too, and on Windows the hook inherits the run's prompt, event and error files. A hook that outlives Codex keeps them locked; one observed hook chain held them for about 13 s. Cleanup retries for up to 30 s (`ASK_CODEX_CLEANUP_WINDOW_S`), so a finished consultation may take that long to return. If the lock outlasts the window, the reply is still delivered and the run is reported with its retained location for a later cleanup. The plugin does not disable your hook. See [ticket 12](.scratch/script-owned-consultation/issues/12-cleanup-retries-transient-windows-lock.md).
+- **Review reads the whole scope:** a review lets Codex read the scoped change, including untracked files in a working-tree review. Excluding secrets is an instruction to Codex, not an enforced filter.
+- **Working-tree clean filters:** a working-tree review runs `git status`, which can still run a repository-configured clean filter (`.gitattributes` plus `filter.<x>.clean`) when it re-reads files whose stat data changed. `--no-ext-diff`, `--no-textconv` and `core.fsmonitor=false` do not cover this. Base and range reviews compare commits only and are not affected. Review a repository you do not trust with `--base` or a range, or inspect its filter configuration first.
+- **Steering by diff content:** text in the reviewed change can try to steer Codex's conclusions; that the content is data is an instruction, not enforcement. Claude's per-claim dispositions are the control, and Claude does not act on a claim without your separate request.
 - **Cost:** consultations consume Codex usage, and a parallel pair starts two runs. Current per-consultation token overhead has not been measured.
 
 Reports may follow the conversation language. They must still include the question and type, model and effort, effective MCP policy, relevant timer/stop details, and Claude's disposition for each substantive claim. Execution failures contribute no attributed Codex opinion.
