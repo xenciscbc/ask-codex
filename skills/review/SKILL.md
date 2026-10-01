@@ -48,7 +48,7 @@ A rejected scope ends the review before any Codex command, with this line: `Scop
 
 ## 2. Scope
 
-Every git command starts with exactly `git --no-pager -c core.fsmonitor=false -C '<project>'` (written `<git>` below), where `<project>` is the absolute current project directory; every `diff` also carries `--no-ext-diff --no-textconv`. Run only the read-only commands shown here.
+Every git command starts with exactly `git --no-pager -c core.fsmonitor=false -C '<project>'` (written `<git>` below), where `<project>` is the absolute current project directory as your environment reports it — never run `cd` or `pwd` to find it; every `diff` also carries `--no-ext-diff --no-textconv`. Run only the read-only commands shown here.
 
 **Check a ref** — the base ref, and each range endpoint — before any other command uses it:
 
@@ -85,7 +85,7 @@ Remove credentials from every slot, the focus included, and say in the report if
 
 ## 5. Execute
 
-Read the sections "Script interface", "Execute, wait and stop" and "Collect and report" of `<ask>/SKILL.md` now and follow them as written, with `<skill>` read as `<ask>`; they are not repeated here. The request file holds exactly the fields listed there: `project`, `prompt` (the prompt above), `models` (the resolved choices) and `confirmations`. The rest of `<ask>/SKILL.md` — its Boundaries, consultation types and question preparation — belongs to `ask`; for a review, this file's Boundaries apply.
+Read the sections "Script interface", "Execute, wait and stop" and "Collect and report" of `<ask>/SKILL.md` now and follow them as written, with `<skill>` read as `<ask>`; they are not repeated here. Write the resolve file, the prompt and the request file with the Write tool — never assemble them in a shell command (no `cd`, heredoc or inline script). The request file holds exactly the fields listed there: `project`, `prompt` (the prompt above), `models` (the resolved choices) and `confirmations`. The rest of `<ask>/SKILL.md` — its Boundaries, consultation types and question preparation — belongs to `ask`; for a review, this file's Boundaries apply.
 
 ## 6. Report
 
