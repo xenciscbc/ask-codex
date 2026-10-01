@@ -157,7 +157,7 @@ OpenAI's official Codex plugin has its own review commands. They are a different
 | Reviewer | Codex's built-in native reviewer | Codex, challenging the approach and design choices | Codex through `codex exec`, structured claims |
 | Focus text | not supported | supported | supported, plus Claude's change intent as stance |
 | Scope | working tree or branch (`--base <ref>`) | working tree or branch (`--base <ref>`) | working tree, `--base <ref>` or a commit range |
-| Model and effort | not chosen by the command | not chosen by the command | aliases and effort, up to two models in parallel |
+| Model and effort | `--model` is passed through (undocumented); no effort choice | `--model` is passed through (undocumented); no effort choice | aliases and effort, up to two models in parallel |
 | MCP servers | not controlled by the command | not controlled by the command | disabled by default (ask-codex MCP policy); Codex shell read-only |
 | Foreground and background | `--wait`, `--background`, `/codex:status` | `--wait`, `--background`, `/codex:status` | foreground, with a check interval and stop reporting owned by the script |
 | Runtime | plugin's shared companion script | plugin's shared companion script | `codex exec` called directly ([ADR 0001](docs/adr/0001-call-codex-exec-directly.md)) |

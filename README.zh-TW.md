@@ -157,7 +157,7 @@ OpenAI 官方 Codex plugin 也有審查指令，與 `/ask-codex:review` 是不�
 | 審查者 | Codex 內建的原生 reviewer | Codex，挑戰實作方式與設計選擇 | 透過 `codex exec` 呼叫 Codex，結構化論點 |
 | Focus 文字 | 不支援 | 支援 | 支援，並附上 Claude 對變更意圖的說明作為立場 |
 | 範圍 | working tree 或 branch（`--base <ref>`） | working tree 或 branch（`--base <ref>`） | working tree、`--base <ref>` 或 commit range |
-| 模型與 effort | 指令本身不選擇 | 指令本身不選擇 | 模型簡稱與 effort，最多兩個模型並行 |
+| 模型與 effort | 可傳 `--model`（說明未記載）；不能選 effort | 可傳 `--model`（說明未記載）；不能選 effort | 模型簡稱與 effort，最多兩個模型並行 |
 | MCP server | 指令本身不控制 | 指令本身不控制 | 預設停用（ask-codex MCP 政策）；Codex shell 唯讀 |
 | 前景與背景 | `--wait`、`--background`、`/codex:status` | `--wait`、`--background`、`/codex:status` | 前景執行，由腳本負責檢查間隔與停止回報 |
 | 執行層 | plugin 共用的 companion 腳本 | plugin 共用的 companion 腳本 | 直接呼叫 `codex exec`（[ADR 0001](docs/adr/0001-call-codex-exec-directly.md)） |
