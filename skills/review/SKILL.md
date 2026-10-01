@@ -89,7 +89,7 @@ Read the sections "Script interface", "Execute, wait and stop" and "Collect and 
 
 ## 6. Report
 
-Report as `ask`'s "Collect and report" says, with consultation type `review`, and begin with the scope line:
+Report as `ask`'s "Collect and report" says, with consultation type `review`. The report's first line is the scope line, written as plain text exactly in this form (not as a heading, and with the words `Review scope:` kept):
 
 `Review scope: <kind>; <base or range>; files: <list>`
 
