@@ -331,6 +331,8 @@ for (const c of CASES) {
   expect(!three.test(TS + TS) && !three.test(TS + TS + TS + TS) && !three.test(TS) && !three.test(""), "discuss-headless-default/three-calls: two, four, one or no lines fail");
   const disc = re("discuss-headless-default", "default-disclosed");
   expect(disc.test("Round limit: 3 (default; no round count given)") && disc.test("**Round limit:** 3 (default; no round count given)") && disc.test(REPORT.replace("Round limit: 2", "Round limit: 3 (default; no round count given)")), "default-disclosed: the fixed wording passes, plain or marked up");
+  expect(disc.test("Round limit: 3 (default; no round count given — no interactive question tool was available in this session, so the headless default applied)"), "default-disclosed: a clause added inside the parentheses passes (seen in a t03 reply)");
+  expect(!disc.test("Round limit: 3 (default; no round count\ngiven)") && !disc.test("Round limit: 3 (default; no rounds)"), "default-disclosed: the fixed words still must appear unbroken");
   expect(!disc.test(REPORT.replace("Round limit: 2", "Round limit: 3")) && !disc.test("Round limit: 5 (default; no round count given)") && !disc.test("Round limit: 3 (you chose it)") && !disc.test(""), "default-disclosed: a bare 3, another number or other wording fails");
   const rej1 = re("discuss-rounds-out-of-range", "refusal-line");
   expect(rej1.test("Round limit rejected: 1 — a discussion needs 2 to 10 rounds.") && rej1.test("**Round limit rejected:** `1` — a discussion needs 2 to 10 rounds."), "discuss-rounds-out-of-range/refusal-line: the fixed line passes, plain or marked up");
