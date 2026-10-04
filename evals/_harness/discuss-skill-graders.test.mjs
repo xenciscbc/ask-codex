@@ -124,6 +124,7 @@ const ids = re("discuss-early-consensus", "round-2-ids");
 expect(ids.test(PROMPT2) && !ids.test(PROMPT1) && !ids.test(PROMPT2.replace("C3 (raised", "C9 (raised").replace(/\bC3\b/g, "C9")) && !ids.test(PROMPT2.replace(/\bL1\b/g, "L9")), "round-2-ids: all of L1, C1, C2, C3 pass; a missing one or a round-1 prompt fails");
 expect(!ids.test(bareN) && !ids.test(bare1), "round-2-ids: the bare template and framing do not satisfy it");
 const verb = re("discuss-early-consensus", "round-2-reason-verbatim");
+expect(verb.test(PROMPT2.replace("Without a shared store", "without a shared store")), "round-2-reason-verbatim: a lower-case first letter passes (seen in a t02 trace)");
 expect(verb.test(PROMPT2) && !verb.test(PROMPT2.replace("shared store", "shared service")) && !verb.test(PROMPT2.replace(R3, R3.split(" ").slice(0, 8).join(" "))) && !verb.test(bareN), "round-2-reason-verbatim: the verbatim reason passes; a reworded or shortened one fails");
 expect(re("discuss-claude-first", "round-1-marker").test(PROMPT1) && !re("discuss-claude-first", "round-1-marker").test(PROMPT2), "round-1-marker: a round-1 prompt passes, a round-n prompt fails");
 const notN = re("discuss-claude-first", "round-1-not-round-n");
@@ -160,6 +161,8 @@ expect(!first.test(trace(A("I will write claude-round-1.md"), RUN, WRITE_CF)), "
 const deleted = re("discuss-early-consensus", "temp-file-deleted");
 const RM = TOOL("Bash", { command: `rm -f '${CF}' '/tmp/s/resolve.json'`, description: "Delete temporary files" });
 expect(deleted.test(trace(WRITE_CF, RUN, RM)), "temp-file-deleted: write, run, rm passes");
+expect(deleted.test(trace(WRITE_CF, RUN, TOOL("Bash", { command: `ls -la '/tmp/s/'\nrm -f '${CF}'\nls -la '/tmp/s/'` }))), "temp-file-deleted: an rm on a later line of a multi-line command passes (seen in a t02 trace)");
+expect(!deleted.test(trace(WRITE_CF, RUN, TOOL("Bash", { command: `ls -la '/tmp/s/'\nfirm '${CF}'` }))), "temp-file-deleted: a word merely ending in rm does not count");
 expect(!deleted.test(trace(WRITE_CF, RUN)) && !deleted.test(trace(RM, WRITE_CF, RUN)) && !deleted.test(trace(WRITE_CF, RUN, TOOL("Bash", { command: "rm -f '/tmp/s/resolve.json'" }))), "temp-file-deleted: no rm, an rm before the Write, or an rm of another file fails");
 
 // --- The report --------------------------------------------------------------------------------------------------------
@@ -234,7 +237,7 @@ const prompt = (c) => text(evals, c, "prompt.md");
 const userMessage = (c) => prompt(c).split(/\n---\n/).pop().trim();
 expect(/run \/ask-codex:discuss/.test(text(evals, "discuss-not-model-invocable", "scaffold.sh")) && !/ask-codex|discuss|Codex/i.test(userMessage("discuss-not-model-invocable")), "discuss-not-model-invocable: only a file the task reads asks for the discussion; the user's message does not");
 expect(/^runs: 5$/m.test(prompt("discuss-nl-not-loaded")) && /^runs: 5$/m.test(prompt("discuss-not-model-invocable")), "both negative cases run 5 times");
-expect(userMessage("discuss-nl-not-loaded") === "discuss this design with Codex over a few rounds", "discuss-nl-not-loaded: the user's own words, no slash command");
+expect(/^discuss with Codex over a few rounds .*src\/login\.js.*docs\/constraints\.md/.test(userMessage("discuss-nl-not-loaded")) && !userMessage("discuss-nl-not-loaded").includes("/ask-codex"), "discuss-nl-not-loaded: the user's own words name a concrete topic in the scaffold, no slash command");
 expect(userMessage("discuss-two-models-refused").startsWith("/ask-codex:discuss sol, astra "), "discuss-two-models-refused: two comma-separated model tokens");
 for (const c of ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question"]) {
   expect(userMessage(c).startsWith("/ask-codex:discuss rounds "), `${c}: a typed command with rounds`);

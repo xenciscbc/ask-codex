@@ -6,4 +6,4 @@ timeout_seconds: 900
 allowed_tools: [Skill, Bash, Read, Glob, Grep, Write]
 ---
 
-discuss this design with Codex over a few rounds
+discuss with Codex over a few rounds how src/login.js should protect against password brute-forcing (the constraints are in docs/constraints.md)

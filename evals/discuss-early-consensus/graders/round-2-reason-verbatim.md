@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: 'Without a shared store an attacker can spread attempts across instances and never reach the limit\.'
+pattern: '[Ww]ithout a shared store an attacker can spread attempts across instances and never reach the limit\.'
 target:
   source: file
   path: .stub/exec-stdin.2.txt
