@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ask-codex discussion reply",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "points", "open_questions"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One or two sentences: Codex's overall position in this round."
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement", "reason", "evidence", "kind", "confidence", "stance", "revised_statement", "user_call", "user_call_reason", "new_blocking", "reopen"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable identifier. Codex-raised points are C1, C2; Claude-raised points keep their L1, L2 ids. Never renumber."
+          },
+          "statement": {
+            "type": "string",
+            "description": "One single assertion."
+          },
+          "reason": {
+            "type": "string",
+            "description": "The full reasoning behind the statement or stance, not a summary."
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "file:line references or command/output excerpts supporting the point; empty only when none exist."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["fact", "inference"],
+            "description": "fact = directly observed (file content, command output); inference = reasoned from observations."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "stance": {
+            "type": ["string", "null"],
+            "enum": ["accept", "maintain", "revise", null],
+            "description": "Position on a carried point: accept the other side's position, maintain your own, or revise to a wording both could accept. null on a new point."
+          },
+          "revised_statement": {
+            "type": ["string", "null"],
+            "description": "The proposed wording when stance is revise; otherwise null."
+          },
+          "user_call": {
+            "type": "boolean",
+            "description": "true when the point is a preference or authority question for the user, not a matter of right or wrong."
+          },
+          "user_call_reason": {
+            "type": ["string", "null"],
+            "description": "Why the point is the user's call when user_call is true; otherwise null."
+          },
+          "new_blocking": {
+            "type": "boolean",
+            "description": "true for a new point raised after round 1 that blocks the conclusion."
+          },
+          "reopen": {
+            "type": "boolean",
+            "description": "true when the point reopens a tentative agreement."
+          }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Questions Codex could not resolve and that would change its position."
+    }
+  }
+}

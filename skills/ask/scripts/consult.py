@@ -105,13 +105,22 @@ def validate(request):
         names.append(name)
     if len(set(names)) != len(names) or (len(names) == 2 and None in names):
         raise ValueError("Parallel consultation needs two explicit different models")
+    if reply_schema_of(request) == "discussion" and len(names) != 1:
+        raise ValueError("A discussion takes exactly one model")
     return project
+
+
+def reply_schema_of(request):
+    schema = request.get("reply_schema", "consultation")
+    if schema not in ("consultation", "discussion"):
+        raise ValueError("Invalid reply schema")
+    return schema
 
 
 def preflight(request, neutral):
     project = validate(request)
     policy, overrides = resolve(request, project, neutral, listing)
-    return {"project": str(project), "models": request["models"], **policy}, overrides
+    return {"project": str(project), "models": request["models"], "reply_schema": reply_schema_of(request), **policy}, overrides
 
 
 def prepare(request_path, base):
@@ -198,7 +207,7 @@ def run(directory):
             if model.get("model"):
                 args += ["-m", model["model"]]
             args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
-                     "--disable", "apps", "--output-schema", (HERE.parent / "consultation.schema.json").as_posix(),
+                     "--disable", "apps", "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
                      "-o", (child / "last-message.json").as_posix(), "-"]
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")
             handles = {"stdin": streams.enter_context(prompt.open("rb")),
@@ -368,7 +377,7 @@ def collect(directory, after_delivery):
             try:
                 text = reply.read_text(encoding="utf-8")
                 if text.strip():
-                    result.update(state="completed", reply=classify(text))
+                    result.update(state="completed", reply=classify(text, plan["summary"].get("reply_schema", "consultation")))
             except UnicodeError:
                 pass
         if result["state"] == "failed":

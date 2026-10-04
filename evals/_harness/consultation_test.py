@@ -10,6 +10,32 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "skills/ask/scripts/consult.py"
+SKILL = REPO / "skills/ask"
+sys.path.insert(0, str(SKILL / "scripts"))
+from replies import classify  # noqa: E402
+
+# Codex command line of a request without reply_schema, captured from baseline 6266c3e
+# (the stub's .stub/exec-argv.json), run directory / project path / skill directory replaced by placeholders.
+BASELINE_ARGV = [
+    "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
+    "-C", "<PROJECT>",
+    "-m", "gpt-6-sol",
+    "-c", 'model_reasoning_effort="high"',
+    "-c", 'mcp_servers={"blender"={command="ask-codex-disabled",enabled=false},"comfyui"={command="ask-codex-disabled",enabled=false},"cua_repl"={command="ask-codex-disabled",enabled=false},"node_repl"={command="ask-codex-disabled",enabled=false},"pencil"={command="ask-codex-disabled",enabled=false}}',
+    "--disable", "apps",
+    "--output-schema", "<SKILL_DIR>/consultation.schema.json",
+    "-o", "<RUN_DIR>/0/last-message.json",
+    "-",
+]
+
+DISCUSSION_REPLY = {
+    "summary": "One contested point remains.",
+    "points": [{"id": "C1", "statement": "The cache is never invalidated.", "reason": "set() has no matching delete().",
+                "evidence": ["src/cache.js:12"], "kind": "fact", "confidence": "high", "stance": None,
+                "revised_statement": None, "user_call": False, "user_call_reason": None,
+                "new_blocking": False, "reopen": False}],
+    "open_questions": [],
+}
 
 
 class ConsultationTest(unittest.TestCase):
@@ -536,6 +562,114 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         if stopped["state"] == "stop_unconfirmed":
             self.assertTrue(Path(result["retained_location"]).exists())
             self.assertEqual(self.call("cleanup", ready["directory"])["state"], "failed")
+
+    def normalised_argv(self, directory):
+        replacements = ((Path(directory).as_posix(), "<RUN_DIR>"), (self.project.as_posix(), "<PROJECT>"),
+                        (SKILL.as_posix(), "<SKILL_DIR>"))
+        argv = json.loads((self.project / ".stub/exec-argv.json").read_text(encoding="utf-8"))
+        for old, new in replacements:
+            argv = [arg.replace(old, new) for arg in argv]
+        return argv
+
+    def test_reply_schema_absent_or_consultation_keeps_the_baseline_command_line(self):
+        for schema in (None, "consultation"):
+            with self.subTest(reply_schema=schema):
+                self.request.pop("reply_schema", None)
+                if schema:
+                    self.request["reply_schema"] = schema
+                ready = self.prepare()
+                self.assertEqual(ready["summary"]["reply_schema"], "consultation", ready)
+                self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+                self.assertEqual(self.normalised_argv(ready["directory"]), BASELINE_ARGV)
+                self.call("cleanup", ready["directory"])
+
+    def test_discussion_reply_schema_is_named_and_passed_to_codex(self):
+        self.request["reply_schema"] = "discussion"
+        ready = self.prepare()
+        self.assertEqual(ready["summary"]["reply_schema"], "discussion", ready)
+        self.call("run", ready["directory"])
+        argv = self.normalised_argv(ready["directory"])
+        expected = list(BASELINE_ARGV)
+        expected[expected.index("<SKILL_DIR>/consultation.schema.json")] = "<SKILL_DIR>/discussion.schema.json"
+        self.assertEqual(argv, expected)
+        self.call("cleanup", ready["directory"])
+
+    def test_invalid_reply_schema_or_discussion_with_two_models_is_refused_before_codex(self):
+        refused = [("transcript", self.request["models"]), ("", self.request["models"]), (None, self.request["models"]),
+                   (["discussion"], self.request["models"]),
+                   ("discussion", self.request["models"] + [{"model": "gpt-6-astra", "effort": "medium"}])]
+        for schema, models in refused:
+            with self.subTest(reply_schema=schema, models=len(models)):
+                self.request.update(reply_schema=schema, models=models)
+                self.assertEqual(self.prepare()["state"], "failed")
+        self.assertFalse((self.project / ".stub/mcp-list.log").exists())
+        self.assertFalse((self.project / ".stub/exec.sentinel").exists())
+
+    def test_classifier_handles_discussion_booleans_without_raising(self):
+        valid = classify(json.dumps(DISCUSSION_REPLY), "discussion")
+        self.assertEqual(valid["format"], "structured", valid)
+        wrong = json.loads(json.dumps(DISCUSSION_REPLY))
+        wrong["points"][0]["user_call"] = "true"
+        self.assertEqual(classify(json.dumps(wrong), "discussion")["format"], "unstructured")
+        missing = json.loads(json.dumps(DISCUSSION_REPLY))
+        del missing["points"][0]["reopen"]
+        self.assertEqual(classify(json.dumps(missing), "discussion")["format"], "unstructured")
+        # An integer is not a boolean, even though bool subclasses int in Python.
+        wrong["points"][0]["user_call"] = 1
+        self.assertEqual(classify(json.dumps(wrong), "discussion")["format"], "unstructured")
+
+    def test_classifier_default_schema_is_the_consultation_schema(self):
+        reply = {"summary": "x", "claims": [], "open_questions": []}
+        self.assertEqual(classify(json.dumps(reply))["format"], "structured")
+        self.assertEqual(classify(json.dumps(reply), "consultation")["format"], "structured")
+        self.assertEqual(classify(json.dumps({"summary": "x", "claims": "wrong", "open_questions": []}))["format"], "unstructured")
+        self.assertEqual(classify(json.dumps(reply), "discussion")["format"], "unstructured")
+        self.assertEqual(classify("plain text", "discussion")["format"], "unstructured")
+
+    def test_discussion_schema_follows_the_structural_rules(self):
+        schema = json.loads((SKILL / "discussion.schema.json").read_text(encoding="utf-8"))
+        nodes = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                if node.get("type") == "object":
+                    nodes.append(node)
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        walk(schema)
+        self.assertEqual(len(nodes), 2)  # the top level and the point
+        for node in nodes:
+            self.assertIs(node.get("additionalProperties"), False)
+            self.assertEqual(sorted(node["required"]), sorted(node["properties"]))
+        self.assertEqual(sorted(schema["properties"]), ["open_questions", "points", "summary"])
+        point = schema["properties"]["points"]["items"]["properties"]
+        self.assertEqual(sorted(point), sorted(["id", "statement", "reason", "evidence", "kind", "confidence", "stance",
+                                                "revised_statement", "user_call", "user_call_reason", "new_blocking", "reopen"]))
+        self.assertIn(None, point["stance"]["enum"])
+        for name in ("user_call", "new_blocking", "reopen"):
+            self.assertEqual(point[name]["type"], "boolean")
+        for name in ("revised_statement", "user_call_reason"):
+            self.assertEqual(point[name]["type"], ["string", "null"])
+        self.assertEqual(point["stance"]["type"], ["string", "null"])
+
+    def test_discussion_consultation_runs_end_to_end(self):
+        self.scenario({"exec": {"reply": DISCUSSION_REPLY}})
+        self.request["reply_schema"] = "discussion"
+        ready = self.prepare()
+        self.assertEqual(ready["state"], "prepared", ready)
+        self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+        self.assertEqual(self.call("wait", ready["directory"], "--seconds", "5")["state"], "finished")
+        collected = self.call("collect", ready["directory"])
+        self.assertEqual(collected["state"], "collected", collected)
+        self.assertEqual(collected["runs"][0]["state"], "completed", collected)
+        self.assertEqual(collected["runs"][0]["reply"]["format"], "structured", collected)
+        self.assertEqual(collected["runs"][0]["reply"]["content"], DISCUSSION_REPLY)
+        self.assertFalse(Path(ready["directory"]).exists())
+        self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
 
 
 if __name__ == "__main__":

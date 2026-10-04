@@ -143,6 +143,35 @@ try {
     run(args, dir);
     check(/repeated disable definition for blender/.test(fs.readFileSync(path.join(dir, ".stub", "violations.log"), "utf-8")), "repeated disable definition is a violation");
   }
+  // Per-call reply sequence (discuss ticket 01): numbered records, per-entry replies, last entry reused.
+  {
+    const replyOne = { summary: "first call", claims: [], open_questions: [] };
+    const replyTwo = { summary: "second call", points: [], open_questions: [] };
+    const dir = project("sequence", { exec: { sequence: [{ reply: replyOne }, { reply: replyTwo }] } });
+    const argsWith = (out, schema) => execArgs(dir, out).map((a) => (a === "schema.json" ? schema : a));
+    const outs = [1, 2, 3].map((n) => path.join(dir, `out${n}.json`));
+    const rs = [run(argsWith(outs[0], "/s/one.json"), dir, {}, "prompt one"),
+                run(argsWith(outs[1], "/s/two.json"), dir, {}, "prompt two"),
+                run(argsWith(outs[2], "/s/three.json"), dir, {}, "prompt three")];
+    check(rs.every((r) => r.status === 0), "sequence: all calls succeed");
+    check(JSON.parse(fs.readFileSync(outs[0], "utf-8")).summary === "first call", "sequence: first call follows entry 1");
+    check(JSON.parse(fs.readFileSync(outs[1], "utf-8")).summary === "second call", "sequence: second call follows entry 2");
+    check(JSON.parse(fs.readFileSync(outs[2], "utf-8")).summary === "second call", "sequence: a call past the end reuses the last entry");
+    const records = (name) => fs.readFileSync(path.join(dir, ".stub", name), "utf-8");
+    check(records("exec-stdin.1.txt") === "prompt one" && records("exec-stdin.2.txt") === "prompt two" && records("exec-stdin.3.txt") === "prompt three", "sequence: numbered stdin records in call order");
+    for (const [n, schema] of [[1, "/s/one.json"], [2, "/s/two.json"], [3, "/s/three.json"]]) {
+      const argv = JSON.parse(records(`exec-argv.${n}.json`));
+      check(argv[argv.indexOf("--output-schema") + 1] === schema, `sequence: exec-argv.${n}.json holds that call's schema path`);
+    }
+    check(records("exec-stdin.txt") === "prompt three" && JSON.parse(records("exec-argv.json")).includes("/s/three.json"), "sequence: single-run records still hold the last call");
+    check(fs.readdirSync(path.join(dir, ".stub", "exec-calls")).length === 3, "sequence: exec-calls has one record per call");
+  }
+  {
+    // Without a sequence the numbered records still appear and the existing ones are unchanged.
+    const { r, dir } = execCase("valid");
+    check(r.status === 0 && fs.readFileSync(path.join(dir, ".stub", "exec-stdin.1.txt"), "utf-8") === "prompt", "no sequence: numbered record written for call 1");
+    check(Array.isArray(JSON.parse(fs.readFileSync(path.join(dir, "last.json"), "utf-8")).claims), "no sequence: default reply");
+  }
   {
     const { r, dir } = execCase("valid");
     const files = fs.readdirSync(path.join(dir, ".stub"));

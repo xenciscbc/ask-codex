@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def matches(value, schema):
-    types = {"object": dict, "array": list, "string": str, "null": type(None)}
+    types = {"object": dict, "array": list, "string": str, "boolean": bool, "null": type(None)}
     expected = schema.get("type")
     if expected:
         names = expected if isinstance(expected, list) else [expected]
@@ -24,8 +24,8 @@ def matches(value, schema):
     return True
 
 
-def classify(text):
-    schema = json.loads((Path(__file__).resolve().parent.parent / "consultation.schema.json").read_text())
+def classify(text, schema_name="consultation"):
+    schema = json.loads((Path(__file__).resolve().parent.parent / f"{schema_name}.schema.json").read_text())
     try:
         value = json.loads(text)
     except ValueError:

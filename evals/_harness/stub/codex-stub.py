@@ -22,6 +22,10 @@ it ends by itself — a killed run leaves none). `exec.reply` replaces the defau
 `exec.by_model` = {"<model slug>": {mode, reply, …}} overrides those settings for calls with that
 `-m` (parallel consultations); such calls also write .stub/exec-argv.<slug>.json and
 .stub/exec-stdin.<slug>.txt, and exec.sentinel gains one line per call.
+`exec.sequence` = [{mode, reply, …}, …] gives call n (1-based, counted in .stub/exec-count.txt) the
+settings of entry n, merged over `exec`; calls past the end reuse the last entry (discussion rounds).
+Every exec call also writes .stub/exec-argv.<n>.json and .stub/exec-stdin.<n>.txt, <n> being that
+call's number, after the prompt is read.
 
 Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
 CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
@@ -237,14 +241,26 @@ def exec_(args):
     directory = opts.get("cwd") or os.getcwd()
     scenario = load_scenario(directory) or {"dir": directory, "data": {}}
     data = scenario["data"]
+    records = stub_dir(scenario)
+    # 1-based number of this exec call in the scenario directory, kept in a counter file.
+    counter = os.path.join(records, "exec-count.txt")
+    number = 1
+    if os.path.exists(counter):
+        with open(counter, encoding="utf-8") as f:
+            number = int(f.read().strip() or 0) + 1
+    with open(counter, "w", encoding="utf-8") as f:
+        f.write(str(number))
     # Parallel consultations (ticket 08): exec.by_model["<slug>"] overrides exec settings for that -m.
     slug = opts.get("model")
     exec_cfg = dict(data.get("exec") or {})
     by_model = exec_cfg.pop("by_model", None) or {}
+    # Discussion rounds: exec.sequence[n-1] overrides exec settings for call n; calls past the end reuse the last entry.
+    sequence = exec_cfg.pop("sequence", None) or []
+    if sequence:
+        exec_cfg.update(sequence[min(number, len(sequence)) - 1])
     if slug in by_model:
         exec_cfg.update(by_model[slug])
     data = {**data, "exec": exec_cfg}
-    records = stub_dir(scenario)
     # Separate files remain reliable under concurrent appends on Windows/WSL mounts.
     calls = os.path.join(records, "exec-calls")
     os.makedirs(calls, exist_ok=True)
@@ -296,7 +312,8 @@ def exec_(args):
     with open(os.path.join(records, "exec.sentinel"), "a", encoding="utf-8") as f:
         f.write(datetime.datetime.now(datetime.timezone.utc).isoformat() + "\n")
     argv_text = json.dumps(args, indent=2)
-    targets = [("exec-argv.json", argv_text), ("exec-stdin.txt", prompt)]
+    targets = [("exec-argv.json", argv_text), ("exec-stdin.txt", prompt),
+               (f"exec-argv.{number}.json", argv_text), (f"exec-stdin.{number}.txt", prompt)]
     if slug:
         targets += [(f"exec-argv.{slug}.json", argv_text), (f"exec-stdin.{slug}.txt", prompt)]
     for name, payload in targets:
