@@ -349,6 +349,107 @@ for (const c of CASES) {
   expect(userMessage("discuss-headless-default").startsWith("/ask-codex:discuss design rate limiting") && !/\brounds\b/.test(userMessage("discuss-headless-default")), "discuss-headless-default: the command carries no round count");
   expect(userMessage("discuss-rounds-out-of-range").startsWith("/ask-codex:discuss rounds 1 "), "discuss-rounds-out-of-range: the command carries rounds 1");
 }
+// --- Ticket 04: a round that cannot complete ends the discussion with a partial report ----------------------------------------------
+{
+  const NEW = { "discuss-round-fails": "fail", "discuss-unstructured-ends": "unstructured" };
+  const scenarioOf = (c) => JSON.parse(text(evals, c, "scaffold.sh").match(/cat > \.stub\/scenario\.json <<'EOF'\n([\s\S]*?)\nEOF\n/)[1]);
+  const early = scenarioOf("discuss-early-consensus").exec.sequence[0];
+  for (const [c, mode] of Object.entries(NEW)) {
+    for (const f of ["case.yaml", "prompt.md", "scaffold.sh"]) expect(fs.existsSync(path.join(evals, c, f)), `${c}/${f} exists`);
+    expect(new RegExp(`^name: ${c}$`, "m").test(text(evals, c, "case.yaml")) && /^tags: \[discuss-skill\]$/m.test(text(evals, c, "case.yaml")), `${c}: case.yaml names the case and tags it discuss-skill`);
+    expect(/^description: ".+"$/m.test(prompt(c)) && /^max_turns: \d+$/m.test(prompt(c)) && /^timeout_seconds: \d+$/m.test(prompt(c)) && /^allowed_tools: \[.*\]$/m.test(prompt(c)) && !/^runs:/m.test(prompt(c)), `${c}: prompt.md has its header fields and no runs override`);
+    expect(/^set -euo pipefail$/m.test(text(evals, c, "scaffold.sh")), `${c}: the scaffold stops on error`);
+    expect(userMessage(c).startsWith("/ask-codex:discuss rounds 3 ") && !/AskUserQuestion/.test(prompt(c).match(/^allowed_tools: .*$/m)[0]), `${c}: the command carries rounds 3 (room for a retry or a round 3) and the session is headless`);
+    // The scenario: round 1 is the early-consensus reply (the disputed Redis point), round 2 is only a mode.
+    const seq = scenarioOf(c).exec.sequence;
+    expect(seq.length === 2, `${c}: the sequence has the two rounds the case needs`);
+    expect(JSON.stringify(seq[0]) === JSON.stringify(early), `${c}: round 1 is the early-consensus reply`);
+    expect(JSON.stringify(seq[1]) === JSON.stringify({ mode }), `${c}: round 2 is exactly {"mode": "${mode}"}`);
+    const errs = checkErr(seq[0].reply);
+    expect(errs.length === 0, `${c}: round 1 reply fits discussion.schema.json ${errs.slice(0, 3)}`);
+    const s = text(evals, c, "scaffold.sh");
+    expect(/No Redis/.test(s) && /Redis/.test(seq[0].reply.points[2].statement), `${c}: C3 (a shared Redis) contradicts the constraints file`);
+    for (const g of fs.readdirSync(path.join(evals, c, "graders"))) {
+      const n = g.replace(/\.md$/, ""), t = read(c, n);
+      if (/^pattern:|^input_match:/m.test(t)) expect((() => { try { re(c, n); return true; } catch { return false; } })(), `${c}/${n}: the pattern compiles as a JavaScript regex`);
+      expect(!/\(\?i\)/.test(t) && !/exec-calls/.test(t) && (!/^type: tool_used$/m.test(t) || /^tool: Bash$/m.test(t)), `${c}/${n}: no inline flags, no exec-calls, no Skill-tool grader`);
+      const p = t.match(/^  path: (.+)$/m);
+      if (p) expect(RECORDS.has(p[1].trim()), `${c}/${n}: reads a record the stub writes`);
+    }
+    // The graders both cases share with discuss-limit-reached are the same files.
+    for (const n of ["no-bare-cd", "no-violations", "report-sections", "two-calls", "round-2-marker"]) expect(read(c, n) === read("discuss-limit-reached", n), `${c}/${n} is the discuss-limit-reached grader`);
+    expect(/^type: tool_used$/m.test(read(c, "no-bare-cd")) && /^max: 0$/m.test(read(c, "no-bare-cd")), `${c}/no-bare-cd allows none`);
+    expect(["round-2-incomplete", "c3-unresolved-ended", "no-round-2-stance"].every((n) => fs.existsSync(path.join(evals, c, "graders", `${n}.md`))), `${c}: has the three partial-report graders`);
+    for (const n of ["round-2-incomplete", "c3-unresolved-ended", "no-round-2-stance"]) expect(read(c, n) === read("discuss-round-fails", n), `${c}/${n} is the same file in both cases`);
+    expect(/^type: regex$/m.test(read(c, "c3-unresolved-ended")) && !/^target:/m.test(read(c, "c3-unresolved-ended")) && /^match: not_contains$/m.test(read(c, "no-round-2-stance")) && !/^target:/m.test(read(c, "no-round-2-stance")), `${c}: the partial-report graders grade the final response`);
+  }
+  // The stub's round 2: a failing exit, and plain text that is not the discussion schema.
+  const stubText = text(evals, "_harness", "stub", "codex-stub.py");
+  expect(/if mode == "fail":\n\s+sys\.stderr\.write\([^\n]*\n\s+sys\.exit\(1\)/.test(stubText) && /elif mode == "unstructured":\n\s+reply = "I looked at the code and I think the timeout handling is the problem\."/.test(stubText), "stub: `fail` exits 1 without a reply, `unstructured` answers the timeout sentence");
+  expect(/call n \(1-based/.test(stubText), "stub: exec.sequence gives call n the settings of entry n");
+
+  // --- the graders on crafted partial reports -------------------------------------------------------------------------------------
+  const PART = (round2, tail = "") => [
+    "## Discussion process", "Topic: rate limiting for login()", "Model: gpt-6-sol (high)", "Round limit: 3", "MCP policy: all MCP servers disabled",
+    "Round 1: C1 and C2 matched my L2 and L3; C3 (shared Redis) disputed by me against docs/constraints.md:3.",
+    round2, tail,
+    "", "## Agreed", "- L2 = C1: Count failed attempts per username and per IP.", "- L3 = C2: Return one error text.",
+    "", "## For you to decide", "- C3 — Keep the failure counters in a shared Redis instance. (unresolved because the discussion ended)",
+    "  Claude recommends: in-process counters — docs/constraints.md:3 forbids Redis.",
+    "  Codex recommends: a shared store — a later second instance would lose the limit.",
+  ].join("\n");
+  const FAILED = PART("Round 2: did not complete — the run failed (Codex exited with an error).");
+  const UNSTR = PART("Round 2: did not complete — the reply was unstructured.", "Unstructured reply: \"I looked at the code and I think the timeout handling is the problem.\"");
+  const inc = re("discuss-round-fails", "round-2-incomplete");
+  expect(inc.test(FAILED) && inc.test(UNSTR) && inc.test(FAILED.replace("Round 2:", "**Round 2:**")) && inc.test(FAILED.replace("Round 2: ", "- Round 2: ")) && inc.test(FAILED.replace(/\n/g, "\r\n")), "round-2-incomplete: the fixed line passes, plain, marked up, in a list or with CRLF");
+  expect(!inc.test(PART("Round 2: Codex maintained C3.")) && !inc.test(PART("Round 2: did not complete.")) && !inc.test(PART("Round 2: did not complete — ")) && !inc.test(PART("Round 2 did not complete — the run failed.")) && !inc.test(PART("Round 3: did not complete — the run failed.")) && !inc.test(PART("Round 2: could not finish — the run failed.")), "round-2-incomplete: a stance line, no reason, no colon, another round or other words fail");
+  const unres = re("discuss-round-fails", "c3-unresolved-ended");
+  expect(unres.test(FAILED) && unres.test(FAILED.replace("(unresolved because the discussion ended)", "— **unresolved because the discussion ended**")) && unres.test(FAILED.replace(/^## (.*)$/gm, "**$1**")), "c3-unresolved-ended: C3 marked with the fixed words passes, plain or marked up");
+  expect(!unres.test(FAILED.replace(" (unresolved because the discussion ended)", "")) && !unres.test(FAILED.replace("unresolved because the discussion ended", "unresolved after the round limit")) && !unres.test(FAILED.replace("unresolved because the discussion ended", "split after debate")), "c3-unresolved-ended: no mark, or other words, fail");
+  expect(!unres.test(FAILED.replace("- C3 — Keep", "- C4 — Keep")), "c3-unresolved-ended: C3 not among the decision items fails");
+  expect(unres.test(FAILED.replace("- C3 — Keep", "- C1 — Count. (unresolved because the discussion ended)\n- C3 — Keep")), "c3-unresolved-ended: another C id listed before C3 does not matter");
+  expect(!unres.test(FAILED.replace(" (unresolved because the discussion ended)", "\n- C1 — Count. (unresolved because the discussion ended)")), "c3-unresolved-ended: another C id between C3 and the mark means C3 itself is not marked");
+  expect(!unres.test(FAILED.replace("- L3 = C2:", "- L3 = C3:").replace("- C3 — Keep the failure counters in a shared Redis instance. (unresolved because the discussion ended)", "- L9 — Reset the counter. (unresolved because the discussion ended)")), "c3-unresolved-ended: C3 only under Agreed fails");
+  const stance = re("discuss-round-fails", "no-round-2-stance");
+  expect(!stance.test(FAILED) && !stance.test(UNSTR) && !stance.test(UNSTR.replace("Round 2:", "**Round 2:**")) && !stance.test(PART("Round 2: **did not complete** — the reply was unstructured, so no stance was taken.")), "no-round-2-stance: the incomplete-round line, even one that names stances, passes");
+  expect(stance.test(PART("Round 2: Codex maintained C3 (a second instance later); I maintained my objection.")) && stance.test(PART("Round 2: Codex accepted C3's removal.")) && stance.test(PART("**Round 2:** I was persuaded by Codex.")) && stance.test(PART("Round 2: did not complete — the reply was unstructured.", "Round 2: Codex revised C3.")), "no-round-2-stance: a Round 2 line reporting a stance fails (also next to the incomplete-round line)");
+  expect(!stance.test(PART("Round 2: did not complete — the reply was unstructured.", "Codex maintained C3 in round 1.")), "no-round-2-stance: a stance mentioned outside a Round 2 line is not this grader's business");
+  const rf = re("discuss-round-fails", "round-2-reason-failure");
+  expect(rf.test(FAILED) && rf.test(PART("Round 2: did not complete — the launch failed (codex: command not found).")) && !rf.test(UNSTR) && !rf.test(PART("Round 2: did not complete — the stop was unconfirmed.")), "round-2-reason-failure: a failed run passes, an unstructured reply or another reason fails");
+  const ru = re("discuss-unstructured-ends", "round-2-reason-unstructured");
+  expect(ru.test(UNSTR) && !ru.test(FAILED) && !ru.test(PART("Round 2: did not complete — Codex returned no reply.")), "round-2-reason-unstructured: the unstructured reason passes, others fail");
+  const lab = re("discuss-unstructured-ends", "unstructured-label");
+  expect(lab.test(UNSTR) && lab.test(UNSTR.replace("Unstructured reply:", "**Unstructured reply:**")) && lab.test(UNSTR.replace("Unstructured reply: \"", "Unstructured reply:\n> \"")), "unstructured-label: the label followed by the reply passes, plain, marked up or as a block quote");
+  expect(!lab.test(FAILED) && !lab.test(UNSTR.replace("Unstructured reply:", "Unstructured:")) && !lab.test(UNSTR.replace("Unstructured reply: \"I looked at the code and I think the timeout handling is the problem.\"", "Unstructured reply:")) && !lab.test(UNSTR.replace("Unstructured reply:", "The reply was unstructured:")), "unstructured-label: no label, another label or an empty label fails");
+  const carried = re("discuss-unstructured-ends", "unstructured-carried");
+  expect(carried.test(UNSTR) && carried.test(UNSTR.replace(/Unstructured reply: .*/, "Unstructured reply: a short note blaming how timeouts are handled — timeout")) && !carried.test(FAILED) && !carried.test(PART("Round 2: did not complete — the reply was unstructured.", "Unstructured reply: Codex wrote something." + " ".repeat(700) + "timeout")), "unstructured-carried: the content under the label passes; no label, or the word far from the label, fails");
+  // The reports that the SKILL forbids would fail: an invented stance moves C3 out of the open items.
+  const INVENTED = FAILED.replace("Round 2: did not complete — the run failed (Codex exited with an error).", "Round 2: Codex maintained C3 and I maintained my objection.").replace(" (unresolved because the discussion ended)", "");
+  expect(!inc.test(INVENTED) && !unres.test(INVENTED) && stance.test(INVENTED), "an invented round-2 stance fails the incomplete-line, unresolved-mark and no-stance graders together");
+  expect(unres.source === re("discuss-unstructured-ends", "c3-unresolved-ended").source, "c3-unresolved-ended is the same grader in both cases");
+
+  // --- the skill states the fixed lines --------------------------------------------------------------------------------------------
+  const sec = skill.slice(skill.indexOf("## A round that cannot complete"), skill.indexOf("## 8. Report"));
+  expect(sec.length > 500 && skill.split("## A round that cannot complete").length === 2 && !skill.includes("A round that does not return a structured reply"), "skill: one early-end section, titled `A round that cannot complete`");
+  expect(skill.indexOf("## 7. Rounds 2 to n") < skill.indexOf("## A round that cannot complete") && skill.indexOf("## A round that cannot complete") < skill.indexOf("## 8. Report"), "skill: the early-end section sits between section 7 and the report");
+  expect(/Never retry it, never prepare another round, and make no further Codex call/.test(sec), "skill early end: no retry, no further round prepared, no further Codex call");
+  for (const [pat, what] of [[/`failed` or `launch_failed`/, "failed or launch_failed"], [/it is stopped: the user chose to stop at a `decision_required`/, "a stop chosen at decision_required"], [/headless stop path/, "the headless stop path"], [/`stop_unconfirmed`/, "stop_unconfirmed"], [/`format: unstructured`/, "format: unstructured"], [/does not match the discussion schema/, "a schema mismatch counts as unstructured"], [/`confirmation_required`/, "confirmation_required"]])
+    expect(pat.test(sec), `skill early end names the ending case: ${what}`);
+  expect(/Report the uncertainty and the retained location, never claim termination/.test(sec) && /never remove the run or call cleanup/.test(sec), "skill early end: an unconfirmed stop reports uncertainty and the retained location and never claims termination");
+  expect(/Never read stances, points or ids out of it/.test(sec), "skill early end: an unstructured reply is never turned into stances");
+  expect(/no interactive question tool and its `prepare` or `run` returns `confirmation_required`: do not execute\. Remove the request file and report the pending items and their decline outcomes/.test(sec), "skill early end: headless confirmation_required executes nothing and reports pending items with decline outcomes");
+  expect(/With an interactive question tool, a `confirmation_required` result in any round does not end the discussion: ask as `ask` says, prepare again with the answers, and run that same round\./.test(sec), "skill early end: interactive confirmation_required asks and continues the same round");
+  expect(sec.includes("`Round <n>: did not complete — <reason>.`"), "skill early end: the fixed incomplete-round line");
+  expect(sec.includes("`Unstructured reply:`") && sec.includes("`Pending confirmation:`") && sec.includes("`Retained location: <directory>`"), "skill early end: the labels Unstructured reply:, Pending confirmation: and Retained location:");
+  expect(sec.includes("`<id> — <statement> (unresolved because the discussion ended)`") && /never marked with them/.test(sec), "skill early end: open points carry the fixed words, and a point split at the limit never does");
+  expect(sec.includes("exactly `Codex recommends: none returned`") && /Codex's last returned position/.test(sec) && /Nothing from the incomplete round enters the ledger/.test(sec), "skill early end: Codex recommends its last returned position, or exactly `none returned`; nothing from the incomplete round is used");
+  expect(/The `Both recommend:` line replaces the two lines only when Codex returned a position and it matches yours/.test(sec), "skill early end: Both recommend only when Codex returned a matching position");
+  expect(/`Agreed`|\*\*Agreed\*\*/.test(sec) && /what was settled up to the last completed round/.test(sec), "skill early end: Agreed lists what was settled up to the last completed round");
+  expect(/follow `ask`'s stop rules|`ask`'s stop operation/.test(sec) && /Run `ask`'s stop operation and collect/.test(sec), "skill early end: a stop follows ask's stop operation");
+  const rep = skill.slice(skill.indexOf("## 8. Report"));
+  expect(/When the discussion has ended \(nothing contested, the last round the limit allows, or a round that cannot complete/.test(rep) && rep.includes('section "A round that cannot complete"'), "skill report: also written when a round cannot complete, pointing at the early-end section");
+  expect(/until nothing is contested or a round cannot complete/.test(skill) && /A round that cannot complete ends the discussion: see/.test(skill), "skill: the order of work and Running a round point at the early-end section");
+}
 // The schema checker bites: a reply with a wrong type, a missing key and an extra key is refused.
 {
   const good = JSON.parse(text(evals, "discuss-limit-reached", "scaffold.sh").match(/cat > \.stub\/scenario\.json <<'EOF'\n([\s\S]*?)\nEOF\n/)[1]).exec.sequence[1].reply;
