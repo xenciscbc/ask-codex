@@ -183,6 +183,8 @@ expect(!sect.test([order[1], "x", order[0], "x", order[2], "x"].join("\n")) && !
 expect(sect.source === re("discuss-limit-reached", "report-sections").source, "the report-sections grader is the same in both cases");
 const dec = re("discuss-limit-reached", "c3-decision-item");
 expect(dec.test(REPORT) && dec.test(REPORT.replace(/Claude recommends:/, "**Claude recommends:**").replace(/Codex recommends:/, "**Codex recommends**:")), "c3-decision-item: C3 with both recommendation lines passes");
+expect(dec.test(REPORT.replace("docs/constraints.md:3 forbids Redis.", "docs/constraints.md:3 forbids Redis; Codex maintained C3 while accepting L1.")), "c3-decision-item: C3 named again inside its own recommendation passes (seen in a t02b reply)");
+expect(!dec.test(REPORT.replace("docs/constraints.md:3 forbids Redis.", "see C1.")), "c3-decision-item: another C id inside the recommendations still fails");
 expect(!dec.test(REPORT.replace(/\n  Codex recommends:[^\n]*/, "")), "c3-decision-item: a missing Codex recommends line fails");
 expect(!dec.test(REPORT.replace(/\n  Claude recommends:[^\n]*/, "")), "c3-decision-item: a missing Claude recommends line fails");
 expect(!dec.test(REPORT.replace("- C3 — Keep", "- C4 — Keep")), "c3-decision-item: C3 not among the decision items fails");

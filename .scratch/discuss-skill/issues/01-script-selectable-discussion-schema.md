@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved — 1708335 (2026-10-04); see Comments
 
 - [ ] A request with `reply_schema` absent or `consultation` uses the consultation schema; `discussion` uses the discussion schema; any other value, and `discussion` with two models, is refused before any Codex command.
 - [ ] The prepared summary names the reply schema.
@@ -15,3 +15,9 @@
 - [ ] Stub: a two-entry reply sequence over two calls yields the first and second prompt in order in the numbered per-call prompt records, each numbered command-line record holds that call's schema path, and each reply follows its sequence entry. Existing single-call, per-model and call-log records are unchanged for scenarios without a sequence.
 - [ ] All existing offline harness tests (node and python) pass, except the named pre-existing CRLF failure of `ticket03-patterns.test.mjs`.
 - [ ] The `script-consultation` Claude case still passes.
+
+## Comments
+
+- 2026-10-04 — Implemented test-first (executor), commit 1708335. Main-session addition: `collect` reads the plan summary's `reply_schema` with a `consultation` default, so a run retained by an older version still collects after upgrade (an older prepared-but-unrun plan fails `run`'s summary recheck before Codex, which is safe).
+- Offline: `consultation_test.py` 37 OK, `resolve_test.py` 42 OK, every `evals/_harness/*.test.mjs` 0 failures.
+- `script-consultation` x3 on 1708335: 1.00 / 0.67 / 0.67 — the two misses are the LLM judge `report`; all three final replies meet every rubric clause on reading. Baseline 6266c3e x3 gives the identical 0.78 with the same judge misses, so this is not a regression. Evidence: `evidence/t01-run-log.txt`, `evidence/baseline-run-log.txt`.
