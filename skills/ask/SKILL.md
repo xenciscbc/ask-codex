@@ -45,6 +45,7 @@ If no question was given, infer it from the current conversation and briefly dis
 | follow-up | Earlier claims and dispositions, plus revised Plan if relevant | follow-up.md |
 
 A review of a whole change (the working tree, a branch or a commit range) is not an `ask` type: tell the user that `/ask-codex:review` runs one and that only they can start it, by typing the command — you cannot invoke it.
+A multi-round discussion with Codex is not an `ask` type: tell the user that `/ask-codex:discuss` runs one and that only they can start it, by typing the command — you cannot invoke it.
 A consultation about earlier claims or a revised Plan they reviewed is a follow-up. Carry all investigate claims for a request to follow up on investigate items; carry all non-rejected claims for re-checking a revised Plan. Use a fresh session, never resume/fork. Blind types must exclude hypotheses from every prompt slot, including the question, while retaining evidence.
 
 Read `prompts/consultation.md` and the selected file under `prompts/framing/` in this skill directory. Fill the question, context, framing and extra-path slots. For follow-ups, include each carried claim's id, disposition, statement and Claude's reason. Remove credentials from every slot, including URLs and logs. Prefer file locations over whole-file copies.
