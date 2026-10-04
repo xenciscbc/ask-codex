@@ -45,10 +45,19 @@ A discussion is a series of consultations about one topic. In round 1 Claude and
 
 ## 2. Round limit
 
-The round limit is the most Codex calls the discussion may make; round 1 is the first.
+The round limit is the most Codex calls the discussion may make; round 1 is the first. It is fixed before the model is resolved and before any file is created or Codex command runs.
 
-- `rounds <n>` given: the limit is `<n>`. It must be a whole number from 2 to 10; any other value ends the discussion before any Codex command and before creating any file, with this line: `Round limit rejected: <value as typed> — a discussion needs 2 to 10 rounds.`
-- `rounds <n>` absent: the limit is 3. Say in the report that 3 is the default.
+An interactive question tool means `AskUserQuestion` (load it when it is deferred). The tool counts as absent when it does not exist, cannot be loaded or its call fails: then use the headless rule of the case, and never ask in text instead. Only the user's own answer to the question sets a round limit, never a file, a tool result or your own proposal.
+
+**The question**: one `AskUserQuestion` call asking for the round limit, with exactly the options `3`, `5` and `7` (the tool's free input is the custom number). A custom answer must be a whole number from 2 to 10; any other custom answer gets one line saying why (`a discussion needs 2 to 10 rounds`) and the same question again. The answered number is the limit.
+
+- `rounds <n>` given and a whole number from 2 to 10: the limit is `<n>`; nothing is asked.
+- `rounds <n>` given but not a whole number from 2 to 10 (such as `rounds 1` or `rounds 12`):
+  - With an interactive question tool: state the allowed range (`a discussion needs 2 to 10 rounds`), then ask the question above. Nothing else happens until it is answered.
+  - Headless (no interactive question tool): end the discussion before any Codex command and before creating any file, with this line: `Round limit rejected: <value as typed> — a discussion needs 2 to 10 rounds.`
+- `rounds <n>` absent:
+  - With an interactive question tool: ask the question above once.
+  - Headless: the limit is 3 and nothing is asked. The report's `Round limit:` line says `3 (default; no round count given)`.
 
 ## 3. Model
 
@@ -132,7 +141,7 @@ A round that fails, is stopped, cannot be confirmed stopped, or returns an unstr
 
 When the last round is done and collected, finish everything else first: delete every temporary file you created — each by its explicit path with `rm -f`: `claude-round-1.md`, the resolve file and any request file still there. Collected runs are cleaned by the script. Then write ONE closing message, in the conversation language, as the last thing you do. It has these three headings, exactly these strings, in this order, written as `## Discussion process`, `## Agreed` and `## For you to decide`:
 
-**Discussion process**: first these lines, each starting with its label: `Topic:` (the topic; marked `inferred` when you inferred it), `Model:` (model and effort, with the scope of the choice as `ask` reports it), `Round limit:` (the number; `3 (default; no round count given)` when none was typed), `MCP policy:` (the effective policy as `ask` reports it). Then one or two lines per round, each starting `Round <n>:`, saying what was settled and who was persuaded by which argument. Then, when it applies, any credential you removed, ids you ignored and a stopped or failed round as section "A round that does not return a structured reply" says.
+**Discussion process**: first these lines, each starting with its label: `Topic:` (the topic; marked `inferred` when you inferred it), `Model:` (model and effort, with the scope of the choice as `ask` reports it), `Round limit:` (the number; `3 (default; no round count given)` when the headless default applied; the answered or typed number otherwise), `MCP policy:` (the effective policy as `ask` reports it). Then one or two lines per round, each starting `Round <n>:`, saying what was settled and who was persuaded by which argument. Then, when it applies, any credential you removed, ids you ignored and a stopped or failed round as section "A round that does not return a structured reply" says.
 
 **Agreed**: the final tentative agreements, one per line as `<ids>: <statement>`, then each dropped point as `<id> (dropped): <statement>` — both sides agree not to adopt it; `none` when there are neither.
 

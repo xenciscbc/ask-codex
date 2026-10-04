@@ -22,7 +22,7 @@ let pass = 0, fail = 0;
 const expect = (ok, label) => { if (ok) pass++; else { fail++; console.log(`FAIL ${label}`); } };
 
 const CASES = ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question",
-  "discuss-two-models-refused", "discuss-nl-not-loaded", "discuss-not-model-invocable"];
+  "discuss-two-models-refused", "discuss-nl-not-loaded", "discuss-not-model-invocable", "discuss-headless-default", "discuss-rounds-out-of-range"];
 const MARKER = "<!-- ask-codex-discuss-skill-body -->";
 const skill = text(repo, "skills", "discuss", "SKILL.md");
 const template = text(repo, "skills", "discuss", "prompts", "discussion.md");
@@ -98,12 +98,12 @@ expect(has.test(TS) && !has.test(""), "discuss-claude-first/has-call: one call p
 expect(re("discuss-rounds-arg-no-question", "has-call").test(TS + TS) && !re("discuss-rounds-arg-no-question", "has-call").test(""), "discuss-rounds-arg-no-question/has-call: a call passes, none fails");
 const most = re("discuss-nl-not-loaded", "at-most-one-call");
 expect(most.test("") && most.test(TS) && !most.test(TS + TS), "discuss-nl-not-loaded/at-most-one-call: zero or one passes, two fail");
-for (const c of ["discuss-two-models-refused", "discuss-not-model-invocable"]) {
+for (const c of ["discuss-two-models-refused", "discuss-not-model-invocable", "discuss-rounds-out-of-range"]) {
   const g = read(c, "no-exec-sentinel");
   expect(/^type: file_exists$/m.test(g) && /^path: \.stub\/exec\.sentinel$/m.test(g) && /^exists: false$/m.test(g), `${c}/no-exec-sentinel: zero calls = no sentinel file`);
   expect(!/exec\.sentinel/.test(text(evals, c, "scaffold.sh")), `${c}: the scaffold does not create the sentinel`);
 }
-for (const c of ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question"]) {
+for (const c of ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question", "discuss-headless-default"]) {
   expect(!/exec\.sentinel|exec-stdin|exec-argv/.test(text(evals, c, "scaffold.sh").replace(/^#.*$/gm, "")), `${c}: the scaffold leaves the stub records to the stub`);
 }
 const nlScaffold = text(evals, "discuss-nl-not-loaded", "scaffold.sh");
@@ -205,7 +205,7 @@ for (const c of CASES) {
   const g = read(c, "no-bare-cd");
   expect(/^type: tool_used$/m.test(g) && /^tool: Bash$/m.test(g) && /^max: 0$/m.test(g), `${c}/no-bare-cd allows none`);
 }
-for (const c of ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question"]) {
+for (const c of ["discuss-early-consensus", "discuss-limit-reached", "discuss-claude-first", "discuss-rounds-arg-no-question", "discuss-headless-default"]) {
   const g = read(c, "no-violations");
   expect(/^match: not_contains$/m.test(g) && /path: \.stub\/violations\.log/.test(g) && /^pattern: '\\S'$/m.test(g), `${c}/no-violations is the usual stub check`);
 }
@@ -270,7 +270,7 @@ for (const c of CASES) {
   for (const g of fs.readdirSync(path.join(evals, c, "graders"))) {
     const t = read(c, g.replace(/\.md$/, ""));
     expect(!/exec-calls/.test(t), `${c}/${g}: never grades exec-calls/*.json`);
-    expect(!/^type: tool_used$/m.test(t) || /^tool: (?:Bash|AskUserQuestion)$/m.test(t), `${c}/${g}: no Skill-tool grader for a user-only skill`);
+    expect(!/^type: tool_used$/m.test(t) || /^tool: (?:Bash|AskUserQuestion|Write)$/m.test(t), `${c}/${g}: no Skill-tool grader for a user-only skill`);
     if (/^pattern:|^input_match:/m.test(t)) expect((() => { try { re(c, g.replace(/\.md$/, "")); return true; } catch { return false; } })(), `${c}/${g}: the pattern compiles as a JavaScript regex`);
     expect(!/\(\?i\)/.test(t), `${c}/${g}: no inline flags`);
     const p = t.match(/^  path: (.+)$/m) || t.match(/^path: (.+)$/m);
@@ -285,7 +285,7 @@ for (const c of CASES) {
   const files = {};
   for (const m of s.matchAll(/cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF\n/g)) files[m[1]] = m[2].split("\n");
   const replies = exec.sequence ? exec.sequence.map((e) => e.reply) : [];
-  if (exec.sequence) expect(replies.length === 2, `${c}: the sequence has one entry per round the case needs`);
+  if (exec.sequence) expect(replies.length === (c === "discuss-headless-default" ? 3 : 2), `${c}: the sequence has one entry per round the case needs`);
   for (const [i, r] of replies.entries()) {
     const errors = checkErr(r);
     expect(errors.length === 0, `${c}: round ${i + 1} reply fits discussion.schema.json ${errors.slice(0, 3)}`);
@@ -305,11 +305,47 @@ for (const c of CASES) {
     expect(r1.points[2].reason === R3 && R3.length > 40, `${c}: C3's reason is the string the verbatim grader looks for`);
     const c3 = r2.points.find((p) => p.id === "C3");
     const wantStance = c === "discuss-early-consensus" ? "accept" : "maintain";
+    if (c === "discuss-headless-default") {
+      const p3 = replies[2].points[0];
+      expect(replies[2].points.length === 1 && p3.id === "C3" && p3.stance === "maintain" && p3.evidence.every((ev) => !!files[ev.split(":")[0]]), `${c}: round 3 maintains only C3, so the discussion stops at the default limit`);
+    }
     expect(c3.stance === wantStance, `${c}: round 2 ${wantStance}s C3`);
     expect(r2.points.filter((p) => p.stance === "maintain").length === (wantStance === "maintain" ? 1 : 0), `${c}: ${wantStance === "accept" ? "nothing" : "only C3"} is maintained in round 2`);
     // C3 contradicts the constraints file in the scaffold, so Claude disputes it.
     expect(/No Redis/.test(s) && /Redis/.test(r1.points[2].statement), `${c}: C3 (a shared Redis) contradicts the constraints file`);
   }
+}
+// --- Ticket 03: the round limit question, the headless default and the out-of-range refusal ---------------------------------------
+{
+  const sec = skill.slice(skill.indexOf("## 2. Round limit"), skill.indexOf("## 3. Model"));
+  expect(sec.includes("`AskUserQuestion`") && /exactly the options `3`, `5` and `7`/.test(sec), "skill section 2: the AskUserQuestion question offers exactly 3, 5 and 7");
+  expect(/whole number from 2 to 10/.test(sec) && /same question again/.test(sec), "skill section 2: a custom answer must be 2 to 10, otherwise asked again");
+  expect(/never ask in text/.test(sec) && /cannot be loaded or its call fails/.test(sec), "skill section 2: headless means absent, failing or unloadable, and never asks in text");
+  expect(sec.includes("`3 (default; no round count given)`") && /Headless: the limit is 3 and nothing is asked/.test(sec), "skill section 2: headless without rounds uses 3 and discloses it");
+  expect(sec.includes("`Round limit rejected: <value as typed> — a discussion needs 2 to 10 rounds.`") && /before any Codex command and before creating any file/.test(sec), "skill section 2: headless out-of-range keeps the fixed refusal line and stops before any command or file");
+  expect(/state the allowed range/.test(sec) && /Only the user's own answer/.test(sec), "skill section 2: interactive out-of-range states the range and asks; only the user's answer sets the limit");
+  expect(/^2\. Fix the round limit\.\n3\. Resolve the model\./m.test(skill), "skill: the round limit comes before the model");
+  const three = re("discuss-headless-default", "three-calls");
+  expect(/path: \.stub\/exec\.sentinel/.test(read("discuss-headless-default", "three-calls")), "discuss-headless-default/three-calls reads the stub sentinel");
+  expect(three.test(TS + TS + TS) && three.test(TS + TS + TS.trim()) && three.test((TS + TS + TS).replace(/\n/g, "\r\n")), "discuss-headless-default/three-calls: three lines pass");
+  expect(!three.test(TS + TS) && !three.test(TS + TS + TS + TS) && !three.test(TS) && !three.test(""), "discuss-headless-default/three-calls: two, four, one or no lines fail");
+  const disc = re("discuss-headless-default", "default-disclosed");
+  expect(disc.test("Round limit: 3 (default; no round count given)") && disc.test("**Round limit:** 3 (default; no round count given)") && disc.test(REPORT.replace("Round limit: 2", "Round limit: 3 (default; no round count given)")), "default-disclosed: the fixed wording passes, plain or marked up");
+  expect(!disc.test(REPORT.replace("Round limit: 2", "Round limit: 3")) && !disc.test("Round limit: 5 (default; no round count given)") && !disc.test("Round limit: 3 (you chose it)") && !disc.test(""), "default-disclosed: a bare 3, another number or other wording fails");
+  const rej1 = re("discuss-rounds-out-of-range", "refusal-line");
+  expect(rej1.test("Round limit rejected: 1 — a discussion needs 2 to 10 rounds.") && rej1.test("**Round limit rejected:** `1` — a discussion needs 2 to 10 rounds."), "discuss-rounds-out-of-range/refusal-line: the fixed line passes, plain or marked up");
+  expect(!rej1.test("Round limit rejected: 12 — a discussion needs 2 to 10 rounds.") && !rej1.test("Round limit rejected: 1.") && !rej1.test("A discussion takes exactly one model: sol, astra names two.") && !rej1.test("I cannot start that."), "refusal-line (rounds): another value, no range or another refusal fails");
+  const ncs = read("discuss-rounds-out-of-range", "no-consult-script");
+  expect(/^type: tool_used$/m.test(ncs) && /^tool: Bash$/m.test(ncs) && /^max: 0$/m.test(ncs), "no-consult-script allows none");
+  const consult = re("discuss-rounds-out-of-range", "no-consult-script");
+  expect(consult.test(cmd("python '/x/ask-codex/skills/ask/scripts/consult.py' resolve '/tmp/r.json'")) && !consult.test(cmd("ls /w")) && !consult.test(cmd("cat docs/constraints.md")), "no-consult-script: a consult.py command is caught, other commands are not");
+  const wr = read("discuss-rounds-out-of-range", "no-file-written");
+  expect(/^type: tool_used$/m.test(wr) && /^tool: Write$/m.test(wr) && /^max: 0$/m.test(wr), "no-file-written: no Write tool use");
+  expect(re("discuss-rounds-out-of-range", "no-codex-call").source === re("discuss-two-models-refused", "no-codex-call").source, "discuss-rounds-out-of-range/no-codex-call is the two-models grader");
+  const tools = (c) => prompt(c).match(/^allowed_tools: .*$/m)[0];
+  expect(!/AskUserQuestion/.test(tools("discuss-headless-default")) && !/AskUserQuestion/.test(tools("discuss-rounds-out-of-range")), "ticket 03 cases are headless: the question tool is not offered");
+  expect(userMessage("discuss-headless-default").startsWith("/ask-codex:discuss design rate limiting") && !/\brounds\b/.test(userMessage("discuss-headless-default")), "discuss-headless-default: the command carries no round count");
+  expect(userMessage("discuss-rounds-out-of-range").startsWith("/ask-codex:discuss rounds 1 "), "discuss-rounds-out-of-range: the command carries rounds 1");
 }
 // The schema checker bites: a reply with a wrong type, a missing key and an extra key is refused.
 {
