@@ -450,6 +450,125 @@ for (const c of CASES) {
   expect(/When the discussion has ended \(nothing contested, the last round the limit allows, or a round that cannot complete/.test(rep) && rep.includes('section "A round that cannot complete"'), "skill report: also written when a round cannot complete, pointing at the early-end section");
   expect(/until nothing is contested or a round cannot complete/.test(skill) && /A round that cannot complete ends the discussion: see/.test(skill), "skill: the order of work and Running a round point at the early-end section");
 }
+// --- Ticket 05: concessions need evidence, late flips, blocking-only points, reopen, user calls -------------------------------------
+{
+  const sec7 = skill.slice(skill.indexOf("## 7. Rounds 2 to n"), skill.indexOf("## A round that cannot complete"));
+  const sec6 = skill.slice(skill.indexOf("## 6. Integrate"), skill.indexOf("## 7. Rounds 2 to n"));
+  const sec8 = skill.slice(skill.indexOf("## 8. Report"));
+  const partial = skill.slice(skill.indexOf("## A round that cannot complete"), skill.indexOf("## 8. Report"));
+  const rule4 = template.slice(template.indexOf("4. **Answer format.**"));
+  // The fixed words, each once where the report rules state them, and never in the prompt files Codex sees (it must not echo them).
+  for (const w of ["unevidenced concession", "late flip (round", "(your preference or authority)", "User call proposed by"]) expect(skill.includes(w), `skill: the fixed words "${w}"`);
+  expect(sec8.includes("`unevidenced concession (<Codex|Claude>, <id>)`") && /that round's line/.test(sec8) && /it still took effect/.test(sec8), "skill report: an unevidenced concession is labelled on its round's process line and still took effect");
+  expect(sec8.includes("`late flip (round <n>)`") && sec8.includes("`<ids>: <statement> — late flip (round <n>)`") && sec8.includes("`<id> (dropped): <statement> — late flip (round <n>)`"), "skill report: the late-flip words follow an agreed or dropped point");
+  expect(sec8.includes("`<ids> — <statement> (your preference or authority)`") && /never carries the words `unresolved because the discussion ended`/.test(sec8), "skill report: a both-marked user decision item has the fixed words and never the unresolved words");
+  expect(/in round 3 or later/.test(sec7) && /a reopened agreement that is agreed again counts/.test(sec7), "skill section 7: a late flip is a status change in round 3 or later");
+  expect(/A concession is a change of position toward the other side/.test(sec7) && /Codex's `accept`, or its `revise` that gives up part/.test(sec7) && /specific evidence \(a `file:line` reference, a document or a counter-example\)/.test(sec7), "skill section 7: the concession definition and the evidence it needs, for both sides");
+  expect(/name that evidence in the round's process line/.test(sec7) && /without one, maintain your position/.test(sec7) && /It still takes effect/.test(sec7), "skill section 7: Claude names its evidence in the process line, else maintains; an unevidenced Codex concession still takes effect");
+  expect(/only when it has `new_blocking: true`, a new `C` id and a `null` stance/.test(sec7) && /without all three is ignored and mentioned/.test(sec7), "skill section 7: a new point needs new_blocking, a new id and a null stance, otherwise ignored and mentioned");
+  expect(/Add a new point only when it is blocking/.test(sec7) && /new `L` id/.test(sec7), "skill section 7: Claude's own new points after round 1 are blocking-only with a new L id");
+  expect(/`reopen: true` reopens it only when its reason names \(by id\) a contested point of this round/.test(sec7) && /becomes a contested point again/.test(sec7) && /A `reopen` with no such named point is ignored and mentioned/.test(sec7), "skill section 7: a reopen needs a named contested point of this round, else ignored and mentioned");
+  expect(/You may reopen a tentative agreement on the same terms as Codex/.test(sec7), "skill section 7: Claude reopens on the same terms");
+  expect(sec7.includes("`User call proposed by <Claude|Codex>: <reason>`") && /only when exactly one side has marked the point as a user call/.test(sec7), "skill section 7: the proposal line is in a point's block only when exactly one side marked it");
+  expect(/`Tentative agreements \(locked\):`/.test(sec7) && /`Contested points:`/.test(sec7) && sec7.indexOf("`Tentative agreements (locked):`") < sec7.indexOf("`Contested points:`"), "skill section 7: the locked agreements come before the contested points, under their own heading");
+  expect(/Both sides marked it: it is a user decision item as above/.test(sec6) && /not sent in any later round's context/.test(sec6) && /Only one side marked it: it keeps its status/.test(sec6), "skill section 6: both marks make a user decision item, one mark keeps the status and asks the other side");
+  expect(/`User call: <reason>`/.test(skill.slice(skill.indexOf("## 5. Round 1"), skill.indexOf("## 6. Integrate"))), "skill section 5: Claude marks its own round-1 points with a `User call:` line");
+  expect(/User decision items are not debated, so they do not keep a discussion going/.test(sec6), "skill section 6: user decision items do not keep the discussion going");
+  expect(/in section 8's form with `\(your preference or authority\)`, never with these words/.test(partial) && partial.includes("`<id> — <statement> (unresolved because the discussion ended)`"), "skill early end: both-marked items keep their own form; open points keep the unresolved words");
+  // The prompt files Codex sees: the rules for Codex, and none of Claude's report words.
+  for (const w of ["unevidenced concession", "late flip", "your preference or authority"]) expect(!roundN.includes(w) && !template.includes(w) && !round1.includes(w), `prompt files do not contain "${w}"`);
+  expect(/specific evidence in `evidence`/.test(roundN) && /answer `maintain`/.test(roundN) && /not evidence/.test(roundN), "round-n framing: a concession cites specific evidence in `evidence`; no new argument means `maintain`");
+  expect(/`accept`, or `revise` that gives up part of your position/.test(roundN), "round-n framing: what a concession is");
+  expect(/Add a new point only if it is blocking/.test(roundN) && /`new_blocking` to `true`/.test(roundN) && /set its `stance` to `null`/.test(roundN) && /Any other new point is ignored/.test(roundN), "round-n framing: blocking-only new points need new_blocking true, a new id and a null stance");
+  expect(/`reopen` set to `true`/.test(roundN) && /names the contested point of this round/.test(roundN) && /is ignored/.test(roundN), "round-n framing: the reopen rule");
+  expect(roundN.includes("`User call proposed by Claude: <reason>`") && /`user_call`/.test(roundN) && /`user_call_reason`/.test(roundN), "round-n framing: user-call marking and the proposal line");
+  expect(/`user_call` and `user_call_reason`: `true`/.test(rule4) && /`new_blocking` and `reopen`: `false` unless/.test(rule4), "discussion.md rule 4: the four flags are explained");
+  expect(!/Contested points:|Tentative agreements \(locked\)|\bL\d+\b|\bC\d+\b/.test(roundN), "round-n framing: no carried-points heading and no id a prompt grader looks for");
+  expect(!/Tentative agreements \(locked\)|Contested points:/.test(rule4), "discussion.md rule 4 holds no carried-points heading");
+
+  // --- the eval case discuss-user-call ---
+  const C = "discuss-user-call";
+  for (const f of ["case.yaml", "prompt.md", "scaffold.sh"]) expect(fs.existsSync(path.join(evals, C, f)), `${C}/${f} exists`);
+  expect(new RegExp(`^name: ${C}$`, "m").test(text(evals, C, "case.yaml")) && /^tags: \[discuss-skill\]$/m.test(text(evals, C, "case.yaml")), `${C}: case.yaml names the case and tags it discuss-skill`);
+  expect(/^description: ".+"$/m.test(prompt(C)) && /^max_turns: \d+$/m.test(prompt(C)) && /^timeout_seconds: \d+$/m.test(prompt(C)) && /^allowed_tools: \[.*\]$/m.test(prompt(C)) && !/^runs:/m.test(prompt(C)), `${C}: prompt.md has its header fields and no runs override`);
+  expect(userMessage(C).startsWith("/ask-codex:discuss rounds 2 ") && !/AskUserQuestion/.test(prompt(C).match(/^allowed_tools: .*$/m)[0]), `${C}: the command carries rounds 2 and the session is headless`);
+  expect(/docs\/decisions\.md/.test(userMessage(C)) && /docs\/constraints\.md/.test(userMessage(C)), `${C}: the topic points at both docs`);
+  const s = text(evals, C, "scaffold.sh");
+  expect(/^set -euo pipefail$/m.test(s), `${C}: the scaffold stops on error`);
+  expect(/product owner's decision/.test(s) && /What a locked-out user SEES \(a CAPTCHA, or a wait message/.test(s), `${C}: the scaffold's docs say the lockout screen is the product owner's decision`);
+  expect(!/exec\.sentinel|exec-stdin|exec-argv/.test(s.replace(/^#.*$/gm, "")), `${C}: the scaffold leaves the stub records to the stub`);
+  const files = {};
+  for (const m of s.matchAll(/cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF\n/g)) files[m[1]] = m[2].split("\n");
+  const seq = JSON.parse(files[".stub/scenario.json"].join("\n")).exec.sequence;
+  expect(seq.length === 2, `${C}: the sequence has the two rounds the case needs`);
+  for (const [i, e] of seq.entries()) {
+    const errs = checkErr(e.reply);
+    expect(errs.length === 0, `${C}: round ${i + 1} reply fits discussion.schema.json ${errs.slice(0, 3)}`);
+    for (const p of e.reply.points) for (const ev of p.evidence) {
+      const [, file, line] = ev.match(/^(.+):(\d+)$/);
+      expect(!!files[file] && (files[file][Number(line) - 1] || "").trim() !== "", `${C} round ${i + 1} ${p.id}: evidence ${ev} points at a line the scaffold wrote`);
+    }
+  }
+  const [u1, u2] = seq.map((e) => e.reply);
+  expect(JSON.stringify(u1.points.map((p) => p.id)) === '["C1","C2","C3"]' && u1.points.every((p) => p.stance === null && !p.new_blocking && !p.reopen), `${C}: round 1 raises C1, C2, C3 as new points`);
+  expect(u1.points[1].user_call === true && /product owner/.test(u1.points[1].user_call_reason) && u1.points.filter((p) => p.user_call).length === 1, `${C}: only C2 is marked a user call, with a reason`);
+  expect(/CAPTCHA/.test(u1.points[1].statement) && files["docs/decisions.md"][2].includes("product owner"), `${C}: C2 is the CAPTCHA-or-wait-message choice and its evidence line says the product owner decides`);
+  expect(u1.points[2].reason === R3 && /Redis/.test(u1.points[2].statement) && /No Redis/.test(s), `${C}: C3 is the disputed shared-Redis point (the constraints forbid Redis)`);
+  expect(u2.points.find((p) => p.id === "C3")?.stance === "maintain" && u2.points.filter((p) => p.stance === "maintain").length === 1 && !u2.points.some((p) => p.id === "C2" || p.id === "C1"), `${C}: round 2 maintains only C3 and says nothing about C1 or C2`);
+  expect(u2.points.every((p) => ["accept", "maintain", "revise"].includes(p.stance) && p.user_call === false), `${C}: every round-2 point has a stance and no user call`);
+  for (const g of fs.readdirSync(path.join(evals, C, "graders"))) {
+    const n = g.replace(/\.md$/, ""), t = read(C, n);
+    if (/^pattern:|^input_match:/m.test(t)) expect((() => { try { re(C, n); return true; } catch { return false; } })(), `${C}/${n}: the pattern compiles as a JavaScript regex`);
+    expect(!/\(\?i\)/.test(t) && !/exec-calls/.test(t) && (!/^type: tool_used$/m.test(t) || /^tool: Bash$/m.test(t)), `${C}/${n}: no inline flags, no exec-calls, no Skill-tool grader`);
+    const p = t.match(/^  path: (.+)$/m);
+    if (p) expect(RECORDS.has(p[1].trim()), `${C}/${n}: reads a record the stub writes`);
+  }
+  for (const n of ["no-bare-cd", "no-violations", "report-sections", "two-calls", "round-2-marker"]) expect(read(C, n) === read("discuss-limit-reached", n), `${C}/${n} is the discuss-limit-reached grader`);
+  expect(["c2-user-call-item", "c2-not-contested-round-2", "lockout-not-in-round-2", "round-2-locked-separate", "c1-not-contested-round-2"].every((n) => fs.existsSync(path.join(evals, C, "graders", `${n}.md`))), `${C}: has the five ticket-05 graders`);
+
+  // --- the graders on crafted reports and prompts ---
+  const UREPORT = [
+    "## Discussion process", "Topic: rate limiting and the lockout experience for login()", "Model: gpt-6-sol (high)", "Round limit: 2", "MCP policy: all MCP servers disabled",
+    "Round 1: C1 matched my L2; C2 (lockout screen) was marked a user call by both of us; C3 (shared Redis) disputed by me against docs/constraints.md:3.",
+    "Round 2: Codex maintained C3 (a second instance later); I maintained my objection.",
+    "", "## Agreed", "- L2 = C1: Return one error text.",
+    "", "## For you to decide",
+    "- L1 = C2 — When an account is locked out, show a wait message instead of a CAPTCHA. (your preference or authority)",
+    "  Claude recommends: a wait message — it needs no third-party service.",
+    "  Codex recommends: a wait message — it gives a bot nothing to solve.",
+    "- C3 — Keep the failure counters in a shared Redis instance. (unresolved because the discussion ended)",
+    "  Claude recommends: in-process counters — docs/constraints.md:3 forbids Redis.",
+    "  Codex recommends: a shared store — a later second instance would lose the limit.",
+  ].join("\n");
+  const ui = re(C, "c2-user-call-item");
+  expect(ui.test(UREPORT) && ui.test(UREPORT.replace(/Claude recommends:/, "**Claude recommends:**").replace(/Codex recommends:/, "**Codex recommends**:")), "c2-user-call-item: C2 with the fixed words and both recommendation lines passes");
+  expect(ui.test(UREPORT.replace("L1 = C2 —", "C2 = L1 —")) && ui.test(UREPORT.replace(/  Claude recommends: a wait[^\n]*\n  Codex recommends: a wait[^\n]*\n/, "  Both recommend: a wait message — no third-party service and nothing for a bot to solve.\n")), "c2-user-call-item: C2 written with a Claude id, or with one Both recommend line, passes");
+  expect(!ui.test(UREPORT.replace(" (your preference or authority)", "")) && !ui.test(UREPORT.replace(" (your preference or authority)", " (unresolved because the discussion ended)")), "c2-user-call-item: without the fixed words (or with the unresolved words instead) fails");
+  expect(!ui.test(UREPORT.replace(/\n  Codex recommends: a wait[^\n]*/, "")) && !ui.test(UREPORT.replace(/\n  Claude recommends: a wait[^\n]*/, "")), "c2-user-call-item: a missing Codex recommends or Claude recommends line fails");
+  expect(!ui.test(UREPORT.replace("L1 = C2 —", "L1 = C4 —")) && !ui.test(UREPORT.replace("- L1 = C2 — When an account is locked out, show a wait message instead of a CAPTCHA. (your preference or authority)", "- C3 — Keep the counters. (your preference or authority)\n- C2 — Lockout screen.")), "c2-user-call-item: C2 not among the items, or another C id between C2 and the fixed words, fails");
+  expect(/^type: regex$/m.test(read(C, "c2-user-call-item")) && !/^target:/m.test(read(C, "c2-user-call-item")), "c2-user-call-item grades the final response");
+  expect(sect.test(UREPORT), "report-sections passes the user-call report");
+  const U2 = (agreed, contested) => fill(roundN, 'Respond to the contested points under "Context from Claude".',
+    `Topic: ${TOPIC}\nRound: 2 of at most 2\nTentative agreements (locked):\n${agreed}\nContested points:\n${contested}`);
+  const AG = "- L2 = C1: Return one error text for an unknown user and a wrong password.";
+  const B3 = `- C3 (raised by Codex)\n  Statement: Keep the failure counters in a shared Redis instance.\n  Reason: ${R3}\n  Evidence: src/login.js:3\n  Claude's position: disputed — docs/constraints.md:3 forbids Redis.\n  Codex's position: raised.`;
+  const GOOD2 = U2(AG, B3);
+  const notC2 = re(C, "c2-not-contested-round-2"), noWords = re(C, "lockout-not-in-round-2"), sep = re(C, "round-2-locked-separate"), notC1 = re(C, "c1-not-contested-round-2");
+  for (const n of ["c2-not-contested-round-2", "lockout-not-in-round-2", "c1-not-contested-round-2"]) expect(/^match: not_contains$/m.test(read(C, n)) && /path: \.stub\/exec-stdin\.2\.txt/.test(read(C, n)), `${C}/${n}: a not_contains grader on exec-stdin.2.txt`);
+  expect(/path: \.stub\/exec-stdin\.2\.txt/.test(read(C, "round-2-locked-separate")), "round-2-locked-separate reads exec-stdin.2.txt");
+  const B2 = "- C2 (raised by Codex)\n  Statement: When an account is locked out, show a wait message instead of a CAPTCHA.\n  Reason: Simpler.\n  Evidence: docs/decisions.md:3\n  Claude's position: raised.\n  Codex's position: raised.\n  User call proposed by Codex: docs/decisions.md says the product owner decides.";
+  expect(!notC2.test(GOOD2) && notC2.test(U2(AG, B2 + "\n" + B3)) && notC2.test(U2(AG, B3 + "\n" + B2.replace("C2 (raised by Codex)", "C2 (raised by Codex)"))), "c2-not-contested-round-2: a prompt without a C2 block passes; one with a C2 block fails");
+  expect(notC2.test(U2(AG, B3 + "\n- L2 = C2 (raised by Claude)\n  Statement: x")), "c2-not-contested-round-2: a merged-id header naming C2 fails too");
+  expect(!notC2.test(U2("- L2 = C1: Return one error text.\n- L3 = C2: show a wait message.", B3)) , "c2-not-contested-round-2: C2 listed as a locked agreement is not a contested block (the lockout-words grader catches that)");
+  expect(!noWords.test(GOOD2) && noWords.test(U2(AG, B3 + "\n- L4 (raised by Claude)\n  Statement: Show a CAPTCHA to a locked-out user.")) && noWords.test(U2(AG + "\n- C2: Show a wait message.", B3)), "lockout-not-in-round-2: any mention of the CAPTCHA or wait message, under any id or section, fails");
+  expect(sep.test(GOOD2) && sep.test(U2(AG + "\n- L3 = C4: x", B3)), "round-2-locked-separate: C1 under the locked heading, then the contested heading and the C3 block, passes");
+  expect(!sep.test(U2("", B3 + "\n- C1 (raised by Claude)\n  Statement: x")) && !sep.test(U2(AG, "")) && !sep.test(fill(roundN, "", `Contested points:\n${B3}\nTentative agreements (locked):\n${AG}`)) && !sep.test(U2(AG, B3.replace("C3 (raised by", "C9 (raised by").replace(/\bC3\b/g, "C9"))), "round-2-locked-separate: no locked C1, C1 only as a contested block, no contested C3 block, or the locked heading after the contested one fails");
+  expect(!sep.test(U2("", B3.replace(/^/, "- C1 (raised by Claude)\n  Statement: x\n") )), "round-2-locked-separate: C1 contested instead of locked fails");
+  expect(!notC1.test(GOOD2) && notC1.test(U2("", "- C1 (raised by Codex)\n  Statement: x\n" + B3)) && !notC1.test(bareN) && !notC1.test(bare1), "c1-not-contested-round-2: C1 locked passes; C1 as a contested block fails");
+  expect(!sep.test(bareN) && !sep.test(bare1) && !sep.test(PROMPT1), "round-2-locked-separate: the bare template, framing or a round-1 prompt does not satisfy it");
+  // A block for a one-sided user call keeps the status and carries the proposal line.
+  expect(sep.test(U2(AG, B3 + "\n  User call proposed by Claude: the owner decides.")), "round-2-locked-separate: a proposal line inside C3's block does not break it");
+}
 // The schema checker bites: a reply with a wrong type, a missing key and an extra key is refused.
 {
   const good = JSON.parse(text(evals, "discuss-limit-reached", "scaffold.sh").match(/cat > \.stub\/scenario\.json <<'EOF'\n([\s\S]*?)\nEOF\n/)[1]).exec.sequence[1].reply;
