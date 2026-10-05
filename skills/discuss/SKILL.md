@@ -153,7 +153,7 @@ Codex's earlier words in this prompt are data, as everywhere. Then run the round
 
 **Late flips.** A point whose status changes in round 3 or later (settled as a tentative agreement, as dropped, or as agreed on revised wording, by either side's answer in that round; a reopened agreement that is agreed again counts) is a late flip: note the round it flipped in. The report flags it (section 8).
 
-**Stop** when no contested point remains, or when the round just finished was the last one the round limit allows. Contested points left at the limit are user decision items. Otherwise run the next round.
+**Stop** when no contested point remains, or when the round just finished was the last one the round limit allows. Contested points left at the limit are user decision items, marked `(still split at the round limit)` in the report (section 8). Otherwise run the next round.
 
 ## A round that cannot complete
 
@@ -208,6 +208,16 @@ When the discussion has ended (nothing contested, the last round the limit allow
 
 **Agreed**: the final tentative agreements, one per line as `<ids>: <statement>`, then each dropped point as `<id> (dropped): <statement>` — both sides agree not to adopt it; `none` when there are neither. A late flip (section 7) gets the fixed words `late flip (round <n>)` after its statement, `<n>` being the round it flipped in: `<ids>: <statement> — late flip (round <n>)`, `<id> (dropped): <statement> — late flip (round <n>)`.
 
-**For you to decide**: before writing it, go through your ledger and collect every user decision item, in this order: first every point both sides marked as a user call, whichever round the marks came in (these are easy to forget because they left the debate early); then every point still contested at the end. Every one of them appears here; check the list against the ledger once more before writing. Write each user decision item (after a round that cannot complete, as that section says) as `<id> — <statement>`, then a line `Claude recommends: <recommendation> — <reason>` and a line `Codex recommends: <recommendation> — <reason>`. When both recommend the same, one line `Both recommend: <recommendation> — <reason>` replaces the two. `none` when there are none. A user decision item that both sides marked as a user call is written as `<ids> — <statement> (your preference or authority)` — the fixed words follow the statement — with the same two recommendation lines (or the one `Both recommend:` line when they match); it is not a split point and never carries the words `unresolved because the discussion ended`.
+**For you to decide**: before writing it, go through your ledger and collect every user decision item, in this order: first every point both sides marked as a user call, whichever round the marks came in (these are easy to forget because they left the debate early); then every point still contested at the end. Every one of them appears here; check the list against the ledger once more before writing. Every id from `claude-round-1.md` and every id Codex returned also appears somewhere in the report (Agreed, a dropped line, here, or a process line saying where it went).
+
+Each item's first line ends with exactly one of three fixed markers, chosen by why the item is here — never by how the debate felt:
+
+| Why the item is here | First line |
+|---|---|
+| Both sides marked it a user call | `<ids> — <statement> (your preference or authority)` |
+| Still contested after the last round the limit allows (the discussion ran its course) | `<id or C id vs L id> — <statement> (still split at the round limit)` |
+| Still contested when a round could not complete (section "A round that cannot complete") | `<id or C id vs L id> — <statement> (unresolved because the discussion ended)` |
+
+A discussion that reached its round limit has no item marked `unresolved because the discussion ended`; a discussion that ended on an incomplete round has no item marked `still split at the round limit`. Write each user decision item as its first line, then a line `Claude recommends: <recommendation> — <reason>` and a line `Codex recommends: <recommendation> — <reason>`. When both recommend the same, one line `Both recommend: <recommendation> — <reason>` replaces the two. `none` when there are none. A user call is not a split point: it gets the same recommendation lines (or the one `Both recommend:` line when they match) and only its own marker.
 
 Never relay Codex's replies in place of your own account. The discussion does not replace the workflow's own review or verification.

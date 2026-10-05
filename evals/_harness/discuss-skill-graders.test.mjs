@@ -196,6 +196,17 @@ const agreedOnly = REPORT.replace("- L3 = C2:", "- L3 = C3:").replace("- C3 — 
 expect(!dec.test(agreedOnly), "c3-decision-item: C3 only under Agreed fails");
 expect(!dec.test(REPORT.replace("- C3 — Keep the failure counters in a shared Redis instance.\n", "- C3 — Keep the counters.\n- C1 — Another item.\n")), "c3-decision-item: another C id between C3 and the recommendation lines fails");
 expect(/^type: regex$/m.test(read("discuss-limit-reached", "c3-decision-item")) && !/^target:/m.test(read("discuss-limit-reached", "c3-decision-item")), "c3-decision-item and report-sections grade the final response");
+// Verifier finding F1 (2026-10-05): a split point at the round limit carries its own marker, never the interrupted one.
+const SPLIT = REPORT.replace("- C3 — Keep the failure counters in a shared Redis instance.", "- C3 vs L1 — Keep the failure counters in a shared Redis instance. (still split at the round limit)");
+const ENDED = REPORT.replace("- C3 — Keep the failure counters in a shared Redis instance.", "- C3 vs L1 — Keep the failure counters in a shared Redis instance. (unresolved because the discussion ended)");
+for (const c of ["discuss-limit-reached", "discuss-user-call", "discuss-headless-default"]) {
+  for (const n of ["c3-still-split", "no-ended-marker"]) expect(read(c, n) === read("discuss-limit-reached", n), `${c}/${n} is the discuss-limit-reached grader`);
+}
+const still = re("discuss-limit-reached", "c3-still-split"), ended = re("discuss-limit-reached", "no-ended-marker");
+expect(still.test(SPLIT) && still.test(SPLIT.replace("C3 vs L1", "C3")) && still.test(SPLIT.replace("## For you to decide", "**For you to decide**")), "c3-still-split: C3 (alone or as an opposed pair) with the round-limit marker passes");
+expect(!still.test(REPORT) && !still.test(ENDED) && !still.test(SPLIT.replace("- C3 vs L1", "- C4 vs L1")) && !still.test("- C3 — x (still split at the round limit)\n## For you to decide\nnone"), "c3-still-split: no marker, the interrupted marker, another id, or the marker only before the heading fails");
+expect(/^match: not_contains$/m.test(read("discuss-limit-reached", "no-ended-marker")) && !ended.test(SPLIT) && ended.test(ENDED), "no-ended-marker: a limit-path report with the interrupted marker fails, one with the round-limit marker passes");
+expect(skill.includes("(still split at the round limit)") && /never by how the debate felt/.test(skill) && /has no item marked `unresolved because the discussion ended`/.test(skill), "skill: three fixed markers chosen by why the item is there; a limit-path report never uses the interrupted marker");
 
 // --- The two-model refusal and the other tool graders --------------------------------------------------------------------
 const rej = re("discuss-two-models-refused", "refusal-line");
@@ -465,7 +476,7 @@ for (const c of CASES) {
   for (const w of ["unevidenced concession", "late flip (round", "(your preference or authority)", "User call proposed by"]) expect(skill.includes(w), `skill: the fixed words "${w}"`);
   expect(sec8.includes("`unevidenced concession (<Codex|Claude>, <id>)`") && /that round's line/.test(sec8) && /it still took effect/.test(sec8), "skill report: an unevidenced concession is labelled on its round's process line and still took effect");
   expect(sec8.includes("`late flip (round <n>)`") && sec8.includes("`<ids>: <statement> — late flip (round <n>)`") && sec8.includes("`<id> (dropped): <statement> — late flip (round <n>)`"), "skill report: the late-flip words follow an agreed or dropped point");
-  expect(sec8.includes("`<ids> — <statement> (your preference or authority)`") && /never carries the words `unresolved because the discussion ended`/.test(sec8), "skill report: a both-marked user decision item has the fixed words and never the unresolved words");
+  expect(sec8.includes("`<ids> — <statement> (your preference or authority)`") && /exactly one of three fixed markers/.test(sec8) && /only its own marker/.test(sec8), "skill report: a both-marked user decision item has its own fixed words and only that marker");
   expect(/in round 3 or later/.test(sec7) && /a reopened agreement that is agreed again counts/.test(sec7), "skill section 7: a late flip is a status change in round 3 or later");
   expect(/A concession is a change of position toward the other side/.test(sec7) && /Codex's `accept`, or its `revise` that gives up part/.test(sec7) && /specific evidence \(a `file:line` reference, a document or a counter-example\)/.test(sec7), "skill section 7: the concession definition and the evidence it needs, for both sides");
   expect(/name that evidence in the round's process line/.test(sec7) && /without one, maintain your position/.test(sec7) && /It still takes effect/.test(sec7), "skill section 7: Claude names its evidence in the process line, else maintains; an unevidenced Codex concession still takes effect");
