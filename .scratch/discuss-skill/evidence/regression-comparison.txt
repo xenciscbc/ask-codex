@@ -1,0 +1,64 @@
+parallel-two-models  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  adopted: candidate 3/3, baseline 3/3
+  exec-twice: candidate 3/3, baseline 3/3
+  gpt-6-astra-disable-set: candidate 3/3, baseline 3/3
+  gpt-6-sol-disable-set: candidate 3/3, baseline 3/3
+  h-consensus: candidate 1/3, baseline 1/3
+  h-divergences: candidate 3/3, baseline 3/3
+  h-solo: candidate 3/3, baseline 3/3
+  merged-llm: candidate 2/3, baseline 2/3
+  skill-fired: candidate 3/3, baseline 3/3
+  tag-astra: candidate 3/3, baseline 3/3
+  tag-sol: candidate 3/3, baseline 3/3
+  two-background-runs: candidate 3/3, baseline 3/3
+  two-temp-dirs: candidate 3/3, baseline 3/3
+parallel-one-fails  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  exec-twice: candidate 3/3, baseline 3/3
+  failed-line: candidate 3/3, baseline 3/3
+  gpt-6-astra-disable-set: candidate 3/3, baseline 3/3
+  gpt-6-sol-disable-set: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+  two-background-runs: candidate 3/3, baseline 3/3
+  two-temp-dirs: candidate 3/3, baseline 3/3
+followup-carries-claims  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  c2-resolved: candidate 3/3, baseline 3/3
+  c2-updated: candidate 3/3, baseline 3/3
+  no-bare-cd: candidate 1/3, baseline 2/3
+  one-codex-exec: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+  stdin-c2-line: candidate 0/3, baseline 1/3
+  stdin-c2-reason: candidate 0/3, baseline 1/3
+timeout-stalled-stop  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  no-bare-cd: candidate 0/3, baseline 1/3
+  one-codex-exec: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+  stop-report: candidate 3/3, baseline 3/3
+  stopped-at-stop: candidate 3/3, baseline 3/3
+  stopped-line: candidate 3/3, baseline 3/3
+  used-run-script: candidate 3/3, baseline 3/3
+  used-stop-script: candidate 3/3, baseline 3/3
+  used-taskstop: candidate 3/3, baseline 3/3
+headless-timer-wait  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  final-mcp-line: candidate 3/3, baseline 3/3
+  final-presents-claims: candidate 0/3, baseline 1/3
+  no-bare-cd: candidate 1/3, baseline 0/3  <-- fails more on candidate
+  one-codex-exec: candidate 3/3, baseline 3/3
+  override-active: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+  used-wait-script: candidate 3/3, baseline 3/3
+unstructured-text  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  one-codex-exec: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+schema-unreadable  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  one-codex-exec: candidate 3/3, baseline 3/3
+  reports-unreadable: candidate 0/3, baseline 1/3
+  skill-fired: candidate 3/3, baseline 3/3
+policy-default-allowlist  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  all-servers-disabled: candidate 3/3, baseline 3/3
+  header-default: candidate 3/3, baseline 3/3
+  no-bare-cd: candidate 0/3, baseline 1/3
+  one-codex-exec: candidate 3/3, baseline 3/3
+  skill-fired: candidate 3/3, baseline 3/3
+setup-writes-config  (candidate 3 runs, 0 errored; baseline 3 runs, 0 errored)
+  no failures on either
+graders failing more often on the candidate: 1
