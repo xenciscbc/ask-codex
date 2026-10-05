@@ -322,8 +322,9 @@ for (const c of CASES) {
   if (replies.length) {
     const [r1, r2] = replies;
     expect(r1.points.every((p) => /^C\d+$/.test(p.id) && p.stance === null), `${c}: round 1 raises only new C points with a null stance`);
-    const want = ["C1", "C2", "C3", ...Array.from({ length: 12 }, (_, k) => `L${k + 1}`)];
-    expect(JSON.stringify(r2.points.map((p) => p.id)) === JSON.stringify(want), `${c}: round 2 answers C1-C3 and L1-L12`);
+    // L1-L30: a p5 early-consensus run raised 13 points and the unanswered L13 kept the discussion going to the limit.
+    const want = ["C1", "C2", "C3", ...Array.from({ length: 30 }, (_, k) => `L${k + 1}`)];
+    expect(JSON.stringify(r2.points.map((p) => p.id)) === JSON.stringify(want), `${c}: round 2 answers C1-C3 and L1-L30`);
     expect(r2.points.every((p) => ["accept", "maintain", "revise"].includes(p.stance)), `${c}: every round-2 point has a stance`);
     expect(r1.points[2].reason === R3 && R3.length > 40, `${c}: C3's reason is the string the verbatim grader looks for`);
     const c3 = r2.points.find((p) => p.id === "C3");
