@@ -11,6 +11,7 @@ ask-codex 是一組 Claude Code skills，也提供 plugin 安裝方式，透過�
 - 腳本負責設定解析、MCP 授權檢查、執行、有時間上限的等待、行程追蹤與結構化結果。
 - 安全傳遞 Unicode 回覆；輸出失敗可重新收集結果，並分開回報交付與清理失敗。
 - 整體變更審查：`/ask-codex:review` 把 working tree、與某個 base 比較的 branch，或一段 commit range 交給 Codex 審查，由 Claude 判斷每個論點。只有你輸入指令才能啟動。
+- 多輪討論：`/ask-codex:discuss` 讓 Claude 與一個 Codex 模型針對一個設計主題進行多輪討論——先各自獨立作答，之後只討論有爭議的部分——最後回報雙方的共識，以及需要你決定的事項與雙方各自的建議。只有你輸入指令才能啟動。
 - 目前實作目標為 Windows 搭配 Git Bash，以及 Linux。兩者皆有離線測試；真實 Claude 的驗證目前僅涵蓋 WSL 上兩個搭配 stub Codex 的 headless 案例。此版完整的真實 Codex 諮詢與互動流程尚未驗證。
 
 ## 執行邊界
@@ -32,7 +33,7 @@ Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為�
 /plugin install ask-codex@ask-codex
 ```
 
-第一個 `ask-codex` 是外掛名稱，第二個是此儲存庫定義的 marketplace 名稱。安裝後使用 `/ask-codex:ask`、`/ask-codex:review` 與 `/ask-codex:setup`。
+第一個 `ask-codex` 是外掛名稱，第二個是此儲存庫定義的 marketplace 名稱。安裝後使用 `/ask-codex:ask`、`/ask-codex:review`、`/ask-codex:discuss` 與 `/ask-codex:setup`。
 
 也可以在終端機安裝至使用者範圍：
 
@@ -60,11 +61,12 @@ claude plugin update ask-codex@ask-codex --scope user
 |---|---|---|
 | `skills/ask/` | `~/.claude/skills/ask/` | `<project>/.claude/skills/ask/` |
 | `skills/review/` | `~/.claude/skills/review/` | `<project>/.claude/skills/review/` |
+| `skills/discuss/` | `~/.claude/skills/discuss/` | `<project>/.claude/skills/discuss/` |
 | `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
 
-Windows 的 `~` 是使用者家目錄，通常為 `C:\Users\<username>`。`ask` 必須包含 `SKILL.md`、`prompts/`、`scripts/` 與 `consultation.schema.json`，不能只複製 `SKILL.md`。`setup` 提供 MCP 政策設定輔助功能。`review` 透過 `ask` skill 的腳本與 prompt 執行，並以相鄰目錄（`../ask`）找到它們，因此 `review` 只能與 `ask` 一起複製到同一個上層目錄。
+Windows 的 `~` 是使用者家目錄，通常為 `C:\Users\<username>`。`ask` 必須包含 `SKILL.md`、`prompts/`、`scripts/`、`consultation.schema.json` 與 `discussion.schema.json`，不能只複製 `SKILL.md`。`setup` 提供 MCP 政策設定輔助功能。`review` 與 `discuss` 透過 `ask` skill 的腳本與 prompt 執行，並以相鄰目錄（`../ask`）找到它們，因此只能與 `ask` 一起複製到同一個上層目錄。
 
-使用上述目錄名稱時，指令是 `/ask`、`/review` 與 `/setup`，取代本 README 其他段落中的 plugin 前綴指令。也可以直接用自然語言明確要求 Claude 諮詢 Codex。參考 Claude Code 的[skill 位置與命名規則](https://code.claude.com/docs/en/skills)。
+使用上述目錄名稱時，指令是 `/ask`、`/review`、`/discuss` 與 `/setup`，取代本 README 其他段落中的 plugin 前綴指令。也可以直接用自然語言明確要求 Claude 諮詢 Codex。參考 Claude Code 的[skill 位置與命名規則](https://code.claude.com/docs/en/skills)。
 
 更新時，下載或 pull 最新儲存庫，以相應的新目錄替換已安裝的目錄，包含所有支援檔案；若有自行修改，請先備份。手動複製的 skills 不由 `claude plugin update` 管理。
 
@@ -104,6 +106,8 @@ claude -p --plugin-dir /path/to/ask-codex \
 /ask-codex:review
 /ask-codex:review --base main
 /ask-codex:review sol main..HEAD 檢查錯誤處理
+/ask-codex:discuss 登入服務應該如何限制密碼猜測？
+/ask-codex:discuss sol:high rounds 5 設計外掛的設定檔格式。
 /ask-codex:setup
 ```
 
@@ -116,6 +120,8 @@ claude -p --plugin-dir /path/to/ask-codex \
 **模型與 effort。** 可用**模型簡稱**指定（`sol`、`astra`、`6 sol`），或連同 effort 一起指定（`sol:high`）；簡稱有歧義時 Claude 會列出候選並詢問。未指定模型時，Claude 會先用本 session 先前選定的模型，其次是 Codex 設定中的 `model`，再其次是本機快取中可見且優先序最高的模型；這些來源都沒有模型時，交由 CLI 使用預設值。**諮詢 effort** 永遠不低於 `medium` 且一律明確傳入，不會沿用 Codex 設定裡的 effort；`ultra` 需要使用者明確要求且模型支援。當你的**模型指定**與目前設定不同時，互動 session 會問這次指定只限這一次，還是延續本 session 其餘；headless 執行無法詢問，因此只套用於該次諮詢，並以對話語言在報告中揭露適用範圍，不要求固定句子或行位置。模型與 effort 和本 session 現行設定相同時，不需另加範圍說明。
 
 **審查。**`/ask-codex:review [model tokens] [--base <ref> | A..B | A...B] [focus]` 針對一份完整變更諮詢 Codex。預設範圍是 working tree（staged、unstaged 與 untracked 檔案）；`--base <b>` 指 `HEAD` 上自與 `<b>` 的 merge base 以來的 commits（只含已 commit 的變更，不含未 commit 的修改）；`A..B` 與 `A...B` 指定明確的 commit range。其餘文字是你的 focus，原樣交給 Codex。模型 token 的用法與 `ask` 相同，也可並行兩個模型。Claude 以強化過的唯讀 git 指令解析每個 ref（形似選項的 ref 會被拒絕；範圍為空或被拒絕時不會執行任何東西），把範圍與這份變更的意圖（作為立場）交給 Codex，由 Codex 自行唯讀檢視 diff。報告以範圍行開頭，接著列出每個論點與 Claude 的處置；沒有任何論點不代表通過審查。**審查僅限使用者啟動：**skill 停用了模型呼叫，Claude 無法啟動它，只有輸入該指令才會執行；自然語言的審查請求不會被轉成審查。若要求對整份變更做審查，`ask` 會告知有這個指令，而不是自行執行。Claude 絕不因為某個論點而修改任何東西。
+
+**討論。**`/ask-codex:discuss [model token] [rounds <n>] [topic]` 讓 Claude 與一個 Codex 模型針對一個主題（功能設計、介面設計、工作流程）進行多輪討論。第一輪雙方各自獨立作答：Claude 在 Codex 啟動前先寫下自己的結果，Codex 看不到它。接著 Claude 整合兩份結果：雙方都提出的點成為**暫定共識**，Claude 同意的 Codex 論點也併入其中，其餘——Claude 不同意的 Codex 論點，以及 Claude 自己提出的點——成為**爭議點**。之後每一輪只把爭議點連同雙方完整的理由與證據，送到**全新的** Codex session（不 resume，理由見 [ADR 0007](docs/adr/0007-discuss-skill.md)）；Codex 對每一點表示接受、維持或修正，Claude 再逐一回應。所有點都不再有爭議，或到達輪數上限時結束：輪數可在指令中用 `rounds <n>`（2–10）指定，否則 Claude 會詢問（3、5、7 或自行輸入），headless 執行則使用 3 輪並在報告中說明。報告分三部分：過程（每輪一兩行，誰被哪條論據說服）、共識（包含雙方都同意放棄的點），以及**待你決定**的事項——到最後仍有分歧的點，以及雙方都認為屬於你的偏好或權限的點——每項都附 Claude 與 Codex 各自的建議與理由。為了避免假性共識：讓步必須引用具體證據，否則標為「無證據讓步」；第 3 輪以後才翻轉的點會特別標示；第一輪之後只有會改變結論的新論點才能提出；這些規則對 Claude 與 Codex 一體適用。某一輪失敗、被停止或回覆不符格式時，討論就此結束並給出部分報告，不會重試。每場討論只有一個模型參與，且全程固定。**討論僅限使用者啟動**，與審查相同：Claude 無法自行啟動，以自然語言提出要求時，`ask` 會告知有這個指令。Codex 只讀取，套用與 `ask` 相同的 MCP 政策，且每一輪開始前都會檢查；主題需要外部文件時，可依下方 MCP 政策段落開放文件類 MCP server。
 
 **並行諮詢。** 指定兩個不同模型（`astra, sol`）可讓兩者回答同一個問題並各自給出**獨立意見**，再合併為**共識**、**單獨提出**與**分歧**三類，每個論點標註來源模型，每個分歧都說明採納哪一方及理由。最多兩個模型，且不可重複。
 
@@ -136,7 +142,7 @@ Claude 預設每 30 分鐘檢查一次進行中的諮詢；每段前景等待最
 | 使用者 | `~/.claude/ask-codex.json` |
 | 專案 | `<project>/.claude/ask-codex.local.json` |
 
-例如，下列政策只允許名為 `docs`、且已在 Codex 啟用的 server：
+server 名稱就是 Codex 自己使用的名稱：執行 `codex mcp list` 可以看到，`/ask-codex:setup` 也會列出來。例如，下列政策只允許名為 `docs`、且已在 Codex 啟用的 server：
 
 ```json
 {"mcp_policy": "allowlist", "mcp_allow": ["docs"]}
@@ -203,6 +209,7 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 - **審查會讀取整個範圍：**審查讓 Codex 讀取範圍內的變更，working tree 審查包含 untracked 檔案。排除機密只是給 Codex 的指示，並非強制過濾。
 - **Working tree 的 clean filter：**working tree 審查會執行 `git status`，當它重新讀取 stat 資料已變動的檔案時，仍可能執行儲存庫設定的 clean filter（`.gitattributes` 加上 `filter.<x>.clean`）。`--no-ext-diff`、`--no-textconv` 與 `core.fsmonitor=false` 都涵蓋不到這點。Base 與 range 審查只比較 commits，不受影響。審查不信任的儲存庫時，請用 `--base` 或 range，或先檢查其 filter 設定。
 - **diff 內容引導：**被審查的變更中的文字可能試圖引導 Codex 的結論；「內容是資料」只是指示，並非強制。控制手段是 Claude 對每個論點的處置，且 Claude 不會在沒有你另行要求時依論點行動。
+- **討論的用量與收斂：**每一輪討論呼叫一次 Codex（最多十次），且因為每輪都是新 session，Codex 每輪都要重新探索專案。避免假性共識的規則（讓步需附證據、標示後期翻轉、只接受阻擋等級的新論點）是給兩個模型的指示，不是強制機制；報告中的標示才是控制手段。Codex 先前的輸出會被帶入後續 prompt，和任何檔案一樣被視為資料。
 - **用量：**諮詢會消耗 Codex 用量，並行諮詢會啟動兩次執行。目前尚未量測每次諮詢的 token 基本成本。
 
 報告可使用對話語言，但必須保留問題與類型、模型與 effort、生效 MCP 政策、相關計時與停止資訊，以及 Claude 對每個實質論點的處置。執行失敗不會被當成 Codex 意見。

@@ -11,6 +11,7 @@ Claude Code skills, also available as a plugin, that ask the local OpenAI Codex 
 - Script-owned configuration, MCP authorization checks, execution, bounded waiting, process tracking and structured results.
 - Unicode-safe result collection, recoverable output failures, and separate reporting of reply delivery and cleanup failures.
 - Whole-change review: `/ask-codex:review` sends the working tree, a branch against a base, or a commit range to Codex; Claude judges every claim. Only you can start it, by typing the command.
+- Multi-round discussion: `/ask-codex:discuss` has Claude and one Codex model work a design topic over several rounds — independent first answers, then only the disputed points — and reports what was agreed and what is left for you to decide, with each side's recommendation. Only you can start it, by typing the command.
 - Windows with Git Bash and Linux are the current implementation targets. Offline tests cover both; real-Claude validation is limited to two headless WSL cases using stub Codex. Full live Codex consultations and interactive flows are not yet validated for this implementation.
 
 ## Execution boundaries
@@ -32,7 +33,7 @@ In Claude Code, add this repository's marketplace and install its plugin:
 /plugin install ask-codex@ask-codex
 ```
 
-The first `ask-codex` is the plugin name; the second is the marketplace name defined in this repository. Then use `/ask-codex:ask`, `/ask-codex:review` and `/ask-codex:setup`.
+The first `ask-codex` is the plugin name; the second is the marketplace name defined in this repository. Then use `/ask-codex:ask`, `/ask-codex:review`, `/ask-codex:discuss` and `/ask-codex:setup`.
 
 Alternatively, install from your terminal at user scope:
 
@@ -60,11 +61,12 @@ Download or clone this repository, then copy these **entire directories**:
 |---|---|---|
 | `skills/ask/` | `~/.claude/skills/ask/` | `<project>/.claude/skills/ask/` |
 | `skills/review/` | `~/.claude/skills/review/` | `<project>/.claude/skills/review/` |
+| `skills/discuss/` | `~/.claude/skills/discuss/` | `<project>/.claude/skills/discuss/` |
 | `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
 
-On Windows, `~` is your user home, typically `C:\Users\<username>`. The `ask` directory must include `SKILL.md`, `prompts/`, `scripts/` and `consultation.schema.json`; copying only `SKILL.md` is insufficient. `setup` provides the MCP policy setup helper. `review` runs through the `ask` skill's scripts and prompts, which it finds as its sibling directory (`../ask`), so copy `review` only together with `ask`, into the same parent directory.
+On Windows, `~` is your user home, typically `C:\Users\<username>`. The `ask` directory must include `SKILL.md`, `prompts/`, `scripts/`, `consultation.schema.json` and `discussion.schema.json`; copying only `SKILL.md` is insufficient. `setup` provides the MCP policy setup helper. `review` and `discuss` run through the `ask` skill's scripts and prompts, which they find as their sibling directory (`../ask`), so copy them only together with `ask`, into the same parent directory.
 
-With these directory names, use `/ask`, `/review` and `/setup` instead of the plugin-prefixed commands shown elsewhere in this README. You can also explicitly ask Claude to consult Codex in natural language. See Claude Code's [skill locations and naming rules](https://code.claude.com/docs/en/skills).
+With these directory names, use `/ask`, `/review`, `/discuss` and `/setup` instead of the plugin-prefixed commands shown elsewhere in this README. You can also explicitly ask Claude to consult Codex in natural language. See Claude Code's [skill locations and naming rules](https://code.claude.com/docs/en/skills).
 
 To update, download or pull the latest repository and replace the installed directories with the matching new copies, including their supporting files. Back up any local edits first. Manually copied skills are not managed by `claude plugin update`.
 
@@ -104,6 +106,8 @@ An installed plugin does not need `--plugin-dir`. Headless execution still needs
 /ask-codex:review
 /ask-codex:review --base main
 /ask-codex:review sol main..HEAD check error handling
+/ask-codex:discuss How should the login service limit password guessing?
+/ask-codex:discuss sol:high rounds 5 Design the plugin's settings file format.
 /ask-codex:setup
 ```
 
@@ -116,6 +120,8 @@ Aliases resolve against your local Codex model list; these examples do not guara
 **Models and effort.** Name a model by alias (`sol`, `astra`, `6 sol`) or with an effort (`sol:high`); an ambiguous alias makes Claude list the candidates and ask. Without a model, Claude uses the one chosen earlier in this session if there is one, otherwise the `model` in your Codex config, otherwise the highest-priority visible model in the local cache; if no model is available from these sources, the CLI selects its default. Consultation effort is never below `medium` and is always passed explicitly, rather than inherited from Codex configuration. `ultra` requires an explicit request and model support. When your choice differs from the session's, an interactive session asks whether it applies to this consultation only or to the rest of the session. A headless run cannot ask, so the choice applies only to that consultation and the report discloses the scope in the conversation language; no fixed sentence or line position is required. Naming the model and effort already in use needs no scope note.
 
 **Review.** `/ask-codex:review [model tokens] [--base <ref> | A..B | A...B] [focus]` consults Codex about one whole change. The scope is the working tree by default (staged, unstaged and untracked files); `--base <b>` means the commits on `HEAD` since its merge base with `<b>` (committed changes only; uncommitted changes are not included); `A..B` and `A...B` name an explicit commit range. Any remaining text is your focus, passed to Codex verbatim. Model tokens work as in `ask`, including two models in parallel. Claude resolves each ref with hardened, read-only git commands (an option-like ref is rejected, and nothing runs when the scope is empty or rejected), gives Codex the scope and the change's intent as its stance, and lets Codex inspect the diff itself, read-only. The report begins with the scope line, then lists every claim with Claude's disposition. A review with no claims is not an approval. **It is user-only:** the skill disables model invocation, so Claude cannot start it and only typing the command does; natural-language review requests are not turned into reviews. Asked for a whole-change review, `ask` tells you the command exists instead. Claude never fixes anything because of a claim.
+
+**Discussion.** `/ask-codex:discuss [model token] [rounds <n>] [topic]` works one topic — a feature design, an interface, a workflow — with one Codex model over several rounds. In round 1 both sides answer independently: Claude writes its own result down before Codex starts, and Codex never sees it. Claude then integrates the two: points both raised become tentative agreements, Codex's points Claude agrees with join them, and the rest — Codex's points Claude disputes and Claude's own points — are contested. Each later round sends only the contested points, with both sides' full reasons and evidence, to a **fresh** Codex session (never a resumed one; see [ADR 0007](docs/adr/0007-discuss-skill.md)); Codex accepts, maintains or revises each, and Claude answers in turn. The discussion ends when nothing is contested or at the round limit: `rounds <n>` (2–10) in the command, otherwise Claude asks (3, 5, 7 or your own number), and a headless run uses 3 and says so. The report has three parts: the process (one or two lines per round, who was persuaded by what), what was agreed (including points both sides dropped), and what is for you to decide — points still split at the end and points both sides consider your preference or authority — each with Claude's and Codex's recommendation and reason. To resist false agreement, a concession must cite specific evidence or is labelled an *unevidenced concession*, points that flip in round 3 or later are flagged, new points after round 1 are allowed only when they would change the conclusion, and these rules bind Claude as well as Codex. A round that fails, is stopped or returns an unstructured reply ends the discussion with a partial report; nothing is retried. Only one model takes part, fixed for the whole discussion. **It is user-only**, like review: Claude cannot start it, and asked in natural language, `ask` points you to the command. Codex reads only, under the same MCP policy as `ask`, checked before every round; when a topic needs outside documentation, allow a documentation MCP server as described under MCP policy below.
 
 **Parallel consultation.** Name two different models (`astra, sol`) to ask both the same question and get independent opinions, merged into consensus, solo claims and divergences, each tagged with the model that made it, and each divergence resolved with a stated reason. At most two models, never the same one twice.
 
@@ -136,7 +142,7 @@ Policy files are merged key by key:
 | User | `~/.claude/ask-codex.json` |
 | Project | `<project>/.claude/ask-codex.local.json` |
 
-For example, this policy permits only a server named `docs` if it is already enabled in Codex:
+Server names are the names Codex itself uses: `codex mcp list` shows them, and `/ask-codex:setup` lists them for you. For example, this policy permits only a server named `docs` if it is already enabled in Codex:
 
 ```json
 {"mcp_policy": "allowlist", "mcp_allow": ["docs"]}
@@ -203,6 +209,7 @@ See the [validation record](.scratch/script-owned-consultation/evidence/validati
 - **Review reads the whole scope:** a review lets Codex read the scoped change, including untracked files in a working-tree review. Excluding secrets is an instruction to Codex, not an enforced filter.
 - **Working-tree clean filters:** a working-tree review runs `git status`, which can still run a repository-configured clean filter (`.gitattributes` plus `filter.<x>.clean`) when it re-reads files whose stat data changed. `--no-ext-diff`, `--no-textconv` and `core.fsmonitor=false` do not cover this. Base and range reviews compare commits only and are not affected. Review a repository you do not trust with `--base` or a range, or inspect its filter configuration first.
 - **Steering by diff content:** text in the reviewed change can try to steer Codex's conclusions; that the content is data is an instruction, not enforcement. Claude's per-claim dispositions are the control, and Claude does not act on a claim without your separate request.
+- **Discussion cost and convergence:** a discussion makes one Codex call per round (up to ten), and each round re-explores the project because sessions are fresh. Its rules against false agreement (evidenced concessions, late-flip flags, blocking-only new points) are instructions to both models, not enforcement; the labels in the report are the control. Codex's earlier output is carried into later prompts as data, like any file.
 - **Cost:** consultations consume Codex usage, and a parallel pair starts two runs. Current per-consultation token overhead has not been measured.
 
 Reports may follow the conversation language. They must still include the question and type, model and effort, effective MCP policy, relevant timer/stop details, and Claude's disposition for each substantive claim. Execution failures contribute no attributed Codex opinion.
