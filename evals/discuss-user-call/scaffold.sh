@@ -39,14 +39,13 @@ cat > .stub/scenario.json <<'EOF'
     "sequence": [
       {
         "reply": {
-          "summary": "Login needs throttling that works with the single-process constraint, one error text, and a product decision about the lockout screen.",
+          "summary": "Login needs throttling that counts failed attempts, works with the single-process constraint, and a product decision about the lockout screen.",
           "points": [
             {
               "id": "C1",
-              "statement": "Return the same error text for an unknown user and for a wrong password.",
-              "reason": "Line 5 says unknown user and line 6 says wrong password, which tells an attacker which usernames exist.",
+              "statement": "Count failed login attempts per username and lock the account for a while after repeated failures.",
+              "reason": "login() answers every wrong password immediately and keeps no count, so nothing slows down guessing against one account.",
               "evidence": [
-                "src/login.js:5",
                 "src/login.js:6"
               ],
               "kind": "fact",
