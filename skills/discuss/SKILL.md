@@ -89,7 +89,7 @@ First, write Claude's own result. Do this before any `prepare`, `run` or other C
 
 Then run Codex's round 1, blind. Read `<discuss>/prompts/discussion.md` and `<discuss>/prompts/framing/round-1.md`, and fill the slots:
 
-- framing: the content of `round-1.md`.
+- framing: the whole content of `round-1.md`, copied verbatim from its first line `Discussion round: 1 (independent).` to its end; never shorten or paraphrase it.
 - question: the topic.
 - context: the facts Codex needs about the topic — where to look (file locations), the requirements and constraints that bear on it, and anything the user said about it. Never Claude's result from `claude-round-1.md`, a conclusion, a recommendation, a leaning or a candidate answer, and never an `L` id.
 - extra paths: `none`.
@@ -119,7 +119,7 @@ User decision items are not debated, so they do not keep a discussion going. Whe
 
 Each round is a fresh consultation: never resume or fork an earlier Codex session. Prepare the round-n prompt from `<discuss>/prompts/discussion.md` and `<discuss>/prompts/framing/round-n.md`, and fill the slots:
 
-- framing: the content of `round-n.md`.
+- framing: the whole content of `round-n.md`, copied verbatim from its first line `Discussion round: follow-up.` to its end, in every round from 2 on. Read the file again if you no longer have its text; never shorten, paraphrase or replace it with your own line such as `Round <n> of at most <limit>` — the round number belongs in the context, and the framing carries the rules Codex must follow in that round.
 - question: `Respond to the contested points under "Context from Claude".`
 - context, in this order:
   - `Topic: <topic>`

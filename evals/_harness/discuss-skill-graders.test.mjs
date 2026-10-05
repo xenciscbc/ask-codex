@@ -124,6 +124,14 @@ for (const [c, n] of [["discuss-early-consensus", 1], ["discuss-early-consensus"
 expect(/path: \.stub\/exec-stdin\.2\.txt/.test(read("discuss-early-consensus", "round-2-marker")), "round-2-marker reads exec-stdin.2.txt");
 expect(re("discuss-early-consensus", "round-2-marker").test(PROMPT2) && !re("discuss-early-consensus", "round-2-marker").test(PROMPT1), "round-2-marker: a round-n prompt passes, a round-1 prompt fails");
 expect(re("discuss-limit-reached", "round-2-marker").test(PROMPT2) && !re("discuss-limit-reached", "round-2-marker").test(PROMPT1), "discuss-limit-reached/round-2-marker: a round-n prompt passes, a round-1 prompt fails");
+// Fix pass 5 (2026-10-05): 2 of 56 round-2 prompts carried a self-written framing line instead of round-n.md.
+for (const c of ["discuss-claude-first", "discuss-headless-default", "discuss-rounds-arg-no-question"]) {
+  expect(read(c, "round-2-marker") === read("discuss-limit-reached", "round-2-marker"), `${c}/round-2-marker is the discuss-limit-reached grader`);
+}
+const r3 = re("discuss-headless-default", "round-3-marker");
+expect(/path: \.stub\/exec-stdin\.3\.txt/.test(read("discuss-headless-default", "round-3-marker")) && r3.test(PROMPT2) && !r3.test(PROMPT1), "discuss-headless-default/round-3-marker reads exec-stdin.3.txt; a round-n prompt passes, a round-1 prompt fails");
+expect(!re("discuss-limit-reached", "round-2-marker").test(PROMPT2.replace("Discussion round: follow-up.", "Round 2 of at most 3.")), "round-2-marker: a self-written framing line instead of round-n.md fails (seen in an f1 trace)");
+expect(/copied verbatim from its first line `Discussion round: follow-up\.`/.test(skill) && /never shorten, paraphrase or replace it/.test(skill), "skill: round-n.md is copied verbatim into every later round's framing");
 const ids = re("discuss-early-consensus", "round-2-ids");
 expect(ids.test(PROMPT2) && !ids.test(PROMPT1) && !ids.test(PROMPT2.replace("C3 (raised", "C9 (raised").replace(/\bC3\b/g, "C9")) && !ids.test(PROMPT2.replace(/\bL1\b/g, "L9")), "round-2-ids: all of L1, C1, C2, C3 pass; a missing one or a round-1 prompt fails");
 expect(!ids.test(bareN) && !ids.test(bare1), "round-2-ids: the bare template and framing do not satisfy it");
@@ -276,7 +284,7 @@ const valid = (v, s, where, errors) => {
 const checkErr = (r) => { const e = []; valid(r, schema, "reply", e); return e; };
 
 // --- Every case: slash commands, graders on the right records, stub replies that fit the files -------------------------------------
-const RECORDS = new Set([".stub/exec.sentinel", ".stub/exec-stdin.txt", ".stub/violations.log", ...[1, 2].flatMap((n) => [`.stub/exec-stdin.${n}.txt`, `.stub/exec-argv.${n}.json`])]);
+const RECORDS = new Set([".stub/exec.sentinel", ".stub/exec-stdin.txt", ".stub/violations.log", ...[1, 2, 3].flatMap((n) => [`.stub/exec-stdin.${n}.txt`, `.stub/exec-argv.${n}.json`])]);
 for (const c of CASES) {
   for (const f of ["case.yaml", "prompt.md", "scaffold.sh"]) expect(fs.existsSync(path.join(evals, c, f)), `${c}/${f} exists`);
   expect(new RegExp(`^name: ${c}$`, "m").test(text(evals, c, "case.yaml")), `${c}: case.yaml names the case`);
