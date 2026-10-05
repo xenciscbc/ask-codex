@@ -180,6 +180,26 @@ The partial report is written as section 8 says, from the ledger as it stood aft
   - `Codex recommends:` is Codex's last returned position on the point, given as a recommendation with Codex's reason: its statement when Codex raised the point, its latest `maintain` or `revise` position (its `revised_statement` when it gave one). When Codex never answered the point (a Claude-only point, or a point from an incomplete round 1), the line is exactly `Codex recommends: none returned`.
   - The `Both recommend:` line replaces the two lines only when Codex returned a position and it matches yours.
 
+Fill this shape exactly; only the angle-bracket slots change, and the lines in parentheses appear only when they apply. The `Unstructured reply:` line is its own line, never part of the `Round <n>:` line, and the parenthesised words close every unresolved item's first line, an opposed pair (`<C id> vs <L id>`) included:
+
+```text
+## Discussion process
+Topic: … / Model: … / Round limit: … / MCP policy: …   (as section 8 says)
+Round 1: …
+Round <n>: did not complete — <reason>.
+(Unstructured reply: <the reply quoted or summarised>)
+(Retained location: <directory>)
+(Pending confirmation: <item> — <decline outcome>)
+
+## Agreed
+<ids>: <statement>   (or: none)
+
+## For you to decide
+<id or C id vs L id> — <statement> (unresolved because the discussion ended)
+Claude recommends: <recommendation> — <reason>
+Codex recommends: <recommendation> — <reason>   (or exactly: Codex recommends: none returned)
+```
+
 ## 8. Report
 
 When the discussion has ended (nothing contested, the last round the limit allows, or a round that cannot complete as section "A round that cannot complete" says), finish everything else first: delete every temporary file you created — each by its explicit path with `rm -f`: `claude-round-1.md`, the resolve file and any request file still there. Collected runs are cleaned by the script. Then write ONE closing message, in the conversation language, as the last thing you do. It has these three headings, exactly these strings, in this order, written as `## Discussion process`, `## Agreed` and `## For you to decide`:

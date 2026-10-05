@@ -87,7 +87,11 @@ const PROMPT2 = fill(roundN, 'Respond to the contested points under "Context fro
 
 // --- Call counts from the stub sentinel -------------------------------------------------------------------------
 const TS = "2026-10-04T03:04:05.123456+00:00\n";
-for (const c of ["discuss-early-consensus", "discuss-limit-reached"]) {
+const early = re("discuss-early-consensus", "stops-early");
+expect(/path: \.stub\/exec\.sentinel/.test(read("discuss-early-consensus", "stops-early")), "discuss-early-consensus/stops-early reads the stub sentinel");
+expect(early.test(TS + TS) && early.test(TS + TS + TS) && early.test((TS + TS + TS).replace(/\n/g, "\r\n")) && early.test(TS + TS.trim()), "discuss-early-consensus/stops-early: two or three lines pass");
+expect(!early.test(TS) && !early.test(TS + TS + TS + TS) && !early.test(TS.repeat(5)) && !early.test(""), "discuss-early-consensus/stops-early: one, four, five (the limit) or no lines fail");
+for (const c of ["discuss-limit-reached"]) {
   const two = re(c, "two-calls");
   expect(/path: \.stub\/exec\.sentinel/.test(read(c, "two-calls")), `${c}/two-calls reads the stub sentinel`);
   expect(two.test(TS + TS) && two.test(TS + TS.trim()) && two.test((TS + TS).replace(/\n/g, "\r\n")), `${c}/two-calls: two lines pass`);
