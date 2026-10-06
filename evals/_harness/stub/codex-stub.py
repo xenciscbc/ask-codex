@@ -22,7 +22,7 @@ it ends by itself — a killed run leaves none). `exec.reply` replaces the defau
 `exec.by_model` = {"<model slug>": {mode, reply, …}} overrides those settings for calls with that
 `-m` (parallel consultations); such calls also write .stub/exec-argv.<slug>.json and
 .stub/exec-stdin.<slug>.txt, and exec.sentinel gains one line per call.
-`exec.sequence` = [{mode, reply, …}, …] gives call n (1-based, counted in .stub/exec-count.txt) the
+`exec.sequence` = [{mode, reply, …}, …] gives call n (1-based; each call claims n by creating .stub/exec-claim.<n> exclusively) the
 settings of entry n, merged over `exec`; calls past the end reuse the last entry (discussion rounds).
 Every exec call also writes .stub/exec-argv.<n>.json and .stub/exec-stdin.<n>.txt, <n> being that
 call's number, after the prompt is read.
@@ -242,14 +242,17 @@ def exec_(args):
     scenario = load_scenario(directory) or {"dir": directory, "data": {}}
     data = scenario["data"]
     records = stub_dir(scenario)
-    # 1-based number of this exec call in the scenario directory, kept in a counter file.
-    counter = os.path.join(records, "exec-count.txt")
+    # 1-based number of this exec call in the scenario directory. Each call claims its number by creating
+    # .stub/exec-claim.<n> exclusively, which is atomic on Windows and WSL mounts, so parallel calls never
+    # share a number. EVAL_CODEX_STUB_COUNTER_DELAY_S (tests only) delays the claim to widen any race.
     number = 1
-    if os.path.exists(counter):
-        with open(counter, encoding="utf-8") as f:
-            number = int(f.read().strip() or 0) + 1
-    with open(counter, "w", encoding="utf-8") as f:
-        f.write(str(number))
+    time.sleep(float(os.environ.get("EVAL_CODEX_STUB_COUNTER_DELAY_S") or 0))
+    while True:
+        try:
+            os.close(os.open(os.path.join(records, f"exec-claim.{number}"), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            number += 1
     # Parallel consultations (ticket 08): exec.by_model["<slug>"] overrides exec settings for that -m.
     slug = opts.get("model")
     exec_cfg = dict(data.get("exec") or {})

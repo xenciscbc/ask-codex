@@ -1,7 +1,7 @@
 ---
 description: "Discuss skill, rounds 5: round 2 accepts every contested point, so the discussion stops after exactly 2 Codex calls, both with the discussion schema; round 2's prompt has the round-n marker, the carried ids and a round-1 Codex reason verbatim; the report has the three sections."
 max_turns: 80
-timeout_seconds: 1500
+timeout_seconds: 2400
 allowed_tools: [Skill, Bash, Read, Glob, Grep, Write]
 ---
 

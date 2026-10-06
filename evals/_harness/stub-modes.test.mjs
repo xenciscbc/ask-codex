@@ -1,7 +1,7 @@
 // Offline test of the stub's failure modes (ticket 04):  node evals/_harness/stub-modes.test.mjs
 // Runs codex-stub.py directly in the OS temp directory and checks exit codes,
 // output text and the -o file for each mode.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -165,6 +165,24 @@ try {
     }
     check(records("exec-stdin.txt") === "prompt three" && JSON.parse(records("exec-argv.json")).includes("/s/three.json"), "sequence: single-run records still hold the last call");
     check(fs.readdirSync(path.join(dir, ".stub", "exec-calls")).length === 3, "sequence: exec-calls has one record per call");
+  }
+  {
+    // Concurrent calls (discuss ticket 09): each call claims its own number, so no two calls share a record.
+    const dir = project("concurrent", { exec: {} });
+    const prompts = Array.from({ length: 8 }, (_, k) => `parallel prompt ${k + 1}`);
+    const runAsync = (input, n) => new Promise((resolve) => {
+      // The delay widens the gap between reading and claiming a number, so a non-atomic counter would collide.
+      const child = spawn(python, [stub, ...execArgs(dir, path.join(dir, `pout${n}.json`))], { cwd: dir, env: { ...process.env, EVAL_CODEX_STUB_COUNTER_DELAY_S: "0.5" } });
+      child.on("close", (code) => resolve(code));
+      child.stdin.end(input);
+    });
+    const codes = await Promise.all(prompts.map((p, k) => runAsync(p, k + 1)));
+    check(codes.every((c) => c === 0), "concurrent: all calls succeed");
+    const got = Array.from({ length: 8 }, (_, k) => {
+      const f = path.join(dir, ".stub", `exec-stdin.${k + 1}.txt`);
+      return fs.existsSync(f) ? fs.readFileSync(f, "utf-8") : null;
+    });
+    check(got.every((g) => g !== null) && new Set(got).size === 8 && prompts.every((p) => got.includes(p)), "concurrent: eight calls get eight distinct numbers, one record each");
   }
   {
     // Without a sequence the numbered records still appear and the existing ones are unchanged.
