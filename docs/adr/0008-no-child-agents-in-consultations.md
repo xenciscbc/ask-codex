@@ -23,7 +23,7 @@ Live probes (`.scratch/subagent-boundary/`):
 
 ## Consequences and honest limits
 
-- Verified on codex-cli 0.159.3 (Windows) for the default configuration, a v1 and a v2 model, command-line feature enabling, and a trusted project's config enabling agents and MultiAgentV2. Not verified: the user's own config file enabling them (needs an edit to the user's Codex configuration; precedence documentation says the command line wins), older CLIs (where `[agents]` may be a role map), and WSL.
-- The `codex exec --json` event stream of 0.159.3 shows no child activity, so a consultation cannot itself detect a child; this relies on the switches.
+- Verified with both pairs on codex-cli 0.159.3 (Windows) for the default configuration, a v1 and a v2 model, and a trusted project's config enabling agents, MultiAgentV2, fan-out and multi_agent. Command-line feature enabling was only shown to defeat the first pair alone; consult.py builds the command line, so no consultation passes such a flag. Not verified: the user's own config file enabling them (needs an edit to the user's Codex configuration; precedence documentation says the command line wins), older CLIs (where `[agents]` may be a role map), and WSL.
+- The `codex exec --json` event stream of 0.159.3 shows child activity only as `collab_tool_call` items for the parent's `wait` (seen in the probes where a child wrote), not the spawn or the child's own tool calls; a consultation does not scan for them and relies on the switches.
 - Other tools a read-only consultation still sees — `notes.write_file`/`append_to_file`, `create_goal`/`update_goal` (Codex's own stores) and `web.run` — are separate follow-ups, not covered here.
 - This deliberately changes the consultation command line that ADR 0007 described `discussion` as leaving unchanged.

@@ -2,7 +2,7 @@
 
 Status: needs-triage
 
-**What to build:** the switches were live-verified on Windows against the default configuration, a v1 and a v2 model, command-line feature enabling, and a trusted project's `.codex/config.toml` enabling agents/MultiAgentV2/fan-out/multi_agent. Not verified: the user's own Codex config enabling them (a live check edits the user's config; documented precedence says the command line wins) and WSL/Linux.
+**What to build:** the switches were live-verified on Windows against the default configuration, a v1 and a v2 model, and a trusted project's `.codex/config.toml` enabling agents/MultiAgentV2/fan-out/multi_agent. Command-line feature enabling was only run against the first pair alone (it defeated it); consultations never pass such a flag. Not verified: the user's own Codex config enabling them (a live check edits the user's config; documented precedence says the command line wins) and WSL/Linux.
 
 **Blocked by:** None — can start immediately.
 
