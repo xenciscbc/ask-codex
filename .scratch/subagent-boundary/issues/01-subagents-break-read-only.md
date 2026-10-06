@@ -22,3 +22,7 @@ Sources: Codex docs, subagents — "Subagents inherit your current sandbox polic
 
 - [ ] Decide the boundary: no children in consultations (`-c agents.enabled=false`), or children limited to read-only lookups with the analysis and answer reserved for the main agent (user's preferred direction) — only if a read-only-only child can be guaranteed, which these probes did not show.
 - [ ] Script change in `consult.py` with its offline oracle and stub argv checks updated; live probe proving no child can write; README known-risk entry and ADR.
+
+## Comments
+
+- 2026-10-06 — Probe 4 (`probe-normal.py`): an ordinary `ask` technical-question consultation (the real template and framing, nothing about child agents) with only `-c agents.enabled=false` added. Exit 0, structured reply with six evidenced claims and one open question; the event stream and reply never mention child agents, delegation or codex-feather, and Codex did not read the `feather-delegation` skill. So disabling agents does not conflict with the codex-feather AGENTS.md entrance in an ordinary consultation (that entrance already says to keep the work with the main agent when roles are unavailable). Guards unchanged; repo untouched. Evidence: `evidence/probe-normal-agentsoff-*`.
