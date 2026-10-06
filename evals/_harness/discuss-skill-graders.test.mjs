@@ -700,5 +700,23 @@ for (const c of CASES) {
   expect(bad((r) => { r.points[0].user_call = "false"; }) && bad((r) => { delete r.points[0].reopen; }) && bad((r) => { r.points[0].extra = 1; }) && bad((r) => { r.points[0].stance = "agree"; }), "schema checker: a string boolean, a missing key, an extra key and an unknown stance are refused");
 }
 
+// --- Framing copied verbatim (discuss ticket 08) ---------------------------------------------------------------------
+{
+  const gen = await import(new URL("./gen-framing-graders.mjs", import.meta.url).href);
+  for (const c of gen.CASES) for (const g of gen.GRADERS) {
+    const file = path.join(evals, c, "graders", `${g.name}.md`);
+    expect(fs.existsSync(file) && fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n") === gen.graderFile(g), `${c}/${g.name} is current (rerun gen-framing-graders.mjs after editing ${g.source})`);
+  }
+  const wrap = (body) => `You are taking part in a discussion.\n\n## Discussion round\n\n${body}\n\n## Question\n\nRespond.`;
+  for (const [g, src] of [["round-1-framing-verbatim", round1], ["round-2-framing-verbatim", roundN]]) {
+    const r = re("discuss-limit-reached", g);
+    const body = src.replace(/\s+$/, "");
+    expect(r.test(wrap(body)) && r.test(wrap(body).replace(/\n/g, "\r\n")), `${g}: the whole framing passes, with LF or CRLF`);
+    const words = body.match(/\b[a-z]{5,}\b/g);
+    expect(!r.test(wrap(body.replace(words[3], words[3] + "s"))) && !r.test(wrap(body.split("\n").slice(0, -1).join("\n"))) && !r.test(wrap(body.split("\n")[0])), `${g}: one changed word, a dropped last line or only the first line fails`);
+  }
+  expect(!re("discuss-limit-reached", "round-2-framing-verbatim").test(wrap(roundN.replace(/`accept` \(you accept/, "`accept` (you agree with"))), "round-2-framing-verbatim: the accept→agree paraphrase seen in a p6 trace fails");
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
