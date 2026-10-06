@@ -4,9 +4,13 @@
 
 **Blocked by:** 03 — round limit choice; 04 — early end with partial report; 05 — concessions need evidence, user-preference points go to the user.
 
-**Status:** ready-for-agent
+**Status:** resolved — see Comments (2026-10-06)
 
 - [ ] README (both languages), ADR-0007 and version 1.3.0 describe the shipped behaviour; the glossary's 討論 section matches what shipped.
 - [ ] Live: one real `/ask-codex:discuss rounds 2 <topic>` on a throwaway repository under `D:/tmp` with a real Codex model — real Codex accepts the discussion schema, both rounds structured, three-section report produced, nothing edited, Codex `config.toml` hash unchanged, no leftover Codex processes. At most 2 real Codex calls, plus one rerun only after a reproduced fix.
 - [ ] A fresh `verifier` confirms the full spec claim on the final commits.
 - [ ] No tag or push until the user says.
+
+## Comments
+
+- 2026-10-06 — Docs, ADR-0007, glossary and version 1.3.0 in 3e7ec28. Live: one real `/ask-codex:discuss rounds 2` on `D:/tmp/discuss-live` with gpt-5.6-sol high on 3e7ec28 — both rounds structured, three-section report, config.toml hash unchanged, no new Codex processes, throwaway repo clean (`evidence/live-discuss-*`). Later changes touch only the discuss skill text and evals, not the script or the CLI path. Regression vs 6266c3e: no grader fails more often on the candidate beyond the named no-bare-cd noise (`evidence/regression-comparison.txt`). Fresh verifier: REFUTED on 71586ee (F1, fixed in d9fc387), then CONFIRMED on 0e75a87 after the p6 rerun (24/24). Not merged, tagged or pushed.

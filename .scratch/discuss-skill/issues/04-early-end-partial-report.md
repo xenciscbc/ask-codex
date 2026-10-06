@@ -4,10 +4,14 @@
 
 **Blocked by:** 02 — `/ask-codex:discuss rounds <n> <topic>` runs a discussion end to end.
 
-**Status:** ready-for-agent
+**Status:** resolved — see Comments (2026-10-06)
 
 - [ ] Eval `discuss-round-fails` (round 1 valid, round 2 fails): exactly 2 Codex calls (no retry); report marks round 2 incomplete with its reason and lists open points as unresolved because the discussion ended.
 - [ ] Eval `discuss-unstructured-ends` (round 2 unstructured): exactly 2 calls; report labels the reply unstructured and invents no stances.
 - [ ] A stop or unconfirmed stop follows `ask`'s stop and report rules, then ends the discussion with the partial report (no further round prepared).
 - [ ] Headless pending confirmation mid-discussion → no further Codex call; pending items and their decline outcomes in the partial report.
 - [ ] 02's evals still pass at their stated runs.
+
+## Comments
+
+- 2026-10-06 — Implemented in 47c98fc (executor, worktree). Later fixes on the same path: 4dca943 (exact partial-report shape after an unstructured quote landed inside the `Round 2:` line and opposed pairs lost the marker) and d9fc387 (verifier F1: three markers chosen by why an item is listed; `(still split at the round limit)` for a discussion that ran its course). Final bytes 0e75a87: `discuss-round-fails` 3/3, `discuss-unstructured-ends` 3/3 (p6). Stop, unconfirmed stop and a headless mid-discussion confirmation are checked against the skill text only (follow-up ticket 10).

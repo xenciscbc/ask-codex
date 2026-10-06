@@ -1,6 +1,6 @@
 # Spec: ask-codex discuss skill
 
-Status: ready-for-agent
+Status: resolved on branch `feat/discuss-skill` (2026-10-06) — not merged, tagged or pushed; see Outcome at the end.
 
 Vocabulary follows `CONTEXT.md` (section 討論, added 2026-10-04 during the grilling session). Decisions respect ADR-0001 (call `codex exec` directly), ADR-0002 (fresh session per follow-up), ADR-0003 (MCP policy), ADR-0005 (script-owned execution) and ADR-0006 (user-only review skill pattern). A new ADR-0007 records the discuss skill and why a multi-round discussion still uses a fresh Codex session per round.
 
@@ -218,3 +218,23 @@ Risk triggers: reply-schema / serialization change (S1), release (version bump, 
 - **Scope:** `README.md` + `README.zh-TW.md` (usage lines, capability paragraph, Known risks from Honest limits, pointer to the MCP policy section and `codex mcp list` for allowlist names), `docs/adr/0007-discuss-skill.md` (D2, D6 with sources, D8), `CONTEXT.md` (already updated; adjust only if implementation changed a term), `.claude-plugin/plugin.json` version → 1.3.0.
 - **Acceptance:** one real harmless `/ask-codex:discuss rounds 2 <topic>` on a throwaway repo under `D:/tmp` with a real Codex model: real Codex accepts `discussion.schema.json`, both rounds structured, D13 report produced, nothing edited, `config.toml` hash unchanged, no leftover Codex processes; then a fresh `verifier` against the full spec claim.
 - **Rollback:** revert; no tag or push until the user says.
+
+---
+
+# Outcome (2026-10-06)
+
+Fresh `verifier`: **REFUTED** on 71586ee (F1: a point still split at the round limit marked `(unresolved because the discussion ended)`, 4 of 6 limit-path reports), then **CONFIRMED** on 0e75a87 after the fix and a full rerun. Commits on `feat/discuss-skill` since `main` (6266c3e): c0edd9e (spec, tickets, glossary), 1708335 (01), eba3939 + 2e970b8 (02), c59ecac + 48541af (03), 47c98fc (04), 37317c2 (05), b2091df, 3e7ec28 (06 docs, 1.3.0), 4dca943, d9fc387 (F1), c0c0fa4 (pass 5), cebddfc (fixture), 0e75a87 (pass 6), plus records commits.
+
+Fix passes beyond the Plan budget (3 per slice) were authorised by the user one at a time: pass 4 (F1, verifier finding), pass 5 (framing copied verbatim), pass 6 (one-sided user-call proposal answered once).
+
+Evidence (`evidence/`, fingerprinted run logs; traces in `D:\tmp\ask-codex-r07b-traces\discuss-<segment>-<case>`):
+
+- Final bytes 0e75a87: p6 — the eight discussion cases x3, 24/24. Cases not rerun on p6 are byte-equivalent for their path (the later edits start after section 4 of the skill): rounds-out-of-range and two-models-refused 3/3 on d9fc387 (f1); nl-not-loaded and not-model-invocable 5/5 on 3e7ec28 (final).
+- Detection proof: with `disable-model-invocation` removed (worktree, never committed), nl-not-loaded failed 5/5 (`noflag`).
+- Live: one real two-round discussion on 3e7ec28 (gpt-5.6-sol high): both rounds structured, three-section report, guards unchanged (`live-discuss-*`).
+- Regression: 9 existing ask/review/setup cases x3 on 4dca943 vs 6266c3e — no grader fails more often on the candidate except one `no-bare-cd` (overall candidate 2/27, baseline 4/27) (`regression-comparison.txt`). Later commits touch only the discuss skill and its evals.
+- Offline: node harness 0 failures (discuss-skill-graders 845), consultation_test 37 OK, resolve_test 42 OK (verifier rerun on 0e75a87).
+
+Deferred (follow-up tickets, `Status: needs-triage`): 07 one-sided user-call edges (verifier A1 P3, A2 P4); 08 framing paraphrased by a word or two in 3 of 27 rounds (A6 P3); 09 report wording drift, residual bare `cd`, stub counter, API stalls (A4/A5 P4); 10 interactive paths verified against the skill text only.
+
+Cleanup: worktree `D:/tmp/ask-codex-discuss-baseline` removed; `D:/tmp/discuss-live` removed after its trace was copied to `evidence/`; kept eval traces remain under `D:\tmp\ask-codex-r07b-traces\discuss-*`.
