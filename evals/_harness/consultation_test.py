@@ -16,7 +16,9 @@ from replies import classify  # noqa: E402
 
 # Codex command line of a request without reply_schema, captured from baseline 6266c3e
 # (the stub's .stub/exec-argv.json), run directory / project path / skill directory replaced by placeholders,
-# plus one deliberate change: `-c agents.enabled=false` after `--disable apps` (subagent-boundary, ADR 0008).
+# plus one deliberate change: child agents off, `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`
+# after `--disable apps` (subagent-boundary, ADR 0008; the second pair because an explicitly enabled
+# multi_agent_v2 feature in the user's or a trusted project's config defeats the first, S2 live probe 2).
 BASELINE_ARGV = [
     "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
     "-C", "<PROJECT>",
@@ -25,6 +27,7 @@ BASELINE_ARGV = [
     "-c", 'mcp_servers={"blender"={command="ask-codex-disabled",enabled=false},"comfyui"={command="ask-codex-disabled",enabled=false},"cua_repl"={command="ask-codex-disabled",enabled=false},"node_repl"={command="ask-codex-disabled",enabled=false},"pencil"={command="ask-codex-disabled",enabled=false}}',
     "--disable", "apps",
     "-c", "agents.enabled=false",
+    "-c", "features.multi_agent_v2.enabled=false",
     "--output-schema", "<SKILL_DIR>/consultation.schema.json",
     "-o", "<RUN_DIR>/0/last-message.json",
     "-",
@@ -597,20 +600,27 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.call("cleanup", ready["directory"])
 
     def test_child_agents_switch_goes_to_codex_exec_only(self):
-        # subagent-boundary (ADR 0008): run() adds the pair to `codex exec` alone, never to `codex mcp list`,
+        # subagent-boundary (ADR 0008): run() adds both pairs to `codex exec` alone, never to `codex mcp list`,
         # the policy overrides or the preflight summary that run() compares with the plan.
+        switches = ("agents.enabled=false", "features.multi_agent_v2.enabled=false")
+        keys = ("agents.enabled", "multi_agent_v2")
         ready = self.prepare()
         plan = json.loads((Path(ready["directory"]) / "plan.json").read_text(encoding="utf-8"))
-        self.assertFalse(any("agents.enabled" in arg for arg in plan["overrides"]), plan["overrides"])
+        for key in keys:
+            self.assertFalse(any(key in arg for arg in plan["overrides"]), plan["overrides"])
+            self.assertNotIn(key, json.dumps(plan["summary"]))
         self.assertFalse(any("agent" in key for key in plan["summary"]), plan["summary"])
         self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
         lines = (self.project / ".stub/mcp-list.log").read_text(encoding="utf-8").splitlines()
         calls = [json.loads(line) for line in lines]
         self.assertEqual(len(calls), 4, calls)  # project and guarded listing, at prepare and again at run
         for call in calls:
-            self.assertFalse(any("agents.enabled" in arg for arg in call["argv"]), call)
+            for key in keys:
+                self.assertFalse(any(key in arg for arg in call["argv"]), call)
         argv = json.loads((self.project / ".stub/exec-argv.json").read_text(encoding="utf-8"))
-        self.assertEqual(argv.count("agents.enabled=false"), 1, argv)
+        for switch in switches:
+            self.assertEqual(argv.count(switch), 1, argv)
+            self.assertEqual(argv[argv.index(switch) - 1], "-c", argv)
         self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
         self.call("cleanup", ready["directory"])
 

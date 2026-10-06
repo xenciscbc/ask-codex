@@ -15,9 +15,11 @@ Records written next to the scenario file:
 
 Exec allowlist: `-s read-only`, `--ephemeral --skip-git-repo-check --json`, `-C`, `-o`, `--output-schema`,
 an optional `-m <slug>`, prompt on stdin (`-`), `--disable apps`, one effort override (medium or above),
-MCP disable overrides, and exactly one `-c agents.enabled=false` (child agents off, subagent-boundary /
-ADR 0008): missing, any other agents.enabled value or a repeat is a violation. `mcp list` accepts only
-MCP disable overrides, so `-c agents.enabled=false` there is an unexpected -c.
+MCP disable overrides, and exactly one each of `-c agents.enabled=false` and
+`-c features.multi_agent_v2.enabled=false` (child agents off, subagent-boundary / ADR 0008; the second
+because an explicitly enabled multi_agent_v2 feature in config defeats the first): for either pair, missing,
+any other value or a repeat is a violation. `mcp list` accepts only MCP disable overrides, so either pair
+there is an unexpected -c.
 
 `exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
 unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
@@ -104,8 +106,10 @@ DISABLE_RE = re.compile(r'^mcp_servers\.([A-Za-z0-9_-]+)=\{\s*command\s*=\s*"ask
 # Consultation effort is never below medium; `ultra` only when the user asks for it.
 EFFORT_RE = re.compile(r'^model_reasoning_effort="(medium|high|xhigh|max|ultra)"$')
 SLUG_RE = re.compile(r'^[A-Za-z0-9._-]+$')
-# Child agents stay off in every consultation (subagent-boundary, ADR 0008): exec only, exactly once.
-AGENTS_OFF = "agents.enabled=false"
+# Child agents stay off in every consultation (subagent-boundary, ADR 0008): exec only, each exactly once.
+# agents.enabled=false alone lost to `[features.multi_agent_v2] enabled = true` in the user's or a trusted
+# project's config (S2 live probe 2), so the feature is switched off on the command line too.
+AGENTS_OFF = ("agents.enabled=false", "features.multi_agent_v2.enabled=false")
 
 
 # Root-table disable entries: enabled=false, optionally with a placeholder transport.
@@ -296,14 +300,14 @@ def exec_(args):
     for flag in opts["repeated"]:
         problems.append(f"repeated {flag}")
     effort_seen = False
-    agents_off = 0
+    agents_off = dict.fromkeys(AGENTS_OFF, 0)
     disabled_seen = set()
     for kv in opts["c"]:
         if EFFORT_RE.match(kv):
             effort_seen = True
             continue
-        if kv == AGENTS_OFF:
-            agents_off += 1
+        if kv in agents_off:
+            agents_off[kv] += 1
             continue
         names = disabled_names(kv)
         if names is None:
@@ -315,11 +319,12 @@ def exec_(args):
                 disabled_seen.add(name)
     if not effort_seen:
         problems.append("missing effort override")
-    # Any other agents.enabled value is an unexpected -c above, and leaves the required pair missing here.
-    if agents_off == 0:
-        problems.append(f"missing -c {AGENTS_OFF}")
-    elif agents_off > 1:
-        problems.append(f"repeated -c {AGENTS_OFF}")
+    # Any other value of either key is an unexpected -c above, and leaves its required pair missing here.
+    for kv, seen in agents_off.items():
+        if seen == 0:
+            problems.append(f"missing -c {kv}")
+        elif seen > 1:
+            problems.append(f"repeated -c {kv}")
     for u in opts["unknown"]:
         problems.append(f"unknown arg {u}")
     for p in problems:

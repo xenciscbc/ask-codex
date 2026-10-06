@@ -207,9 +207,11 @@ def run(directory):
             if model.get("model"):
                 args += ["-m", model["model"]]
             # Child agents stay off: a role file can raise a child's sandbox and bring its own MCP
-            # servers (ADR 0008, .scratch/subagent-boundary). Constant, so not in overrides or summary.
+            # servers (ADR 0008, .scratch/subagent-boundary). The feature switch too, because an enabled
+            # multi_agent_v2 feature in the user's or a trusted project's config defeats agents.enabled=false
+            # alone; command-line -c outranks config files. Constant, so not in overrides or summary.
             args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
-                     "--disable", "apps", "-c", "agents.enabled=false",
+                     "--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
                      "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
                      "-o", (child / "last-message.json").as_posix(), "-"]
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")
