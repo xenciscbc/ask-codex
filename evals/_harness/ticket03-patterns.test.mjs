@@ -49,7 +49,7 @@ const graderOf = (c, g) => {
   const t = fs.readFileSync(path.join(evals, c, "graders", `${g}.md`), "utf8");
   return { re: new RegExp(t.match(/^pattern: '((?:[^']|'')*)'$/m)[1].replace(/''/g, "'")), match: (t.match(/^match: (\S+)$/m) || [, "contains"])[1] };
 };
-const argvSample = (slug, effort) => JSON.stringify(["exec", "-s", "read-only", "--ephemeral", ...(slug ? ["-m", slug] : []), "-c", `model_reasoning_effort="${effort}"`, "--disable", "apps"], null, 2);
+const argvSample = (slug, effort) => JSON.stringify(["exec", "-s", "read-only", "--ephemeral", ...(slug ? ["-m", slug] : []), "-c", `model_reasoning_effort="${effort}"`, "--disable", "apps", "-c", "agents.enabled=false"], null, 2);
 const expectArgv = (c, g, slug, effort, want, label) => {
   const { re } = graderOf(c, g);
   check(re.test(argvSample(slug, effort)) === want, `${c}/${g} ${label}`);

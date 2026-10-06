@@ -206,8 +206,11 @@ def run(directory):
                     "-C", Path(plan["summary"]["project"]).as_posix()]
             if model.get("model"):
                 args += ["-m", model["model"]]
+            # Child agents stay off: a role file can raise a child's sandbox and bring its own MCP
+            # servers (ADR 0008, .scratch/subagent-boundary). Constant, so not in overrides or summary.
             args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
-                     "--disable", "apps", "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
+                     "--disable", "apps", "-c", "agents.enabled=false",
+                     "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
                      "-o", (child / "last-message.json").as_posix(), "-"]
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")
             handles = {"stdin": streams.enter_context(prompt.open("rb")),

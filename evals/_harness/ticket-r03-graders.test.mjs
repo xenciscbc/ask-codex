@@ -72,7 +72,7 @@ for (const [label, text, ok] of [
 
 // tool_used graders see the JSON-encoded Bash input.
 const enc = (command) => JSON.stringify({ command, description: "Run" });
-const RUN_CMD = "bash '/p/skills/ask/scripts/run.sh' '/t/ask-codex/run.a' -- codex exec -s read-only --ephemeral --skip-git-repo-check --json -C '/w' -m gpt-6-sol -c 'model_reasoning_effort=\"high\"' --disable apps --output-schema '/p/skills/ask/consultation.schema.json' -o '/t/ask-codex/run.a/last-message.json' - < '/t/ask-codex/run.a/prompt.md' > '/t/ask-codex/run.a/events.jsonl' 2> '/t/ask-codex/run.a/stderr.log'";
+const RUN_CMD = "bash '/p/skills/ask/scripts/run.sh' '/t/ask-codex/run.a' -- codex exec -s read-only --ephemeral --skip-git-repo-check --json -C '/w' -m gpt-6-sol -c 'model_reasoning_effort=\"high\"' --disable apps -c agents.enabled=false --output-schema '/p/skills/ask/consultation.schema.json' -o '/t/ask-codex/run.a/last-message.json' - < '/t/ask-codex/run.a/prompt.md' > '/t/ask-codex/run.a/events.jsonl' 2> '/t/ask-codex/run.a/stderr.log'";
 check(has("timeout-stalled-stop", "used-run-script", enc(RUN_CMD)), "used-run-script: prefixed launch matches");
 check(!has("timeout-stalled-stop", "used-run-script", enc(RUN_CMD.replace("bash '/p/skills/ask/scripts/run.sh' '/t/ask-codex/run.a' -- ", ""))), "used-run-script: bare codex exec does not match");
 check(!has("timeout-stalled-stop", "used-run-script", enc(STOP_CMD.command)), "used-run-script: stop.sh call does not match");

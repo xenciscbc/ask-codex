@@ -16,10 +16,11 @@ const has = (c, g, text) => count(c, g, text) > 0;
 let pass = 0, fail = 0;
 const check = (ok, label) => { if (ok) pass++; else { fail++; console.log(`FAIL ${label}`); } };
 
-// Per-run argv: five disable definitions, read-only, --disable apps.
+// Per-run argv: five disable definitions, read-only, --disable apps, child agents off.
 const SERVERS = ["blender", "comfyui", "node_repl", "pencil", "cua_repl"];
 const argv = (slug, servers = SERVERS) => JSON.stringify(["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", "/w", "-m", slug,
-  "-c", 'model_reasoning_effort="medium"', ...servers.flatMap((s) => ["-c", `mcp_servers.${s}={command="ask-codex-disabled",enabled=false}`]), "--disable", "apps", "-"], null, 2);
+  "-c", 'model_reasoning_effort="medium"', ...servers.flatMap((s) => ["-c", `mcp_servers.${s}={command="ask-codex-disabled",enabled=false}`]), "--disable", "apps",
+  "-c", "agents.enabled=false", "-"], null, 2);
 for (const slug of ["gpt-6-astra", "gpt-6-sol"]) {
   check(count("parallel-two-models", `${slug}-disable-set`, argv(slug)) === 5, `${slug}: full disable set counts 5`);
   check(count("parallel-two-models", `${slug}-disable-set`, argv(slug, SERVERS.slice(1))) === 4, `${slug}: a missing disable definition counts 4 (grader count:5 fails)`);

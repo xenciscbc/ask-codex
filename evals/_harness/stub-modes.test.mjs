@@ -27,7 +27,8 @@ const project = (name, scenario) => {
 const run = (args, cwd, env = {}, input = "prompt") =>
   spawnSync(python, [stub, ...args], { cwd, input, env: { ...process.env, ...env }, encoding: "utf-8" });
 const execArgs = (dir, out) => ["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", dir,
-  "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "--output-schema", "schema.json", "-o", out, "-"];
+  "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "-c", "agents.enabled=false",
+  "--output-schema", "schema.json", "-o", out, "-"];
 
 try {
   // Missing CLI: every command exits 127, nothing else happens.
@@ -142,6 +143,30 @@ try {
     args.splice(args.indexOf("--disable"), 0, "-c", dup, "-c", dup);
     run(args, dir);
     check(/repeated disable definition for blender/.test(fs.readFileSync(path.join(dir, ".stub", "violations.log"), "utf-8")), "repeated disable definition is a violation");
+  }
+  {
+    // Child agents stay off (subagent-boundary, ADR 0008): every exec carries exactly one -c agents.enabled=false.
+    const OFF = "agents.enabled=false";
+    const violations = (dir) => fs.readFileSync(path.join(dir, ".stub", "violations.log"), "utf-8").replace(/\r\n/g, "\n");
+    const variant = (name, edit) => {
+      const dir = project(`agents-${name}`, {});
+      run(edit(execArgs(dir, path.join(dir, "last.json"))), dir);
+      return violations(dir);
+    };
+    const at = (args) => args.indexOf(OFF);
+    const present = variant("present", (a) => a);
+    check(present === "", `agents: the consultation argv (pair once) records no violation (got ${JSON.stringify(present)})`);
+    const missing = variant("missing", (a) => { a.splice(at(a) - 1, 2); return a; });
+    check(/^exec: missing -c agents\.enabled=false$/m.test(missing), `agents: an argv without the pair is a violation (got ${JSON.stringify(missing)})`);
+    const other = variant("true", (a) => { a[at(a)] = "agents.enabled=true"; return a; });
+    check(/^exec: unexpected -c agents\.enabled=true$/m.test(other) && /^exec: missing -c agents\.enabled=false$/m.test(other),
+      `agents: agents.enabled=true is a violation and leaves the pair missing (got ${JSON.stringify(other)})`);
+    const twice = variant("twice", (a) => { a.splice(at(a) + 1, 0, "-c", OFF); return a; });
+    check(/^exec: repeated -c agents\.enabled=false$/m.test(twice), `agents: the pair twice is a violation (got ${JSON.stringify(twice)})`);
+    // `codex mcp list` is unchanged: the pair is not one of its allowed overrides.
+    const dir = project("agents-mcp-list", {});
+    run(["mcp", "list", "--json", "-c", OFF], dir);
+    check(/^mcp list: unexpected -c agents\.enabled=false$/m.test(violations(dir)), `agents: the pair on mcp list stays an unexpected -c (got ${JSON.stringify(violations(dir))})`);
   }
   // Per-call reply sequence (discuss ticket 01): numbered records, per-entry replies, last entry reused.
   {

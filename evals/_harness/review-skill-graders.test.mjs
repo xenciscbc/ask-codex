@@ -106,7 +106,7 @@ expect(/^match: not_contains$/m.test(read("review-base-ref", "no-base-only-file"
 expect(re("review-range-model-focus", "endpoint-main").test(RANGE) && re("review-range-model-focus", "endpoint-head").test(RANGE), "review-range-model-focus: both endpoints pass");
 expect(!re("review-range-model-focus", "endpoint-head").test(RANGE.replace("main..HEAD ", "")), "review-range-model-focus/endpoint-head: commit ids alone fail");
 expect(re("review-range-model-focus", "focus-verbatim").test(RANGE) && !re("review-range-model-focus", "focus-verbatim").test(RANGE.replace("check error handling", "check the error handling")), "review-range-model-focus/focus-verbatim: verbatim passes, a rewording fails");
-const argv = (m) => JSON.stringify(["exec", "-s", "read-only", "-m", m, "-c", 'model_reasoning_effort="high"', "-"], null, 2);
+const argv = (m) => JSON.stringify(["exec", "-s", "read-only", "-m", m, "-c", 'model_reasoning_effort="high"', "-c", "agents.enabled=false", "-"], null, 2);
 const sol = re("review-range-model-focus", "model-sol");
 expect(sol.test(argv("gpt-6-sol")) && !sol.test(argv("gpt-5.6-terra")) && !sol.test(argv("gpt-6-solar")), "review-range-model-focus/model-sol: only the resolved sol slug passes");
 expect(/path: \.stub\/exec-argv\.json/.test(read("review-range-model-focus", "model-sol")), "review-range-model-focus/model-sol reads exec-argv.json");

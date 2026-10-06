@@ -42,7 +42,7 @@ const project = (name, scenario) => {
 const q = (s) => `'${toBash(s)}'`;
 // The skill's step-8 line, with run.sh as its prefix; redirections stay on the caller's line.
 const launch = ({ dir, run }) => {
-  const cmd = `bash ${q(path.join(scripts, "run.sh"))} ${q(run)} -- ${q(stubCodex)} exec -s read-only --ephemeral --skip-git-repo-check --json -C ${q(dir)} -m gpt-6-sol -c 'model_reasoning_effort="high"' --disable apps --output-schema ${q(schema)} -o ${q(path.join(run, "last-message.json"))} - < ${q(path.join(run, "prompt.md"))} > ${q(path.join(run, "events.jsonl"))} 2> ${q(path.join(run, "stderr.log"))}`;
+  const cmd = `bash ${q(path.join(scripts, "run.sh"))} ${q(run)} -- ${q(stubCodex)} exec -s read-only --ephemeral --skip-git-repo-check --json -C ${q(dir)} -m gpt-6-sol -c 'model_reasoning_effort="high"' --disable apps -c agents.enabled=false --output-schema ${q(schema)} -o ${q(path.join(run, "last-message.json"))} - < ${q(path.join(run, "prompt.md"))} > ${q(path.join(run, "events.jsonl"))} 2> ${q(path.join(run, "stderr.log"))}`;
   const child = spawn("bash", ["-c", cmd], { stdio: "ignore" });
   const state = { exited: false, code: null };
   child.on("exit", (code) => { state.exited = true; state.code = code; });
