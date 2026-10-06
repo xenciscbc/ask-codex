@@ -16,7 +16,7 @@ ask-codex 是一組 Claude Code skills，也提供 plugin 安裝方式，透過�
 
 ## 執行邊界
 
-諮詢以 Codex 的唯讀 shell sandbox 執行，並封鎖 shell 網路存取。MCP server 在該 sandbox 之外執行；腳本預設停用事前檢查時觀察到的所有 server。檢查與執行之間的設定變更可能繞過檢查，詳見下方限制。你允許的 server 可能提供寫入或執行工具；外掛不會讓這些工具變成唯讀。
+諮詢以 Codex 的唯讀 shell sandbox 執行，封鎖 shell 網路存取，並關閉子代理（自 1.3.2 起帶 `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`，見下方已知風險「子代理」）。MCP server 在該 sandbox 之外執行；腳本預設停用事前檢查時觀察到的所有 server。檢查與執行之間的設定變更可能繞過檢查，詳見下方限制。你允許的 server 可能提供寫入或執行工具；外掛不會讓這些工具變成唯讀。
 
 Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為資料。這是模型指示，並非 hook 或工具層的授權屏障。行程停止也依賴可觀測的行程身份與快照，限制詳見下文。
 
@@ -164,7 +164,7 @@ OpenAI 官方 Codex plugin 也有審查指令，與 `/ask-codex:review` 是不�
 | Focus 文字 | 不支援 | 支援 | 支援，並附上 Claude 對變更意圖的說明作為立場 |
 | 範圍 | working tree 或 branch（`--base <ref>`） | working tree 或 branch（`--base <ref>`） | working tree、`--base <ref>` 或 commit range |
 | 模型與 effort | 可傳 `--model`（說明未記載）；不能選 effort | 可傳 `--model`（說明未記載）；不能選 effort | 模型簡稱與 effort，最多兩個模型並行 |
-| MCP server | 指令本身不控制 | 指令本身不控制 | 預設停用（ask-codex MCP 政策）；Codex shell 唯讀 |
+| MCP server | 指令本身不控制 | 指令本身不控制 | 預設停用（ask-codex MCP 政策）；Codex shell 唯讀；子代理關閉 |
 | 前景與背景 | `--wait`、`--background`、`/codex:status` | `--wait`、`--background`、`/codex:status` | 前景執行，由腳本負責檢查間隔與停止回報 |
 | 執行層 | plugin 共用的 companion 腳本 | plugin 共用的 companion 腳本 | 直接呼叫 `codex exec`（[ADR 0001](docs/adr/0001-call-codex-exec-directly.md)） |
 
@@ -199,16 +199,18 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 ## 已知風險與限制
 
 - **MCP 設定競態（尚未解決）：**事前檢查與 `codex exec` 分別載入設定。檢查後新增的 server 沒有對應停用覆寫；已允許 server 的定義也可能在執行前改變。因此 guard 不提供原子化設定快照。準備與執行期間應保持 Codex 與 plugin 設定不變，但這項操作限制無法強制防止並行或惡意變更。詳見[調查紀錄](docs/mcp-configuration-race.md)。
-- **MCP 存取：**允許的工具在 shell sandbox 之外執行，提示指示無法強制其唯讀。唯讀 shell 本身也不會將讀取範圍限制為與問題相關的檔案。
+- **MCP 存取：**允許的工具在 shell sandbox 之外執行，提示指示無法強制其唯讀；允許的 server 本身也可能啟動代理（例如 `codex mcp-server`），子代理的關閉旗標管不到它。唯讀 shell 本身也不會將讀取範圍限制為與問題相關的檔案。
 - **請求來源：**Skill 規則要求諮詢與確認必須來自你的要求，但仍仰賴 Claude 遵循指示。早期測試曾在加入來源檢查前出現檔案文字觸發諮詢的情況；後續有限測試無法證明能完全抵禦提示注入。
 - **行程快照：**追蹤涵蓋已觀測的子行程，包括已捕捉身份、後來脫離原群組的子行程，個別發送訊號前會檢查身份。若子行程在被觀測前已脫離並重新掛到其他父行程，可能無法發現。若 PID／群組被重用，且替代群組首領在觀測前已退出，剩餘群組可能被誤認為原群組並收到終止訊號。外掛沒有核心層強制的行程歸屬隔離。
 - **停止未確認：**無法列舉或核對行程身份時，可能仍有行程存活，包含 Windows 行程查詢權限受限的情況。應保留回報的診斷資料；root 行程退出或 log 安靜，都不能單獨證明停止完成。
 - **保留內容：**停止未確認時，會保留存活行程可能仍需使用的檔案。錯誤 log 可能含專案內容；診斷資料須在明確要求且確認停止後才會清理，沒有自動到期機制。
 - **平台與設定：**歷史 Windows RAM disk 測試曾以 `os error 1` 失敗，但不能因此將所有 OS 錯誤都歸因於磁碟。長期信任專案的定義檢查尚未以真實 Codex CLI 完成端對端驗證。未選定 session 模型時，外部程式修改模型設定可能影響下一次諮詢。
-- **Codex `notify` hook（刻意不修）：**若 Codex 設定了 `notify`，諮詢時 Codex 也會執行該 hook。在 Windows 上，hook 會繼承這次執行的 prompt、事件與錯誤檔。hook 若比 Codex 活得久，就會一直鎖住這些檔案；曾觀察到一串 hook 鎖了約 13 秒。清理最多重試 30 秒（`ASK_CODEX_CLEANUP_WINDOW_S`），所以已完成的諮詢可能要等這麼久才回傳。鎖若超過這段時間，回覆仍會送達，並回報保留位置供之後清理。外掛不會停用你的 hook。詳見 [ticket 12](.scratch/script-owned-consultation/issues/12-cleanup-retries-transient-windows-lock.md)。
+- **子代理（1.3.2 修正；受影響版本 1.0.0–1.3.1）：**Codex 可以叫出子代理（預設開啟，目前多數模型使用 MultiAgentV2）。子代理的角色檔——例如 codex-feather 安裝的 `~/.codex/agents/*.toml`，或受信任專案的 `.codex/agents`——會自行設定 sandbox、模型與 MCP server，而且角色的 sandbox 會覆寫諮詢的 `-s read-only`。因此到 1.3.1 為止，諮詢可能叫出 `workspace-write` 的子代理，在你的專案寫入檔案、使用 ask-codex MCP 政策從未檢查過的 MCP server，並以角色的模型計費；事件紀錄中看不出這件事。自 1.3.2 起，每次諮詢都帶 `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`。已在 codex-cli 0.159.3（Windows）以真實呼叫驗證：預設設定下的 v2 與 v1 模型，以及 `.codex/config.toml` 開啟 agents、MultiAgentV2、fan-out 與 multi_agent 的受信任專案——都沒有子代理工具、沒有寫入。未驗證：你自己的 Codex 設定開啟這些選項（指令列優先於設定檔）、較舊的 CLI、WSL。單獨使用 `--disable multi_agent` 擋不住 MultiAgentV2。若你在 1.3.1 以前曾對不可信的內容執行 `review` 或 `discuss`，且安裝了可寫入的角色，請在那些專案檢查 `git status`；並更新外掛（手動複製者請重新複製 skills）。
+- **sandbox 之外的其他工具：**唯讀的諮詢仍看得到會寫入 Codex 自身儲存的工具（`notes.write_file`／`append_to_file`、`create_goal`／`update_goal`）以及 `web.run`。它們不會動到你的專案檔案，但筆記會跨 Codex session 保留，網路存取則是對外通道；另行追蹤。
+- **Codex `notify` hook 與其他 hook（刻意不修）：**使用者層設定的 Codex hook（以及受信任專案的 hook）也會在諮詢時執行，且不受 sandbox 限制。若 Codex 設定了 `notify`，諮詢時 Codex 也會執行該 hook。在 Windows 上，hook 會繼承這次執行的 prompt、事件與錯誤檔。hook 若比 Codex 活得久，就會一直鎖住這些檔案；曾觀察到一串 hook 鎖了約 13 秒。清理最多重試 30 秒（`ASK_CODEX_CLEANUP_WINDOW_S`），所以已完成的諮詢可能要等這麼久才回傳。鎖若超過這段時間，回覆仍會送達，並回報保留位置供之後清理。外掛不會停用你的 hook。詳見 [ticket 12](.scratch/script-owned-consultation/issues/12-cleanup-retries-transient-windows-lock.md)。
 - **審查會讀取整個範圍：**審查讓 Codex 讀取範圍內的變更，working tree 審查包含 untracked 檔案。排除機密只是給 Codex 的指示，並非強制過濾。
 - **Working tree 的 clean filter：**working tree 審查會執行 `git status`，當它重新讀取 stat 資料已變動的檔案時，仍可能執行儲存庫設定的 clean filter（`.gitattributes` 加上 `filter.<x>.clean`）。`--no-ext-diff`、`--no-textconv` 與 `core.fsmonitor=false` 都涵蓋不到這點。Base 與 range 審查只比較 commits，不受影響。審查不信任的儲存庫時，請用 `--base` 或 range，或先檢查其 filter 設定。
-- **diff 內容引導：**被審查的變更中的文字可能試圖引導 Codex 的結論；「內容是資料」只是指示，並非強制。控制手段是 Claude 對每個論點的處置，且 Claude 不會在沒有你另行要求時依論點行動。
+- **diff 內容引導：**被審查的變更中的文字可能試圖引導 Codex 的結論，被審查 repo 自己的 `AGENTS.md` 或 skills 也可能被 Codex 當成指示而非資料；「內容是資料」只是指示，並非強制。控制手段是 Claude 對每個論點的處置，且 Claude 不會在沒有你另行要求時依論點行動。
 - **討論的用量與收斂：**每一輪討論呼叫一次 Codex（最多十次），且因為每輪都是新 session，Codex 每輪都要重新探索專案。避免假性共識的規則（讓步需附證據、標示後期翻轉、只接受阻擋等級的新論點）是給兩個模型的指示，不是強制機制；報告中的標示才是控制手段。Codex 先前的輸出會被帶入後續 prompt，和任何檔案一樣被視為資料。
 - **用量：**諮詢會消耗 Codex 用量，並行諮詢會啟動兩次執行。目前尚未量測每次諮詢的 token 基本成本。
 

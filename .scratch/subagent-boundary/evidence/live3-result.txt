@@ -1,0 +1,51 @@
+exit 0
+{
+ "file_written": false,
+ "reply": {
+  "summary": "No child-agent spawning tools are available in this session, and the probe file does not exist.",
+  "claims": [
+   {
+    "id": "C1",
+    "statement": "Callable namespaces/tools are: functions.exec, functions.wait, functions.request_user_input; functions.exec can access apply_patch, create_goal, exec_command, get_goal, update_goal, view_image, write_stdin, image_gen__imagegen, and web__run; the exposed tool namespaces are image_gen and web.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Session tool definitions"
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C2",
+    "statement": "The named-role executor spawn attempt could not be made because no child-agent spawning tool or executor role is available in this session.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Session tool definitions",
+     "AGENTS.md delegation instruction"
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C3",
+    "statement": "The spawn_agents_on_csv tool does not exist.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Session tool definitions"
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C4",
+    "statement": "probe-executor.txt does not exist in the project root.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "PowerShell output: NOT_FOUND"
+    ],
+    "followup_status": null
+   }
+  ],
+  "open_questions": []
+ }
+}

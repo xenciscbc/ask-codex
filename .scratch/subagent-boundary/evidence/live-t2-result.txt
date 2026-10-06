@@ -1,0 +1,51 @@
+exit 0
+{
+ "file_written": false,
+ "reply": {
+  "summary": "No child-agent spawning capability is exposed in this session, so neither spawn could be performed and the requested file was not created.",
+  "claims": [
+   {
+    "id": "C1",
+    "statement": "The callable namespaces are `functions`, `history`, and `notes`; direct tools are `functions.exec`, `functions.wait`, `functions.request_user_input`, `functions.new_context`, `history.list_items`, `history.list_windows`, `history.read_item`, `history.search_contents`, `notes.append_to_file`, `notes.list_files_by_prefix`, `notes.read_file`, `notes.search_contents`, and `notes.write_file`; nested tools callable through `functions.exec` are `apply_patch`, `create_goal`, `exec_command`, `get_context_remaining`, `get_goal`, `image_gen__imagegen`, `update_goal`, `view_image`, `web__run`, and `write_stdin`.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "The session tool declarations expose the `functions`, `history`, and `notes` namespaces and their direct tools.",
+     "Runtime `ALL_TOOLS` output: `[\"apply_patch\",\"create_goal\",\"exec_command\",\"get_context_remaining\",\"get_goal\",\"image_gen__imagegen\",\"update_goal\",\"view_image\",\"web__run\",\"write_stdin\"]`."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C2",
+    "statement": "The requested named-role `executor` spawn was not performed because no child-agent spawn tool exists in this session.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Neither the direct session tool declarations nor runtime `ALL_TOOLS` contains a child-agent spawning tool."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C3",
+    "statement": "The `spawn_agents_on_csv` spawn was not performed because the tool does not exist in this session.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Runtime `ALL_TOOLS` does not contain `spawn_agents_on_csv`, and no direct tool with that name is declared."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C4",
+    "statement": "`probe-executor.txt` does not exist in the project root.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "`Test-Path -LiteralPath '.\\probe-executor.txt' -PathType Leaf` check in `D:\\tmp\\sb-trust` produced `MISSING` with exit code 0."
+    ],
+    "followup_status": null
+   }
+  ],
+  "open_questions": []
+ }
+}

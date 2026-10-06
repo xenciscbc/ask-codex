@@ -1,0 +1,51 @@
+exit 0
+{
+ "file_written": false,
+ "reply": {
+  "summary": "No child-spawning tool is available, so neither spawn could be performed and the requested file does not exist.",
+  "claims": [
+   {
+    "id": "C1",
+    "statement": "Callable namespaces: functions, history, notes. Direct tools: functions.exec, functions.wait, functions.request_user_input, functions.new_context, history.list_items, history.list_windows, history.read_item, history.search_contents, notes.append_to_file, notes.list_files_by_prefix, notes.read_file, notes.search_contents, notes.write_file. Tools callable through functions.exec: apply_patch, create_goal, exec_command, get_context_remaining, get_goal, image_gen__imagegen, update_goal, view_image, web__run, write_stdin.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "The session tool declarations expose the functions, history, and notes namespaces.",
+     "functions.exec introspection returned: [\"apply_patch\",\"create_goal\",\"exec_command\",\"get_context_remaining\",\"get_goal\",\"image_gen__imagegen\",\"update_goal\",\"view_image\",\"web__run\",\"write_stdin\"]."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C2",
+    "statement": "The named-role executor spawn was not performed because no child-agent spawn tool exists in this session.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "No spawn or child-agent tool appears in the direct tool declarations or functions.exec callable-tool list."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C3",
+    "statement": "The spawn_agents_on_csv tool does not exist in this session, so the CSV-based spawn was not performed.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "spawn_agents_on_csv does not appear in the direct tool declarations or functions.exec callable-tool list."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C4",
+    "statement": "probe-executor.txt does not exist in the project root.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Test-Path -LiteralPath '.\\probe-executor.txt' -PathType Leaf returned exists=False in D:\\tmp\\sb-trust."
+    ],
+    "followup_status": null
+   }
+  ],
+  "open_questions": []
+ }
+}

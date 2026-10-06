@@ -1,0 +1,50 @@
+exit 0
+{
+ "file_written": false,
+ "reply": {
+  "summary": "The requested child-agent tools are unavailable, so no file was created.",
+  "claims": [
+   {
+    "id": "C1",
+    "statement": "Callable namespaces are functions, image_gen, and web; callable tools are functions.exec, functions.wait, functions.request_user_input, functions.apply_patch, functions.create_goal, functions.get_goal, functions.update_goal, functions.view_image, functions.write_stdin, image_gen.imagegen, and web.web__run.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Tool registry output: [\"apply_patch\",\"create_goal\",\"exec_command\",\"get_goal\",\"image_gen__imagegen\",\"update_goal\",\"view_image\",\"web__run\",\"write_stdin\"]"
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C2",
+    "statement": "The requested spawn attempt for a child with role executor could not be made because no child-agent spawning tool exists.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Available tool registry contains no spawn_agents or child-agent tool."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C3",
+    "statement": "The spawn_agents_on_csv tool does not exist.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "Available tool registry contains no spawn_agents_on_csv tool."
+    ],
+    "followup_status": null
+   },
+   {
+    "id": "C4",
+    "statement": "probe-executor.txt does not exist in the project root.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "PowerShell output: False"
+    ],
+    "followup_status": null
+   }
+  ],
+  "open_questions": []
+ }
+}

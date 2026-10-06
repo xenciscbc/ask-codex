@@ -1,0 +1,9 @@
+[agents]
+enabled = true
+
+[features]
+multi_agent = true
+enable_fanout = true
+
+[features.multi_agent_v2]
+enabled = true
