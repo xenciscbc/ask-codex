@@ -1,6 +1,6 @@
 # 09 — Small report wording drift and harness residuals from the discuss branch
 
-Status: needs-triage
+Status: resolved — see Comments (2026-10-06)
 
 **What to build:** record and, where cheap, remove the P4 residuals the discuss branch left.
 
@@ -12,3 +12,9 @@ Status: needs-triage
 **Blocked by:** None — can start immediately.
 
 - [ ] Decide per item: fix (with an offline-proven grader where it is report wording), or accept as a documented residual.
+
+## Comments
+
+- 2026-10-06 — 2249a95: the stub claims each exec call's number by creating `.stub/exec-claim.<n>` exclusively (a test with eight concurrent calls and a widened race window failed on the old read-modify-write counter and passes now; the verifier reproduced 3–5 distinct records of 8 on the old stub, 8 of 8 on the new); the unread `exec-count.txt` is gone. Discussion cases have a 2400 s timeout.
+- Accepted residuals (user decision 2026-10-06): report wording drift (self-made labels, counts, recommendation order — the c2 grader now accepts either order) and the occasional bare `cd` (fu2 1/9, baseline habit).
+- Environment note from the verifier: on this machine a PowerShell `Get-Process` call took about 4 s on 2026-10-06, which made `run-stop-scripts.test.mjs`, `process-lifecycle.test.mjs` and `consultation_test.py` time out in that session; the diff touches none of run.sh, `_tree.sh` or consult.py, and the same suites passed earlier the same day (consultation_test 37 OK, run-stop-scripts 104/0).
