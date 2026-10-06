@@ -214,7 +214,7 @@ const still = re("discuss-limit-reached", "c3-still-split"), ended = re("discuss
 expect(still.test(SPLIT) && still.test(SPLIT.replace("C3 vs L1", "C3")) && still.test(SPLIT.replace("## For you to decide", "**For you to decide**")), "c3-still-split: C3 (alone or as an opposed pair) with the round-limit marker passes");
 expect(!still.test(REPORT) && !still.test(ENDED) && !still.test(SPLIT.replace("- C3 vs L1", "- C4 vs L1")) && !still.test("- C3 — x (still split at the round limit)\n## For you to decide\nnone"), "c3-still-split: no marker, the interrupted marker, another id, or the marker only before the heading fails");
 expect(still.test(SPLIT.replace("- C3 vs L1 — Keep the failure counters in a shared Redis instance. (still split at the round limit)", "**C3 vs L1 — still split at the round limit** — where the counters live")), "c3-still-split: the fixed words inside a bold heading line pass (seen in a stub30 reply)");
-expect(/The other side answers the proposal once, and that answer settles it/.test(skill) && /the stance `accept` \(Codex accepts your position, and your position is that this is the user's call\), completes the pair/.test(skill) && /A lapsed proposal is never asked again/.test(skill), "skill (fix pass 6): a one-sided user-call proposal is answered once; Codex's accept completes the pair, maintain or revise makes it lapse");
+expect(/The other side answers the proposal once, and that answer settles it/.test(skill) && /`user_call: true` completes the pair, whatever the stance/.test(skill) && /it is never asked again/.test(skill), "skill (fix pass 6, reworded by ticket 07): a one-sided user-call proposal is answered once, by user_call; it is never asked again once lapsed");
 expect(/^match: not_contains$/m.test(read("discuss-limit-reached", "no-ended-marker")) && !ended.test(SPLIT) && ended.test(ENDED), "no-ended-marker: a limit-path report with the interrupted marker fails, one with the round-limit marker passes");
 expect(skill.includes("(still split at the round limit)") && /never by how the debate felt/.test(skill) && /has no item marked `unresolved because the discussion ended`/.test(skill), "skill: three fixed markers chosen by why the item is there; a limit-path report never uses the interrupted marker");
 
@@ -595,6 +595,102 @@ for (const c of CASES) {
   expect(!sep.test(bareN) && !sep.test(bare1) && !sep.test(PROMPT1), "round-2-locked-separate: the bare template, framing or a round-1 prompt does not satisfy it");
   // A block for a one-sided user call keeps the status and carries the proposal line.
   expect(sep.test(U2(AG, B3 + "\n  User call proposed by Claude: the owner decides.")), "round-2-locked-separate: a proposal line inside C3's block does not break it");
+}
+// --- Ticket 07: a one-sided user-call proposal is decided by user_call, never by the stance --------------------------------------------
+{
+  const sec6 = skill.slice(skill.indexOf("## 6. Integrate"), skill.indexOf("## 7. Rounds 2 to n"));
+  const sec7 = skill.slice(skill.indexOf("## 7. Rounds 2 to n"), skill.indexOf("## A round that cannot complete"));
+  const rule4 = template.slice(template.indexOf("4. **Answer format.**"));
+  // The skill: user_call decides the proposal, the stance settles the substance (A1), a lapsed line is not carried (A2).
+  expect(/Codex must decide the proposal explicitly with `user_call`/.test(sec6) && /the stance never decides the first one/.test(sec6), "skill section 6: Codex decides a Claude proposal explicitly with user_call; the stance never decides it");
+  expect(/`user_call: true` completes the pair, whatever the stance: the point becomes a user decision item marked `\(your preference or authority\)`/.test(sec6), "skill section 6: user_call true completes the pair");
+  expect(/`user_call: false` makes your proposal lapse, whatever the stance, and the stance then settles the substance exactly as for any contested point/.test(sec6) && /`accept` makes a tentative agreement on your statement; `maintain` or `revise` leaves the point contested on its substance/.test(sec6), "skill section 6: user_call false lapses the proposal; accept then agrees on Claude's statement, maintain or revise stays contested");
+  expect(!/the stance `accept` \(Codex accepts your position, and your position is that this is the user's call\)/.test(skill) && !/`maintain` or `revise` without `user_call: true` makes your proposal lapse/.test(skill), "skill: the pass-6 reading (a plain accept completes the pair) is gone");
+  expect(/keeps the proposal for one more round only; when the next reply does not decide it either, the proposal lapses/.test(sec6), "skill section 6: an unaddressed proposal is kept for one more round only, then lapses");
+  expect(/you answer once in your ledger/.test(sec6) && /You agree it is the user's call → the pair is complete/.test(sec6) && /Codex's proposal lapses/.test(sec6), "skill section 6: a Codex proposal is answered once by Claude; agree completes the pair, disagree lapses it");
+  expect(/A lapsed proposal is removed from the ledger mark: its `User call proposed by …` line is never carried into a later block/.test(sec6) && /only a proposal still open puts that line into a block/.test(sec6), "skill section 6: a lapsed proposal's line is never carried into a later block");
+  expect(/A mark both sides made stands for the rest of the discussion/.test(sec6) && !/A mark stands for the rest of the discussion/.test(skill), "skill section 6: only a mark both sides made stands for the rest of the discussion (A2 contradiction removed)");
+  expect(/that proposal is still open \(not lapsed\)/.test(sec7) && /Codex's `user_call` decides the proposal, separately from its stance: `true` completes the pair, `false` makes the proposal lapse/.test(sec7), "skill section 7: the proposal line only while the proposal is open; Codex's user_call decides, separately from its stance");
+  expect(/never turns the point into a user decision item/.test(sec7), "skill section 7: a stance on a point whose proposal lapsed never makes it a user decision item");
+  // The framing and rule 4 say the same to Codex.
+  expect(/On such a point you must decide the proposal explicitly/.test(roundN) && /set `user_call` to `false` and say in your reason why the point has a right answer/.test(roundN) && /That decision is separate from your stance: always also give your stance on the substance/.test(roundN), "round-n framing: a proposal is decided explicitly with user_call, apart from the stance, which is always given too");
+  expect(/leave `user_call` `false`, unless you yourself judge the point to be a user call/.test(roundN), "round-n framing: elsewhere user_call is false unless Codex itself judges the point a user call");
+  expect(/`user_call` must be decided explicitly, whatever your stance: `true` if you agree it is the user's call, `false` if the point has a right answer/.test(rule4) && /On any other point it is `false` unless you yourself judge the point a user call/.test(rule4), "discussion.md rule 4: user_call must be decided explicitly on a point carrying a proposal line");
+  expect(!/Contested points:|Tentative agreements \(locked\)|\bL\d+\b|\bC\d+\b/.test(roundN) && !/Tentative agreements \(locked\)|Contested points:/.test(rule4), "round-n framing and rule 4 still hold no carried-points heading or id");
+
+  // --- the two eval cases ---
+  const fillN = (agreed, contested) => fill(roundN, 'Respond to the contested points under "Context from Claude".', `Topic: ${TOPIC}\nRound: 2 of at most 3\nTentative agreements (locked):\n${agreed}\nContested points:\n${contested}`);
+  const AGR = "- L2 = C1: Count failed attempts per username.";
+  const BC3 = `- C3 (raised by Codex)\n  Statement: Keep the failure counters in a shared Redis instance.\n  Reason: ${R3}\n  Evidence: src/login.js:3\n  Claude's position: disputed — docs/constraints.md:3 forbids Redis.\n  Codex's position: raised.`;
+  const PROPOSAL = "User call proposed by Claude: docs/decisions.md says the product owner decides what a locked-out user sees.";
+  const BL5 = `- L5 (raised by Claude)\n  Statement: Show a wait message with the time left to a locked-out user.\n  Reason: No third-party service is needed.\n  Evidence: docs/decisions.md:3\n  Claude's position: raised.\n  Codex's position: not yet answered.\n  ${PROPOSAL}`;
+  const ROUND2 = fillN(AGR, BC3 + "\n" + BL5);
+  const ROUND3_CLEAN = fillN(AGR + "\n- L5: Show a wait message with the time left to a locked-out user.", BC3);
+  const ROUND3_LINE = fillN(AGR, BC3 + "\n" + BL5);
+  const ROUND3_CODEX_LINE = fillN(AGR, BC3 + "\n" + BL5.replace("proposed by Claude", "proposed by Codex"));
+  const AREP = [
+    "## Discussion process", "Topic: rate limiting and the lockout experience for login()", "Model: gpt-6-sol (high)", "Round limit: 3", "MCP policy: all MCP servers disabled",
+    "Round 1: C1 matched my L2; I proposed L5 (the lockout screen) as a user call; C3 (shared Redis) disputed by me against docs/constraints.md:3.",
+    "Round 2: Codex accepted L5 but answered user_call false (it has a right answer), so my proposal lapsed and L5 is agreed; Codex maintained C3.",
+    "Round 3: Codex maintained C3; I maintained my objection.",
+    "", "## Agreed", "- L2 = C1: Count failed attempts per username.", "- L5: Show a wait message with the time left to a locked-out user.",
+    "", "## For you to decide", "- C3 — Keep the failure counters in a shared Redis instance. (still split at the round limit)",
+    "  Claude recommends: in-process counters — docs/constraints.md:3 forbids Redis.",
+    "  Codex recommends: a shared store — a later second instance would lose the limit.",
+  ].join("\n");
+  const AREP_WRONG = AREP.replace("- L5: Show a wait message with the time left to a locked-out user.", "none").replace("## For you to decide", "## For you to decide\n- L5 — Show a wait message with the time left to a locked-out user. (your preference or authority)\n  Both recommend: a wait message — no third-party service.");
+  const carries = (c) => re(c, "round-2-carries-proposal"), noLine = (c) => re(c, "round-3-no-proposal-line"), noItem = (c) => re(c, "no-user-call-item");
+  for (const [C, stanceWanted] of [["discuss-user-call-accept-false", "accept"], ["discuss-user-call-lapse", "maintain"]]) {
+    for (const f of ["case.yaml", "prompt.md", "scaffold.sh"]) expect(fs.existsSync(path.join(evals, C, f)), `${C}/${f} exists`);
+    expect(new RegExp(`^name: ${C}$`, "m").test(text(evals, C, "case.yaml")) && /^tags: \[discuss-skill\]$/m.test(text(evals, C, "case.yaml")), `${C}: case.yaml names the case and tags it discuss-skill`);
+    expect(/^description: ".+"$/m.test(prompt(C)) && /^max_turns: \d+$/m.test(prompt(C)) && /^timeout_seconds: 2400$/m.test(prompt(C)) && /^allowed_tools: \[.*\]$/m.test(prompt(C)) && !/^runs:/m.test(prompt(C)), `${C}: prompt.md has its header fields (timeout 2400) and no runs override`);
+    expect(userMessage(C).startsWith("/ask-codex:discuss rounds 3 ") && !/AskUserQuestion/.test(prompt(C).match(/^allowed_tools: .*$/m)[0]), `${C}: the command carries rounds 3 and the session is headless`);
+    expect(/docs\/decisions\.md/.test(userMessage(C)) && /docs\/constraints\.md/.test(userMessage(C)) && /lockout/.test(userMessage(C)), `${C}: the topic points at both docs and at the lockout experience`);
+    const s = text(evals, C, "scaffold.sh");
+    expect(/^set -euo pipefail$/m.test(s), `${C}: the scaffold stops on error`);
+    expect(/product owner's decision/.test(s) && /What a locked-out user SEES \(a CAPTCHA, or a wait message/.test(s) && /No Redis/.test(s), `${C}: the docs assign the lockout screen to the product owner and forbid Redis`);
+    expect(!/exec\.sentinel|exec-stdin|exec-argv/.test(s.replace(/^#.*$/gm, "")), `${C}: the scaffold leaves the stub records to the stub`);
+    const files = {};
+    for (const m of s.matchAll(/cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF\n/g)) files[m[1]] = m[2].split("\n");
+    const seq = JSON.parse(files[".stub/scenario.json"].join("\n")).exec.sequence;
+    expect(seq.length === 3, `${C}: the sequence has the three rounds the case needs`);
+    for (const [i, e] of seq.entries()) {
+      const errs = checkErr(e.reply);
+      expect(errs.length === 0, `${C}: round ${i + 1} reply fits discussion.schema.json ${errs.slice(0, 3)}`);
+      for (const p of e.reply.points) for (const ev of p.evidence) {
+        const [, file, line] = ev.match(/^(.+):(\d+)$/);
+        expect(!!files[file] && (files[file][Number(line) - 1] || "").trim() !== "", `${C} round ${i + 1} ${p.id}: evidence ${ev} points at a line the scaffold wrote`);
+      }
+    }
+    const [v1, v2, v3] = seq.map((e) => e.reply);
+    expect(JSON.stringify(v1.points.map((p) => p.id)) === '["C1","C2","C3"]' && v1.points.every((p) => p.stance === null && !p.new_blocking && !p.reopen), `${C}: round 1 raises C1, C2, C3 as new points`);
+    expect(v1.points.every((p) => p.user_call === false && p.user_call_reason === null), `${C}: Codex marks nothing as a user call in round 1, so Claude's mark is one-sided`);
+    expect(!/CAPTCHA|lockout|wait message/i.test(JSON.stringify(v1.points.map((p) => p.statement))) && /Redis/.test(v1.points[2].statement) && v1.points[2].reason === R3, `${C}: round 1 raises no lockout-screen point (it is Claude's alone) and C3 is the disputed shared-Redis point`);
+    const want2 = ["C3", ...Array.from({ length: 30 }, (_, k) => `L${k + 1}`)];
+    expect(JSON.stringify(v2.points.map((p) => p.id)) === JSON.stringify(want2), `${C}: round 2 answers C3 and L1-L30`);
+    expect(v2.points.find((p) => p.id === "C3").stance === "maintain" && v2.points.filter((p) => p.id !== "C3").every((p) => p.stance === stanceWanted), `${C}: round 2 maintains C3 and ${stanceWanted}s every L point`);
+    expect(v2.points.every((p) => p.user_call === false && p.user_call_reason === null), `${C}: no round-2 point is marked a user call (user_call false everywhere)`);
+    expect(v2.points.filter((p) => p.id !== "C3").every((p) => /has a right answer/.test(p.reason)), `${C}: every L answer says the point has a right answer`);
+    expect(v3.points.length === 1 && v3.points[0].id === "C3" && v3.points[0].stance === "maintain", `${C}: round 3 maintains C3 only, so the discussion runs to the limit`);
+    for (const g of fs.readdirSync(path.join(evals, C, "graders"))) {
+      const n = g.replace(/\.md$/, ""), t = read(C, n);
+      if (/^pattern:|^input_match:/m.test(t)) expect((() => { try { re(C, n); return true; } catch { return false; } })(), `${C}/${n}: the pattern compiles as a JavaScript regex`);
+      expect(!/\(\?i\)/.test(t) && !/exec-calls/.test(t) && (!/^type: tool_used$/m.test(t) || /^tool: Bash$/m.test(t)), `${C}/${n}: no inline flags, no exec-calls, no Skill-tool grader`);
+      const p = t.match(/^  path: (.+)$/m);
+      if (p) expect(RECORDS.has(p[1].trim()), `${C}/${n}: reads a record the stub writes`);
+    }
+    for (const n of ["no-bare-cd", "no-violations", "round-2-marker", "no-ended-marker"]) expect(read(C, n) === read("discuss-limit-reached", n), `${C}/${n} is the discuss-limit-reached grader`);
+    expect(re(C, "three-headings").source === sect.source && re(C, "round-3-marker").source === r3.source && re(C, "three-calls").source === re("discuss-headless-default", "three-calls").source && /path: \.stub\/exec\.sentinel/.test(read(C, "three-calls")), `${C}: three-headings, round-3-marker and three-calls carry the existing graders' patterns`);
+    expect(["round-2-carries-proposal", "round-3-no-proposal-line", "no-user-call-item"].every((n) => fs.existsSync(path.join(evals, C, "graders", `${n}.md`))), `${C}: has the three ticket-07 graders`);
+    expect(/^match: not_contains$/m.test(read(C, "round-3-no-proposal-line")) && /path: \.stub\/exec-stdin\.3\.txt/.test(read(C, "round-3-no-proposal-line")) && /path: \.stub\/exec-stdin\.2\.txt/.test(read(C, "round-2-carries-proposal")) && !/^match:/m.test(read(C, "round-2-carries-proposal")), `${C}: the precondition reads round 2 and requires the line; the lapse grader reads round 3 and forbids it`);
+    expect(/^match: not_contains$/m.test(read(C, "no-user-call-item")) && !/^target:/m.test(read(C, "no-user-call-item")), `${C}/no-user-call-item grades the final response and forbids the words`);
+    // The graders on crafted prompts and reports.
+    expect(carries(C).test(ROUND2) && !carries(C).test(ROUND3_CLEAN.replace(/\n- L5:[^\n]*/, "")) && !carries(C).test(bareN) && !carries(C).test(bare1) && !carries(C).test(PROMPT1) && !carries(C).test(ROUND2.replace(PROPOSAL, "User call proposed by Codex: the owner decides.")), `${C}/round-2-carries-proposal: a round-2 prompt with Claude's proposal line passes; none, the bare template and framing, a round-1 prompt or a Codex proposal fail`);
+    expect(!noLine(C).test(ROUND3_CLEAN) && !noLine(C).test(bareN) && !noLine(C).test(bare1) && noLine(C).test(ROUND3_LINE) && noLine(C).test(ROUND3_CODEX_LINE), `${C}/round-3-no-proposal-line: a clean round-3 prompt and the bare template and framing (which only name the line with <reason> or …) pass; a carried Claude or Codex proposal line fails`);
+    expect(!noItem(C).test(AREP) && noItem(C).test(AREP_WRONG), `${C}/no-user-call-item: a report with the lapsed point under Agreed passes; one that lists it as (your preference or authority) fails`);
+    expect(sect.test(AREP) && sect.test(AREP_WRONG) && !re("discuss-limit-reached", "no-ended-marker").test(AREP), `${C}: the crafted report has the three headings and no interrupted marker`);
+  }
+  expect(re("discuss-user-call-accept-false", "c3-still-split").test(AREP) && !re("discuss-user-call-accept-false", "c3-still-split").test(AREP.replace("(still split at the round limit)", "")) && read("discuss-user-call-accept-false", "c3-still-split") === read("discuss-limit-reached", "c3-still-split"), "discuss-user-call-accept-false/c3-still-split: C3 split at the round limit passes, no marker fails; the grader is the discuss-limit-reached one");
 }
 // The schema checker bites: a reply with a wrong type, a missing key and an extra key is refused.
 {
