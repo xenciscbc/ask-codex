@@ -1,0 +1,13 @@
+config.toml before: 9c1696ec0f4a49496a8d3855739ca23421e10ec1c9b326601aca275edac53bdc
+config.toml after : eb7f2572f3025e6d099b3826fcec19599cd6e13a0cf9e1eccb74753057a1e6d2
+user ask-codex.json: before absent, after absent
+new codex pid 50696: C:\Users\admin\AppData\Local\OpenAI\Codex\bin\f544b3844e0f14e9\codex.exe exec-server --remote https://codex-cloud-environments.chatgpt.com/api --environment-id 
+new codex pid 59048: C:\Users\admin\AppData\Local\OpenAI\Codex\runtimes\cua_node\7d8d3ac5ca9f6767\bin\node_modules\@oai\sky\bin\windows\swift\x64\codex-computer-use-swift.exe --pare
+new codex pid 85160: C:\Users\admin\AppData\Local\OpenAI\Codex\bin\f544b3844e0f14e9\codex.exe -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex
+throwaway repo status:
+(end)
+28c28
+< SKY_CUA_NATIVE_PIPE_DIRECTORY = '\\.\pipe\codex-computer-use-d29df4d8-cea3-44df-b2a1-e4e38a0b2242'
+---
+> SKY_CUA_NATIVE_PIPE_DIRECTORY = '\\.\pipe\codex-computer-use-8a8a9d0d-501a-4702-abf7-c336c4302426'
+(the only config.toml difference is SKY_CUA_NATIVE_PIPE_DIRECTORY, rewritten by the Codex app restart at 09:31; the three new codex pids are the app's own services, parent PID 37764)
