@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ask-codex UI exercise reply",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["claims", "out_of_scope", "coverage"],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "statement", "steps", "expected", "actual", "viewport", "evidence", "confidence", "in_scope"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["bug", "layout", "ux"],
+            "description": "bug = the app does something wrong; layout = a visual or responsive problem; ux = a usability suggestion."
+          },
+          "statement": {
+            "type": "string",
+            "description": "One single observation or suggestion."
+          },
+          "steps": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Exact reproduction steps in order (URL, element by its role and visible name, input). Required for a bug; empty only when there are none."
+          },
+          "expected": {
+            "type": ["string", "null"],
+            "description": "What should have happened; null for a ux suggestion without one."
+          },
+          "actual": {
+            "type": ["string", "null"],
+            "description": "What did happen, as observed; null for a ux suggestion without one."
+          },
+          "viewport": {
+            "type": ["string", "null"],
+            "description": "The viewport the observation was made at, as WIDTHxHEIGHT; null when it does not depend on one."
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Screenshot file names under the evidence directory, console messages or network entries supporting the claim."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "in_scope": {
+            "type": "boolean",
+            "description": "true when the claim lies inside the requested scope."
+          }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Observations outside the requested scope, listed and not tested."
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pages", "flows", "viewports"],
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Pages visited, by URL path."
+        },
+        "flows": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Flows exercised end to end."
+        },
+        "viewports": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Viewports checked, as WIDTHxHEIGHT."
+        }
+      }
+    }
+  }
+}

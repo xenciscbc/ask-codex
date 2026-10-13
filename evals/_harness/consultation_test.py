@@ -605,6 +605,37 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(argv, expected)
         self.call("cleanup", ready["directory"])
 
+    def test_ask_review_and_discuss_command_lines_equal_the_1ca7a0f_baseline(self):
+        # Exercise work (plan C2) leaves the three consultation interactions unchanged: ask and review send the
+        # consultation schema and differ only in the prompt; discuss sends the discussion schema. No browser server
+        # definition or per-tool approval key reaches Codex or its MCP listing in any of them.
+        cases = (("ask", None, "Question: why does fetchUser return an empty object?"),
+                 ("review", "consultation", "Review the working-tree diff for correctness bugs."),
+                 ("discuss", "discussion", "Round 1: is the cache invalidated?"))
+        for interaction, schema, prompt in cases:
+            with self.subTest(interaction=interaction):
+                self.request.pop("reply_schema", None)
+                if schema:
+                    self.request["reply_schema"] = schema
+                self.request["prompt"] = prompt
+                ready = self.prepare()
+                self.assertEqual(ready["state"], "prepared", ready)
+                self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+                expected = list(BASELINE_ARGV)
+                if schema == "discussion":
+                    expected[expected.index("<SKILL_DIR>/consultation.schema.json")] = "<SKILL_DIR>/discussion.schema.json"
+                argv = self.normalised_argv(ready["directory"])
+                self.assertEqual(argv, expected)
+                for key in ("mcp_servers.cdt_", "approval_mode", "default_tools", "enabled_tools", "ui-exercise"):
+                    self.assertFalse(any(key in arg for arg in argv), key)
+                calls = [json.loads(line) for line in
+                         (self.project / ".stub/mcp-list.log").read_text(encoding="utf-8").splitlines()]
+                for call in calls:
+                    self.assertFalse(any("cdt_" in arg or "approval_mode" in arg for arg in call["argv"]), call)
+                self.assertFalse((self.project / ".stub/mcp-get.log").exists(), "consultations never call mcp get")
+                self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
+                self.call("cleanup", ready["directory"])
+
     def test_child_agents_switch_goes_to_codex_exec_only(self):
         # subagent-boundary (ADR 0008): run() adds both pairs to `codex exec` alone, never to `codex mcp list`,
         # the policy overrides or the preflight summary that run() compares with the plan.

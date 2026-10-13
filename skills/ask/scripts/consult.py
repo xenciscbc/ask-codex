@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import exercise
 import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
@@ -18,6 +19,21 @@ import target as disposable_target
 
 HERE = Path(__file__).resolve().parent
 NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+# Constants of every Codex command line (consultations and exercises); never part of overrides or a summary.
+# Child agents stay off: a role file can raise a child's sandbox and bring its own MCP servers (ADR 0008,
+# .scratch/subagent-boundary). The feature switch too, because an enabled multi_agent_v2 feature in the user's or
+# a trusted project's config defeats agents.enabled=false alone; command-line -c outranks config files.
+# No approval lifts the run out of read-only: a resolved auto_review reviewer drops exec's headless Never and
+# approved an escalation (.scratch/approval-boundary ticket 01, probe p9), and a trusted project's config can set
+# either key, so both are pinned here. No execpolicy .rules file (user or project) is loaded either: an `allow`
+# rule can run a command outside the sandbox whatever the approval policy (inferred from source, not probed).
+EXEC_CONSTANTS = ("--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
+                  "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"', "--ignore-rules")
+
+
+def cli():
+    # This module as the exercise lifecycle sees it (also when run as __main__ or through runpy).
+    return sys.modules[__name__]
 
 
 class AlreadyAttempted(ValueError):
@@ -85,6 +101,25 @@ def listing(project, overrides=()):
     return servers
 
 
+def mcp_get(project, name, overrides=()):
+    server = json.loads(command(["codex", "mcp", "get", name, "--json", *overrides], project))
+    if not isinstance(server, dict):
+        raise ValueError("Invalid MCP server definition")
+    return server
+
+
+def which(name):
+    # Resolved with the environment the script runs Codex with (plan I13, N-1).
+    return shutil.which(name, path=shell_environment().get("PATH"))
+
+
+def timer():
+    override = os.environ.get("EVAL_ASK_CODEX_TIMEOUT_MINUTES")
+    valid = override is not None and re.fullmatch(r"[1-9][0-9]*", override)
+    return {"interval_minutes": int(override) if valid else 30,
+            "source": "override" if valid else "default" if override is None else "ignored_override"}
+
+
 def validate(request):
     if not isinstance(request, dict) or not isinstance(request.get("prompt"), str) or not request["prompt"].strip():
         raise ValueError("A prepared consultation prompt is required")
@@ -126,17 +161,15 @@ def preflight(request, neutral):
 
 def prepare(request_path, base):
     request = read_json(request_path)
+    if exercise.is_request(request):
+        return exercise.prepare(cli(), request, base)
     validate(request)
     with tempfile.TemporaryDirectory(prefix="ask-codex-preflight-") as neutral:
         summary, overrides = preflight(request, neutral)
     parent = Path(base).resolve() / "ask-codex"
     parent.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="run.", dir=parent))
-    override = os.environ.get("EVAL_ASK_CODEX_TIMEOUT_MINUTES")
-    valid = override is not None and re.fullmatch(r"[1-9][0-9]*", override)
-    timer = {"interval_minutes": int(override) if valid else 30,
-             "source": "override" if valid else "default" if override is None else "ignored_override"}
-    write_json(directory / "plan.json", {"version": 1, "request": request, "summary": summary, "timer": timer,
+    write_json(directory / "plan.json", {"version": 1, "request": request, "summary": summary, "timer": timer(),
                                         "overrides": overrides, "directory": str(directory)})
     return {"state": "prepared", "directory": str(directory), "summary": summary}
 
@@ -185,15 +218,59 @@ def remove_run(directory, plan):
 
 def run(directory):
     directory, plan = plan_at(directory)
+    if exercise.is_plan(plan):
+        exercise.require_platform()
     try:
         with (directory / "started").open("x"):
             pass  # Never replay an execution attempt.
     except FileExistsError:
         raise AlreadyAttempted() from None
+    if exercise.is_plan(plan):
+        return run_exercise(directory, plan)
     with tempfile.TemporaryDirectory(prefix="ask-codex-preflight-") as neutral:
         summary, overrides = preflight(plan["request"], neutral)
     if summary != plan["summary"] or overrides != plan["overrides"]:
         raise ValueError("Effective configuration changed; prepare and review a new consultation")
+
+    def argv(model, child):
+        args = ["codex", "exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
+                "-C", Path(plan["summary"]["project"]).as_posix()]
+        if model.get("model"):
+            args += ["-m", model["model"]]
+        return [*args, "-c", f'model_reasoning_effort="{model["effort"]}"', *overrides, *EXEC_CONSTANTS,
+                "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
+                "-o", (child / "last-message.json").as_posix(), "-"]
+
+    return launch(directory, plan, argv, plan["summary"]["project"])
+
+
+def run_exercise(directory, plan):
+    # Guard (I6), identities and placement again, then the owned proxy port; a failure removes the target at once.
+    holder = exercise.before_launch(cli(), directory, plan)
+    try:
+        schema = HERE.parent / f"{exercise.REPLY_SCHEMA}.schema.json"
+        result = launch(directory, plan,
+                        lambda model, child: exercise.codex_argv(plan, model, child, EXEC_CONSTANTS, schema),
+                        plan["summary"]["target"])
+    except Exception as error:
+        # launch() returns launch_failed once a process may have started; an exception here is earlier.
+        holder.close()
+        removal = exercise.remove_target(directory)
+        reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise launch failed"
+        raise ValueError(reason + ("; the target was removed" if removal["state"] == "removed" else
+                                   f"; the target could not be removed, retained: "
+                                   f"{removal.get('retained_location', directory)}")) from None
+    finally:
+        holder.close()  # C4 moves this holder to the supervisor (I8)
+    removal = exercise.after_run(cli(), directory)
+    if removal is not None:
+        result["target_removed"] = removal["state"] == "removed"
+        if removal["state"] != "removed":
+            result["retained_location"] = removal.get("retained_location", str(directory))
+    return result
+
+
+def launch(directory, plan, argv, cwd):
     workers = []
     with ExitStack() as streams:
         launches = []
@@ -203,24 +280,7 @@ def run(directory):
             child.mkdir()
             prompt = child / "prompt.md"
             prompt.write_text(plan["request"]["prompt"], encoding="utf-8")
-            args = ["codex", "exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
-                    "-C", Path(plan["summary"]["project"]).as_posix()]
-            if model.get("model"):
-                args += ["-m", model["model"]]
-            # Child agents stay off: a role file can raise a child's sandbox and bring its own MCP
-            # servers (ADR 0008, .scratch/subagent-boundary). The feature switch too, because an enabled
-            # multi_agent_v2 feature in the user's or a trusted project's config defeats agents.enabled=false
-            # alone; command-line -c outranks config files. Constant, so not in overrides or summary.
-            # No approval lifts the run out of read-only: a resolved auto_review reviewer drops exec's
-            # headless Never and approved an escalation (.scratch/approval-boundary ticket 01, probe p9), and
-            # a trusted project's config can set either key, so both are pinned here; constant as above.
-            # No execpolicy .rules file (user or project) is loaded either: an `allow` rule can run a
-            # command outside the sandbox whatever the approval policy (inferred from source, not probed).
-            args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
-                     "--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
-                     "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"', "--ignore-rules",
-                     "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
-                     "-o", (child / "last-message.json").as_posix(), "-"]
+            args = argv(model, child)
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")
             handles = {"stdin": streams.enter_context(prompt.open("rb")),
                        "stdout": streams.enter_context((child / "events.jsonl").open("wb")),
@@ -230,7 +290,7 @@ def run(directory):
         write_json(directory / "clock.json", {"started": time.time(), "next_check": time.time() + plan["timer"]["interval_minutes"] * 60})
         try:
             for child, invocation, handles in launches:
-                worker = subprocess.Popen(invocation, cwd=plan["summary"]["project"], env=shell_environment(), **handles)
+                worker = subprocess.Popen(invocation, cwd=cwd, env=shell_environment(), **handles)
                 workers.append((worker, child))
                 (child / "launch-pending.json").unlink()
             # Supervision is part of the launcher lifetime too. A failed
@@ -321,6 +381,8 @@ def snapshot(directory, plan):
 
 def wait_for(directory, seconds):
     directory, plan = plan_at(directory)
+    if exercise.is_plan(plan):
+        exercise.require_platform()
     if not 0 <= seconds <= 60:
         raise ValueError("Wait duration must be between 0 and 60 seconds")
     end = time.monotonic() + seconds
@@ -360,6 +422,8 @@ def record_check(directory, clock, status):
 
 def continue_wait(directory):
     directory, plan = plan_at(directory)
+    if exercise.is_plan(plan):
+        exercise.require_platform()
     clock = read_json(directory / "clock.json")
     clock["next_check"] = time.time() + plan["timer"]["interval_minutes"] * 60
     write_json(directory / "clock.json", clock)
@@ -368,6 +432,8 @@ def continue_wait(directory):
 
 def collect(directory, after_delivery):
     directory, plan = plan_at(directory)
+    if exercise.is_plan(plan):
+        return exercise.collect(cli(), directory, plan, after_delivery)
     if (directory / "execution-error.json").exists() and not (directory / "clock.json").exists():
         output = read_json(directory / "execution-error.json")
         after_delivery.append(lambda: remove_run(directory, plan))
@@ -427,6 +493,23 @@ def collect(directory, after_delivery):
 
 def stop(directory, recommended, offered, only_children=None):
     directory, plan = plan_at(directory)
+    if not exercise.is_plan(plan):
+        return stop_codex(directory, plan, recommended, offered, only_children)
+    exercise.require_platform()
+    result = stop_codex(directory, plan, recommended, offered, only_children)
+    # An exercise's target goes once its Codex tree is confirmed ended (I3, I12); an unconfirmed stop keeps it.
+    if result["state"] in ("stopped", "finished"):
+        removal = exercise.remove_target(directory)
+        result["target_removed"] = removal["state"] == "removed"
+        if removal["state"] != "removed":
+            result["retained_location"] = removal.get("retained_location", str(directory))
+            result["removal"] = removal
+    else:
+        result["target_kept"] = exercise.target_kept(directory)
+    return result
+
+
+def stop_codex(directory, plan, recommended, offered, only_children=None):
     statuses = []
     for index, model in enumerate(plan["request"]["models"]):
         child = directory / str(index)
@@ -477,6 +560,12 @@ def cleanup(directory):
                 raise ValueError("Cannot clean up: run has not settled")
             if stop_status(child) is not None and not stop_status(child)["confirmed"]:
                 raise ValueError("Cannot clean up: process-tree stop is unconfirmed")
+    if exercise.is_plan(plan):
+        exercise.require_platform()
+        removal = exercise.remove_target(directory)
+        if removal["state"] != "removed":
+            return {"state": "failed", "reason": f"Cannot clean up: the target was kept ({removal.get('reason')})",
+                    "retained_location": removal.get("retained_location", str(directory)), "removal": removal}
     remove_run(directory, plan)
     return {"state": "cleaned"}
 
@@ -484,7 +573,7 @@ def cleanup(directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
-                                           "target-create", "target-remove"))
+                                           "finish", "target-create", "target-remove"))
     parser.add_argument("path")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
@@ -511,6 +600,8 @@ def main():
             result = disposable_target.create_command(args.path, args.base)
         elif args.action == "target-remove":
             result = disposable_target.remove_command(args.path)
+        elif args.action == "finish":
+            result = exercise.finish(cli(), args.path)
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:
