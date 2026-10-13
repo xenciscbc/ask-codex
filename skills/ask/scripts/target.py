@@ -25,7 +25,10 @@ what counts is where it resolves), and a resolved base inside the project is ref
 directory is created. `ask-codex` and `run.*` are opened or exclusively created relative to the base
 handle and must not be links or junctions; the final path of the base and of the new run directory is
 checked against the project (on a volume that reports no final path, such as a RAM disk, the volume
-serial must differ from the project's), and a refused new run directory is deleted at once. In-process
+serial must differ from the project's), and a refused new run directory is deleted at once. Fail
+closed: the project, the base and every run directory must be in local drive form (`X:\\...` and a
+final path `\\\\?\\X:\\...`); UNC (including an admin share such as `\\\\localhost\\D$`), volume-GUID
+and device paths are refused, because they cannot be compared with the project's path. In-process
 callers (the exercise lifecycle, C2) call create() with their own run-directory factory
 make_run_directory(project final path) -> (run directory, owns it), e.g. a prepared run directory, and
 create_sibling() for a recorded MCP TEMP directory (I5); create() verifies any factory's directory the
@@ -411,9 +414,7 @@ def _validate(request):
     if set(root) - {"path", "confirmed_by_user"}:
         raise TargetError("Unknown target_root fields")
     root_path = _absolute_drive_path(root.get("path"), "target root")
-    project = request.get("project")
-    if not isinstance(project, str) or "\0" in project or not ntpath.isabs(project) or not ntpath.splitdrive(project)[0]:
-        raise TargetError("The project must be an absolute path")
+    project = _absolute_drive_path(request.get("project"), "project")
     name = request.get("target_name")
     if name is None:
         name = f"ask-codex-target-{secrets.token_hex(6)}"
@@ -543,8 +544,11 @@ def _open_project(path):
     try:
         if not _attribute_tag(handle)[0] & ATTR_DIRECTORY:
             raise TargetError("The project is not a directory")
-        final = _final_path(handle)
-        return handle, final[4:] if re.fullmatch(r"\\\\\?\\[A-Za-z]:\\.*", final, re.S) else final
+        try:
+            final = _final_path(handle)
+        except OSError:
+            raise TargetError("The project's final path cannot be determined") from None
+        return handle, _strip_final(final, "project")  # local drive form only; UNC and volume paths refused
     except BaseException:
         _close(handle)
         raise
@@ -588,12 +592,16 @@ def _outside_project(handle, shown, project):
     except OSError:
         final = None
     if final is not None:
-        final = final[4:] if re.fullmatch(r"\\\\\?\\[A-Za-z]:\\.*", final, re.S) else final
-        if _inside(final, project):
+        # Fail closed: only a local drive-letter final path can be compared with the project's.
+        if not re.fullmatch(r"\\\\\?\\[A-Za-z]:\\.*", final, re.S):
+            raise TargetError("The run directory must be on a local drive (not UNC, a volume or a device path)")
+        if _inside(final[4:], project):
             raise TargetError("The run directory must not be inside the project")
         return
     # A volume that reports no final path (e.g. a RAM disk). The project's volume always reports one
     # (_open_project requires it), so a different volume serial is a different volume.
+    if not re.fullmatch(r"[A-Za-z]:\\.*", shown, re.S):
+        raise TargetError("The run directory must be on a local drive (not UNC, a volume or a device path)")
     project_handle = _win_open(project, READ_ATTRIBUTES, FLAG_BACKUP_SEMANTICS)
     try:
         same_volume = _identity(project_handle)["volume_serial"] == _identity(handle)["volume_serial"]
@@ -1047,7 +1055,10 @@ def create_command(request_path, base):
             # The base itself may be a link: its resolved (final) path is what is checked, here and again
             # on its handle. <base>\ask-codex and run.* are opened or created through handles, never followed.
             resolved = Path(base).resolve()
-            if _inside(str(resolved), project):  # before anything is created (refusal leaves nothing behind)
+            # Before anything is created (refusal leaves nothing behind): local drive form only, outside the project.
+            if not re.fullmatch(r"[A-Za-z]:\\.*", str(resolved), re.S):
+                raise TargetError("The base must be on a local drive (not UNC, a volume or a device path)")
+            if _inside(str(resolved), project):
                 raise TargetError("The run directory must not be inside the project")
             resolved.mkdir(parents=True, exist_ok=True)
             return _new_run_directory(resolved, project)

@@ -697,6 +697,51 @@ class DisposableTargetTest(unittest.TestCase):
                 self.assertEqual(os.listdir(directory), [], "no record written")
         self.assertEqual(os.listdir(self.targets), [])
 
+    def admin_share(self, path):
+        path = str(path)
+        unc = "\\\\localhost\\" + path[0] + "$" + path[2:]
+        if not os.path.isdir(unc):
+            self.skipTest("the admin share \\\\localhost\\<drive>$ is not reachable on this machine")
+        return unc
+
+    def test_unc_base_is_refused_wherever_it_points(self):
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        bases = (self.admin_share(self.project), self.admin_share(self.project) + "\\deep\\not-yet",
+                 self.admin_share(elsewhere))
+        project, other = snapshot(self.project), snapshot(elsewhere)
+        for base in bases:
+            with self.subTest(base=base):
+                refused = self.create_with_base(base)
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("must be on a local drive", refused["reason"])
+                self.assert_unchanged(project, self.project)
+                self.assert_unchanged(other, elsewhere)
+                self.assertEqual(os.listdir(self.targets), [])
+
+    def test_project_not_in_local_drive_form_is_refused(self):
+        for project in (self.admin_share(self.project), "\\\\?\\" + str(self.project), "\\\\?\\UNC\\localhost\\D$\\x"):
+            with self.subTest(project=project):
+                self.assert_refused_without_writes(self.request(project=project), "absolute path on a drive letter")
+        # A drive-letter project whose final path is UNC (e.g. through a link to a share) is refused too.
+        target = self.in_process()
+        final_path, prefix = target._final_path, "\\\\?\\" + str(self.project).casefold()
+        unc = "\\\\?\\UNC\\localhost\\" + str(self.project)[0] + "$" + str(self.project)[2:]
+        self.patch(target, "_final_path", lambda h: unc if final_path(h).casefold() == prefix else final_path(h))
+        with self.assertRaises(target.TargetError) as refused:
+            target.create(self.request(), lambda project: self.fail("nothing may be written"))
+        self.assertIn("project must resolve to a local drive-letter path", str(refused.exception))
+        self.assertEqual(self.runs(), [])
+
+    def test_any_factory_directory_in_unc_form_is_refused_before_the_record(self):
+        target = self.in_process()
+        (self.base / "ask-codex" / "run.unc").mkdir(parents=True)
+        unc = Path(self.admin_share(self.base / "ask-codex" / "run.unc"))
+        with self.assertRaises(target.TargetError) as refused:
+            target.create(self.request(), lambda project: (unc, False))
+        self.assertIn("must be on a local drive", str(refused.exception))
+        self.assertEqual(os.listdir(self.base / "ask-codex" / "run.unc"), [], "no record written")
+
     # --- I13 ---
 
     def test_other_platforms_are_refused(self):
