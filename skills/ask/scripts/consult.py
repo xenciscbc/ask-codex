@@ -213,9 +213,11 @@ def run(directory):
             # No approval lifts the run out of read-only: a resolved auto_review reviewer drops exec's
             # headless Never and approved an escalation (.scratch/approval-boundary ticket 01, probe p9), and
             # a trusted project's config can set either key, so both are pinned here; constant as above.
+            # No execpolicy .rules file (user or project) is loaded either: an `allow` rule can run a
+            # command outside the sandbox whatever the approval policy (inferred from source, not probed).
             args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
                      "--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
-                     "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"',
+                     "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"', "--ignore-rules",
                      "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
                      "-o", (child / "last-message.json").as_posix(), "-"]
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")

@@ -29,7 +29,7 @@ const run = (args, cwd, env = {}, input = "prompt") =>
 const execArgs = (dir, out) => ["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", dir,
   "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "-c", "agents.enabled=false",
   "-c", "features.multi_agent_v2.enabled=false", "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"',
-  "--output-schema", "schema.json", "-o", out, "-"];
+  "--ignore-rules", "--output-schema", "schema.json", "-o", out, "-"];
 // Probe p9 (approval-boundary ticket 01, recorded 2026-10-13 against codex-cli 0.159.3): the 1.3.2 consultation
 // command line without the approval pins. With approvals_reviewer = "auto_review" in the user's config, Codex
 // requested escalation out of -s read-only, the request was approved and the file was written. Kept verbatim;
@@ -230,6 +230,17 @@ try {
       run(["mcp", "list", "--json", "-c", PIN], dir);
       check(violations(dir) === `mcp list: unexpected -c ${PIN}\n`, `${tag}: the pin on mcp list is an unexpected -c (got ${JSON.stringify(violations(dir))})`);
     }
+    // Execpolicy .rules files stay unloaded (same ticket): exactly one --ignore-rules on exec, none on mcp list.
+    {
+      const at = (args) => args.indexOf("--ignore-rules");
+      const missing = variant("ignore-rules-missing", (a) => { a.splice(at(a), 1); return a; });
+      check(missing === "exec: missing --ignore-rules\n", `ignore-rules: an argv without it is a violation (got ${JSON.stringify(missing)})`);
+      const twice = variant("ignore-rules-twice", (a) => { a.splice(at(a), 0, "--ignore-rules"); return a; });
+      check(twice === "exec: repeated --ignore-rules\n", `ignore-rules: twice is a violation (got ${JSON.stringify(twice)})`);
+      const dir = project("ignore-rules-mcp-list", {});
+      run(["mcp", "list", "--json", "--ignore-rules"], dir);
+      check(violations(dir) === "mcp list: unexpected --ignore-rules\n", `ignore-rules: on mcp list it is a violation (got ${JSON.stringify(violations(dir))})`);
+    }
     // Probe p9's recorded argv, replayed: the full violation set it produces.
     const dir = project("approval-p9", {});
     const p9 = P9_ARGV.slice(1);
@@ -238,7 +249,8 @@ try {
     run(p9, dir);
     const got = violations(dir);
     check(got === "exec: missing --output-schema\n"
-      + 'exec: missing -c approval_policy="never"\nexec: missing -c approvals_reviewer="user"\n',
+      + 'exec: missing -c approval_policy="never"\nexec: missing -c approvals_reviewer="user"\n'
+      + "exec: missing --ignore-rules\n",
       `approval: the p9 argv is refused (got ${JSON.stringify(got)})`);
   }
   // Per-call reply sequence (discuss ticket 01): numbered records, per-entry replies, last entry reused.

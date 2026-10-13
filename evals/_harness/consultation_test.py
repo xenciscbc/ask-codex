@@ -20,7 +20,8 @@ from replies import classify  # noqa: E402
 # after `--disable apps` (subagent-boundary, ADR 0008; the second pair because an explicitly enabled
 # multi_agent_v2 feature in the user's or a trusted project's config defeats the first, S2 live probe 2);
 # and the approval pins `-c approval_policy="never" -c approvals_reviewer="user"` after them (approval-boundary
-# ticket 01: a resolved auto_review reviewer drops exec's headless Never and approved an escalation, probe p9).
+# ticket 01: a resolved auto_review reviewer drops exec's headless Never and approved an escalation, probe p9),
+# then `--ignore-rules` (same ticket: execpolicy `allow` rules can bypass the sandbox whatever the approval policy).
 BASELINE_ARGV = [
     "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
     "-C", "<PROJECT>",
@@ -32,6 +33,7 @@ BASELINE_ARGV = [
     "-c", "features.multi_agent_v2.enabled=false",
     "-c", 'approval_policy="never"',
     "-c", 'approvals_reviewer="user"',
+    "--ignore-rules",
     "--output-schema", "<SKILL_DIR>/consultation.schema.json",
     "-o", "<RUN_DIR>/0/last-message.json",
     "-",
@@ -628,11 +630,12 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
         self.call("cleanup", ready["directory"])
 
-    def test_approval_pins_go_to_codex_exec_only(self):
-        # approval-boundary ticket 01: run() pins the approval policy and the reviewer on `codex exec` alone,
-        # never on `codex mcp list`, the policy overrides or the preflight summary that run() compares with the plan.
+    def test_approval_pins_and_ignore_rules_go_to_codex_exec_only(self):
+        # approval-boundary ticket 01: run() pins the approval policy and the reviewer and passes --ignore-rules on
+        # `codex exec` alone, never on `codex mcp list`, the policy overrides or the preflight summary that run()
+        # compares with the plan.
         pins = ('approval_policy="never"', 'approvals_reviewer="user"')
-        keys = ("approval_policy", "approvals_reviewer")
+        keys = ("approval_policy", "approvals_reviewer", "--ignore-rules", "ignore_rules", "ignore-rules")
         ready = self.prepare()
         plan = json.loads((Path(ready["directory"]) / "plan.json").read_text(encoding="utf-8"))
         for key in keys:
@@ -650,8 +653,11 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         for pin in pins:
             self.assertEqual(argv.count(pin), 1, argv)
             self.assertEqual(argv[argv.index(pin) - 1], "-c", argv)
-        for key in keys:
+        for key in pins:
+            key = key.split("=")[0]
             self.assertEqual(sum(key in arg for arg in argv), 1, argv)  # no second value of the same key
+        self.assertEqual(argv.count("--ignore-rules"), 1, argv)
+        self.assertEqual(sum("ignore-rules" in arg or "ignore_rules" in arg for arg in argv), 1, argv)
         # I2: the sandbox stays read-only and no approval-bypassing flag or profile reaches Codex.
         self.assertEqual(argv.count("-s"), 1, argv)
         self.assertEqual(argv[argv.index("-s") + 1], "read-only", argv)

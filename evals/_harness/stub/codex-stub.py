@@ -21,8 +21,10 @@ because an explicitly enabled multi_agent_v2 feature in config defeats the first
 any other value or a repeat is a violation. Likewise exactly one each of `-c approval_policy="never"` and
 `-c approvals_reviewer="user"` (approval-boundary ticket 01: a resolved auto_review reviewer drops exec's
 headless Never and approved an escalation out of read-only): missing, any other value (`"on-request"`, a
-granular table, `"auto_review"`) or a repeat is a violation. `mcp list` accepts only MCP disable overrides,
-so any of these pairs there is an unexpected -c.
+granular table, `"auto_review"`) or a repeat is a violation. And exactly one `--ignore-rules` (same ticket:
+execpolicy `allow` rules can bypass the sandbox whatever the approval policy): missing or repeated is a
+violation. `mcp list` accepts only MCP disable overrides, so any of these pairs there is an unexpected -c,
+and `--ignore-rules` there is an unexpected flag.
 
 `exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
 unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
@@ -116,6 +118,8 @@ AGENTS_OFF = ("agents.enabled=false", "features.multi_agent_v2.enabled=false")
 # No approval can lift a consultation out of read-only (approval-boundary ticket 01): exec only, each exactly once.
 APPROVAL_PINS = ('approval_policy="never"', 'approvals_reviewer="user"')
 PINNED = AGENTS_OFF + APPROVAL_PINS
+# Execpolicy .rules files stay unloaded (approval-boundary ticket 01): exec only, exactly once.
+IGNORE_RULES = "--ignore-rules"
 
 
 # Root-table disable entries: enabled=false, optionally with a placeholder transport.
@@ -195,6 +199,8 @@ def mcp_list(args):
             for s in servers:
                 if s["name"] == name:
                     deep_merge(s, patch)
+    for _ in range(args.count(IGNORE_RULES)):
+        violation(scenario, f"mcp list: unexpected {IGNORE_RULES}")
     overrides = config_overrides(args)
     for kv in overrides:
         entries = disabled_entries(kv)
@@ -223,7 +229,7 @@ def mcp_list(args):
 
 
 def parse_exec(args):
-    opts = {"flags": [], "c": [], "unknown": [], "stdin": False, "repeated": []}
+    opts = {"flags": [], "c": [], "unknown": [], "stdin": False, "repeated": [], "ignore_rules": 0}
     i = 0
     while i < len(args):
         a = args[i]
@@ -241,6 +247,8 @@ def parse_exec(args):
             continue
         if a in ("--ephemeral", "--skip-git-repo-check", "--json"):
             opts["flags"].append(a)
+        elif a == IGNORE_RULES:
+            opts["ignore_rules"] += 1
         elif a == "-":
             opts["stdin"] = True
         else:
@@ -331,6 +339,10 @@ def exec_(args):
             problems.append(f"missing -c {kv}")
         elif seen > 1:
             problems.append(f"repeated -c {kv}")
+    if opts["ignore_rules"] == 0:
+        problems.append(f"missing {IGNORE_RULES}")
+    elif opts["ignore_rules"] > 1:
+        problems.append(f"repeated {IGNORE_RULES}")
     for u in opts["unknown"]:
         problems.append(f"unknown arg {u}")
     for p in problems:
