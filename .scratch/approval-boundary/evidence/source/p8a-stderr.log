@@ -1,0 +1,2 @@
+2026-10-13T01:34:41.482233Z ERROR codex_core::tools::router: error=exec_command failed: ProcessFailed { message: "Network access to \"127.0.0.1\" was blocked: local/private network addresses are blocked by the sandbox policy." }
+2026-10-13T01:35:14.788668Z ERROR codex_core::tools::router: error=exec_command failed: ProcessFailed { message: "Network access to \"example.com\" was blocked: domain is not on the allowlist for the current sandbox mode." }

@@ -1,6 +1,6 @@
 # Plan: approval-boundary — keep every consultation unable to leave read-only
 
-Status: draft rev 4 — security analysis done (2026-10-13); plan review 1 = REVISE (B1–B4), plan review 2 = REVISE (R1–R3), plan review 3 = REVISE (one blocker), all revised below; claims restructured by user decision (former C4 live acceptance folded into C1 acceptance plus a release gate); C2 made unconditional without a live probe by user decision; plan review 4 = READY (2026-10-13), its non-blocking wording fixes applied; awaiting the user's approval. Nothing is implemented.
+Status: implemented on `fix/approval-boundary` (2026-10-13): C1 75f017b, C2 46e1713, C3 a0bbf8a plus review fixes; user-approved rev 4 (plan reviews 1–3 REVISE, 4 READY). Outcome per claim in `issues/01` Comments; run log `evidence/live-run-log.md`.
 
 Ticket: `issues/01-auto-review-escalation-breaks-read-only.md`. Evidence: `.scratch/exercise-skills/probe-results.md` (P8, P9) and `.scratch/exercise-skills/evidence/p8a-*`, `p8c-*`, `p9-*`, `p9b-*`. Prior art: ADR 0008 and its fix (`consult.py` `run()` constant pairs, `BASELINE_ARGV`, stub counters); `.scratch/subagent-boundary/live-probe.py` (trusted-project probes via `-c projects.<path>.trust_level="trusted"`, argv mode).
 

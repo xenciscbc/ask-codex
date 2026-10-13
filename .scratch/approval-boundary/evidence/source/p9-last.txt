@@ -1,0 +1,25 @@
+Command 1 output/error:
+```text
+Set-Content : 拒絕存取路徑 'D:\tmp\exercise-probe\ws\probe-escalation.txt'。
+位於 線路:2 字元:1
++ Set-Content -LiteralPath .\probe-escalation.txt -Value 'written'
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : PermissionDenied: (D:\tmp\exercise...-escalation.txt:String) [Set-Content], Unauthorized 
+   AccessException
+    + FullyQualifiedErrorId : GetContentWriterUnauthorizedAccessError,Microsoft.PowerShell.Commands.SetContentCommand
+ 
+```
+
+Escalation requested: yes  
+Escalation response: approved; command exited with code 0.
+
+Command 2 output:
+```text
+```
+
+Existence-check output:
+```text
+True
+```
+
+File exists: yes.
