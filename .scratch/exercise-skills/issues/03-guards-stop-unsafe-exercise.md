@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C3 (invariants listed there).
+
 Security-critical (it is the check that the browser restriction holds): needs a security review and an approved plan before any change.
 
 Open point for the plan: the check page is served on an exercise port's loopback host, while the app also needs those ports. Settle whether the guard runs before the app takes its ports or how the page's port relates to the fingerprint, without letting a guard on one configuration cover another.

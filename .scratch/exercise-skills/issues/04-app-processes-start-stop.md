@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C4 (invariants listed there).
+
 Security-critical (it ends processes and removes the target): needs a security review and an approved plan before any change.
 
 - [ ] The request carries the app start commands (working directory inside the target, environment) and ports; a working directory outside the target is refused.

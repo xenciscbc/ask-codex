@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C1 (invariants listed there).
+
 Security-critical (it decides what the exercise writes and what it deletes): needs a security review and an approved plan before any change.
 
 - [ ] Create refuses a root that the request does not mark as confirmed by the user, and refuses any target path that already exists (file, directory, link or junction); nothing is written in either case.

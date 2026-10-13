@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C6 (invariants listed there).
+
 - [ ] Each bug claim is reproduced by Claude in the browser on the same target; reproduced → confirmed; not reproduced → "not confirmed" with what Claude tried; nothing is dropped silently.
 - [ ] Each layout and UX claim is disposed as adopt, reject or investigate with a reason.
 - [ ] Before starting the app, Claude prepares isolated data for the copy (seeded database copy, test accounts) and lists every external dependency of the backend, asking before starting.

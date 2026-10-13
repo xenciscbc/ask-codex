@@ -1,0 +1,13 @@
+{
+ "exit": 0,
+ "token": "264ade6d",
+ "server_hits": [
+  "/",
+  "/favicon.ico"
+ ],
+ "server": "cdt_ef363ef7",
+ "proxy_port": 36303,
+ "policy": "allowlist",
+ "allowed": [],
+ "evidence_dir_files": []
+}

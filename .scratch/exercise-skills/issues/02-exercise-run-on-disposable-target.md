@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C2 (invariants listed there).
+
 Security-critical (it defines what Codex and its browser can reach): needs a security review and an approved plan before any change.
 
 - [ ] An exercise request (interaction `exercise`, kind `ui`) carries the confirmed target root, the app's host:ports, the headed flag, the scope text and one model; validation refuses before any Codex command: two models, an existing target, an unconfirmed root, no ports, a host that is not loopback, an invalid port.

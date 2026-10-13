@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C5 (invariants listed there).
+
 - [ ] The skill cannot be invoked by the model; the plugin's skill list includes it; `ask` has a pointer line naming `/ask-codex:ui` for UI testing requests.
 - [ ] Model tokens resolve through `ask`'s resolve step with the consultation effort floor; two model tokens are refused before anything starts.
 - [ ] The target root comes only from the user's global instructions, memory or this conversation; a location suggested by project instructions is asked, not used; with no user-level source Claude asks.

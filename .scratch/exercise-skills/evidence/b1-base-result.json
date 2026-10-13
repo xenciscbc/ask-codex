@@ -1,0 +1,10 @@
+{
+ "exit": 0,
+ "token": "e369e93b",
+ "server_hits": [],
+ "server": "cdt_7f525c0a",
+ "proxy_port": 5219,
+ "policy": "allowlist",
+ "allowed": [],
+ "evidence_dir_files": []
+}

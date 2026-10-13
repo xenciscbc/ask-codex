@@ -1,0 +1,30 @@
+# codex-cli 0.159.3, 2026-10-13: fields exposed for a -c defined server
+$ codex mcp get cdt_probe1 --json -c ...command/args/cwd/env/startup_timeout_sec/enabled_tools/tools.click.approval_mode
+{
+  "name": "cdt_probe1",
+  "enabled": true,
+  "disabled_reason": null,
+  "transport": {
+    "type": "stdio",
+    "command": "C:/x/node.exe",
+    "args": [
+      "a.js",
+      "--isolated"
+    ],
+    "env": {
+      "A": "1",
+      "NODE_OPTIONS": ""
+    },
+    "env_vars": [],
+    "cwd": "D:/tmp/ui-mcpget"
+  },
+  "enabled_tools": [
+    "click",
+    "fill"
+  ],
+  "disabled_tools": null,
+  "startup_timeout_sec": 90.0,
+  "tool_timeout_sec": null
+}
+$ codex mcp list --json (keys per entry)
+[['auth_status', 'disabled_reason', 'enabled', 'name', 'startup_timeout_sec', 'tool_timeout_sec', 'transport']]

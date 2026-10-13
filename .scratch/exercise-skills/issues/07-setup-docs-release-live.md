@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C7 (invariants listed there).
+
 - [ ] `/ask-codex:setup` checks the exercise dependencies: Chrome version, node, and that the pinned MCP starts.
 - [ ] README (English and Traditional Chinese) describes `/ask-codex:ui`, its boundary and its difference from Codex's own browsers; states that the browser's network limit is Chrome configuration plus an MCP allowlist, not an OS sandbox; states that Codex's shell can reach every localhost service in all ask-codex skills (P2, P8c); lists what was not verified (DNS prefetch, headed mode).
 - [ ] The pinned MCP version policy is documented: raising it is a release that reruns the P3–P5 and P7 probes.
