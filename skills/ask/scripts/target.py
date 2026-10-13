@@ -20,10 +20,20 @@ Create request (unknown keys are refused):
 
 All checks run before anything is written. Then target-create makes a run directory
 `<base>/ask-codex/run.*` (the ownership convention of consult.py's plan_at) and writes the record
-there, never in the project; a base inside the project is refused before any directory is created.
-In-process callers (the exercise lifecycle, C2) call create() with their own run-directory factory
+there, never in the project. The base is resolved to its final path (the base itself may be a link;
+what counts is where it resolves), and a resolved base inside the project is refused before any
+directory is created. `ask-codex` and `run.*` are opened or exclusively created relative to the base
+handle and must not be links or junctions; the final path of the base and of the new run directory is
+checked against the project (on a volume that reports no final path, such as a RAM disk, the volume
+serial must differ from the project's), and a refused new run directory is deleted at once. In-process
+callers (the exercise lifecycle, C2) call create() with their own run-directory factory
 make_run_directory(project final path) -> (run directory, owns it), e.g. a prepared run directory, and
-create_sibling() for a recorded MCP TEMP directory (I5).
+create_sibling() for a recorded MCP TEMP directory (I5); create() verifies any factory's directory the
+same way (it and its parent no link, not inside the project) before writing the record.
+
+remove() takes the run directory only through the ownership check (record_at). A directory that fails
+it is reported as the retained location itself: its record is not read, because a record outside the
+owned layout is not trusted, and a path taken from it could steer manual cleanup to the wrong place.
 
 Cloud-file placeholders: python.exe runs in placeholder compatibility mode PHCM_DISGUISE_PLACEHOLDER,
 under which a placeholder (e.g. OneDrive, tag 0x9000601A) shows no reparse attribute or tag. create(),
@@ -76,7 +86,6 @@ import re
 import secrets
 import struct
 import sys
-import tempfile
 import time
 
 RECORD = "target.json"
@@ -566,8 +575,82 @@ def record_at(directory):
 
 def _create_directory(parent, name):
     """Exclusive create relative to a verified parent handle; never opens an existing entry."""
-    return _nt_open(parent, name, LIST_DIRECTORY | ADD_FILE | ADD_SUBDIRECTORY | TRAVERSE | READ_ATTRIBUTES,
+    return _nt_open(parent, name, LIST_DIRECTORY | ADD_FILE | ADD_SUBDIRECTORY | TRAVERSE | READ_ATTRIBUTES | DELETE,
                     DIRECTORY_FILE | OPEN_REPARSE_POINT, FILE_CREATE)
+
+
+# --- the run directory that holds the record (never in the project) ---
+
+def _outside_project(handle, shown, project):
+    """Refuse when the open directory is, or cannot be shown not to be, inside the project."""
+    try:
+        final = _final_path(handle)
+    except OSError:
+        final = None
+    if final is not None:
+        final = final[4:] if re.fullmatch(r"\\\\\?\\[A-Za-z]:\\.*", final, re.S) else final
+        if _inside(final, project):
+            raise TargetError("The run directory must not be inside the project")
+        return
+    # A volume that reports no final path (e.g. a RAM disk). The project's volume always reports one
+    # (_open_project requires it), so a different volume serial is a different volume.
+    project_handle = _win_open(project, READ_ATTRIBUTES, FLAG_BACKUP_SEMANTICS)
+    try:
+        same_volume = _identity(project_handle)["volume_serial"] == _identity(handle)["volume_serial"]
+    finally:
+        _close(project_handle)
+    if same_volume or _inside(shown, project):
+        raise TargetError("The run directory cannot be shown to be outside the project")
+
+
+def _new_run_directory(base, project):
+    """Create <base>/ask-codex/run.* through handles; neither component may be a link or junction."""
+    base_handle = _win_open(str(base), LIST_DIRECTORY | ADD_SUBDIRECTORY | TRAVERSE | READ_ATTRIBUTES,
+                            FLAG_BACKUP_SEMANTICS)
+    parent = run = None
+    try:
+        _outside_project(base_handle, str(base), project)
+        try:
+            parent = _nt_open(base_handle, "ask-codex", LIST_DIRECTORY | ADD_SUBDIRECTORY | TRAVERSE | READ_ATTRIBUTES,
+                              OPEN_REPARSE_POINT)
+        except NtError as error:
+            if error.status not in (STATUS_NAME_NOT_FOUND, STATUS_PATH_NOT_FOUND):
+                raise
+            parent = _create_directory(base_handle, "ask-codex")
+        attributes, _ = _attribute_tag(parent)
+        if attributes & ATTR_REPARSE or not attributes & ATTR_DIRECTORY:
+            raise TargetError(f"{base / 'ask-codex'} is a link, a junction or not a directory; nothing is created there")
+        for _ in range(100):
+            name = f"run.{secrets.token_hex(4)}"
+            try:
+                run = _create_directory(parent, name)
+                break
+            except NtError as error:
+                if error.status != STATUS_NAME_COLLISION:
+                    raise
+        else:
+            raise TargetError("No free run directory name")
+        try:
+            _outside_project(run, str(base / "ask-codex" / name), project)
+        except BaseException:
+            _dispose(run)  # the empty directory just created; nothing else is touched
+            raise
+        return base / "ask-codex" / name, True
+    finally:
+        for handle in (run, parent, base_handle):
+            _close(handle)
+
+
+def _verify_run_directory(directory, project):
+    """Any factory's run directory: it and its parent are no links, and it is not inside the project."""
+    for path in (directory, directory.parent):
+        if os.lstat(path).st_file_attributes & ATTR_REPARSE:
+            raise TargetError(f"{path} is a link or junction; the record is not written there")
+    handle = _win_open(str(directory), READ_ATTRIBUTES, FLAG_BACKUP_SEMANTICS)
+    try:
+        _outside_project(handle, str(directory), project)
+    finally:
+        _close(handle)
 
 
 def _exists(parent, name):
@@ -710,14 +793,21 @@ def _create(request, make_run_directory):
             raise TargetError("The target path cannot be checked") from None
         directory, owns = make_run_directory(project)
         directory = Path(directory)
-        if (directory / RECORD).exists():
-            raise TargetError("This run directory already has a target record")
+        try:
+            _verify_run_directory(directory, project)
+            if (directory / RECORD).exists():
+                raise TargetError("This run directory already has a target record")
+        except BaseException:
+            if owns:
+                try:
+                    directory.rmdir()  # only when empty; a link is removed as a link
+                except OSError:
+                    pass
+            raise
         entry = {"kind": "target", "path": target, "state": "pending"}
         record = {"version": VERSION, "directory": str(directory), "owns_run_directory": owns, "project": project,
                   "root": {"path": root, **root_identity}, "entries": [entry], "copy": "pending"}
         try:
-            if _inside(str(directory), project):
-                raise TargetError("The run directory must not be inside the project")
             _write_record(directory, record)
         except BaseException:
             _discard_record(directory, owns)
@@ -954,11 +1044,13 @@ def create_command(request_path, base):
         request = json.loads(Path(request_path).read_text(encoding="utf-8-sig"))
 
         def make_run_directory(project):
-            parent = Path(base).resolve() / "ask-codex"
-            if _inside(str(parent), project):  # before anything is created (refusal leaves nothing behind)
+            # The base itself may be a link: its resolved (final) path is what is checked, here and again
+            # on its handle. <base>\ask-codex and run.* are opened or created through handles, never followed.
+            resolved = Path(base).resolve()
+            if _inside(str(resolved), project):  # before anything is created (refusal leaves nothing behind)
                 raise TargetError("The run directory must not be inside the project")
-            parent.mkdir(parents=True, exist_ok=True)
-            return Path(tempfile.mkdtemp(prefix="run.", dir=parent)), True
+            resolved.mkdir(parents=True, exist_ok=True)
+            return _new_run_directory(resolved, project)
 
         return create(request, make_run_directory)
     except TargetError as error:

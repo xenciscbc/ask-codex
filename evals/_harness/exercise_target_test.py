@@ -640,6 +640,63 @@ class DisposableTargetTest(unittest.TestCase):
         self.assert_unchanged(project, self.project)
         self.assertEqual(os.listdir(self.targets), [])
 
+    def create_with_base(self, base):
+        path = self.requests / "request.json"
+        path.write_text(json.dumps(self.request()), encoding="utf-8")
+        return self.call("target-create", path, "--base", base)
+
+    def test_run_directory_parent_that_is_a_junction_is_refused(self):
+        inside, elsewhere = self.project / "inside", self.root / "elsewhere"
+        inside.mkdir()
+        elsewhere.mkdir()
+        for destination in (inside, elsewhere):
+            with self.subTest(destination=destination.name):
+                base = self.root / f"base-{destination.name}"
+                base.mkdir()
+                junction(base / "ask-codex", destination)
+                project, other = snapshot(self.project), snapshot(elsewhere)
+                refused = self.create_with_base(base)
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("is a link, a junction or not a directory", refused["reason"])
+                self.assert_unchanged(project, self.project)       # nothing written in the project
+                self.assert_unchanged(other, elsewhere)
+                self.assertEqual(os.listdir(self.targets), [])
+                self.assertTrue(os.lstat(base / "ask-codex").st_file_attributes & REPARSE, "the junction is left alone")
+
+    def test_base_that_is_itself_a_junction_counts_where_it_resolves(self):
+        real = self.root / "real-base"
+        real.mkdir()
+        junction(self.root / "base-link", real)
+        result = self.create_with_base(self.root / "base-link")
+        self.assertEqual(result["state"], "created", result)
+        self.assertEqual(str(Path(result["directory"]).parent).casefold(), str(real / "ask-codex").casefold())
+        self.assertEqual(self.remove(result["directory"])["state"], "removed")
+        self.assertEqual(os.listdir(real / "ask-codex"), [])
+        junction(self.root / "base-into-project", self.project)
+        project = snapshot(self.project)
+        refused = self.create_with_base(self.root / "base-into-project")
+        self.assertEqual(refused["state"], "failed", refused)
+        self.assertIn("must not be inside the project", refused["reason"])
+        self.assert_unchanged(project, self.project)
+        self.assertEqual(os.listdir(self.targets), [])
+
+    def test_any_factory_directory_inside_the_project_or_under_a_link_is_refused_before_the_record(self):
+        target = self.in_process()
+        inside = self.project / "ask-codex" / "run.prepared"
+        inside.mkdir(parents=True)
+        elsewhere = self.root / "elsewhere"
+        (elsewhere / "run.prepared").mkdir(parents=True)
+        (self.base / "linked").mkdir()
+        junction(self.base / "linked" / "ask-codex", elsewhere)
+        for directory, expected in ((inside, "must not be inside the project"),
+                                    (self.base / "linked" / "ask-codex" / "run.prepared", "is a link or junction")):
+            with self.subTest(directory=str(directory)):
+                with self.assertRaises(target.TargetError) as refused:
+                    target.create(self.request(), lambda project, d=directory: (d, False))
+                self.assertIn(expected, str(refused.exception))
+                self.assertEqual(os.listdir(directory), [], "no record written")
+        self.assertEqual(os.listdir(self.targets), [])
+
     # --- I13 ---
 
     def test_other_platforms_are_refused(self):
