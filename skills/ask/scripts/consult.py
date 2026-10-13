@@ -236,7 +236,20 @@ def run(directory):
     except FileExistsError:
         raise AlreadyAttempted() from None
     if exercise.is_plan(plan):
-        return run_exercise(directory, plan)
+        try:
+            return run_exercise(directory, plan)
+        except BaseException as error:
+            # Interrupted (any exception, KeyboardInterrupt, ...) before Codex started: leave the failure receipt, so
+            # finish and cleanup do not take the run for one still launching. main() replaces it with its own
+            # result for the errors it reports.
+            if not (directory / "clock.json").exists() and not (directory / "execution-error.json").exists():
+                try:
+                    write_json(directory / "execution-error.json",
+                               {"state": "failed", "reason": f"The exercise run was interrupted before Codex started "
+                                                             f"({type(error).__name__}); no automatic retry"})
+                except OSError:
+                    pass
+            raise
     with tempfile.TemporaryDirectory(prefix="ask-codex-preflight-") as neutral:
         summary, overrides = preflight(plan["request"], neutral)
     if summary != plan["summary"] or overrides != plan["overrides"]:

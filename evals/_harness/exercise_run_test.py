@@ -619,6 +619,23 @@ target._write_record = write
                          [(str(self.targets / "exercise-target").casefold(), "pending")])
         self.assertTrue((self.targets / "exercise-target").exists(), "kept together with its record, never orphaned")
 
+    def test_run_interrupted_before_codex_leaves_a_failure_receipt_so_finish_proceeds(self):
+        ready, directory, plan = self.prepared()
+        interrupt = "import exercise\ndef before_launch(*args, **kwargs):\n    raise KeyboardInterrupt()\n" \
+                    "exercise.before_launch = before_launch\n"
+        result = subprocess.run([sys.executable, "-c", BOOTSTRAP, str(CLI), self.seams(code=interrupt), "run",
+                                 str(directory)], env=self.env, capture_output=True, text=True, encoding="utf-8",
+                                timeout=120)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("KeyboardInterrupt", result.stderr)
+        self.assertTrue((directory / "started").exists())
+        receipt = json.loads((directory / "execution-error.json").read_text(encoding="utf-8"))
+        self.assertIn("interrupted before Codex started", receipt["reason"])
+        self.assertEqual(self.exec_calls(), [])
+        finished = self.call("finish", directory)
+        self.assertEqual(finished["state"], "finished", finished)
+        self.assert_all_removed(directory)
+
     def test_finish_and_cleanup_refuse_while_run_is_launching(self):
         ready, directory, plan = self.prepared()
         (directory / "started").touch()  # run's checks have begun; no clock.json and no execution-error.json yet
@@ -945,13 +962,29 @@ class RedactionTest(unittest.TestCase):
             "https://ghtoken@github.com/x": ("https://[REDACTED]@github.com/x", "ghtoken"),
             "app --password hunter2 --port 80": ("--password [REDACTED] --port 80", "hunter2"),
             "app --token=a": ("--token=[REDACTED]", "=a"),
-            "app --db-password 'two words'": ("--db-password [REDACTED]", "two words"),
-            'app -secret "x y z"': ("-secret [REDACTED]", "x y z"),
+            "app --db-password 'two words'": ("--db-password '[REDACTED]'", "two words"),
+            'app -secret "x y z"': ('-secret "[REDACTED]"', "x y z"),
             "app --api-key K": ("--api-key [REDACTED]", " K"),
             # Plan I11 has no digit condition on a labelled run (code review 1, B2).
             "api_key=AbCdEfGhIjKlMnOpQrStUv": ("api_key=[REDACTED]", "AbCdEfGh"),
             "Authorization: Token sEcReTsEcReTsEcReTx": ("Token [REDACTED]", "sEcReT"),
             "password=CorrectHorseBatteryStaple": ("password=[REDACTED]", "CorrectHorse"),
+            # An explicit `=` or `:` after a secret's name: the value whatever its shape (code review 2, B2).
+            "DB_PASSWORD=supersecretpassword": ("DB_PASSWORD=[REDACTED]", "supersecret"),
+            "JWT_SECRET=supersecretjwtsigningkey": ("JWT_SECRET=[REDACTED]", "supersecretjwt"),
+            "apiKey: hunter2": ("apiKey: [REDACTED]", "hunter2"),
+            # Exceeding any length never lets a secret through (code review 2, B3).
+            "https://" + "u" * 320 + "@host/": ("https://[REDACTED]@host/", "u" * 20),
+            '--private-key "-----BEGIN KEY-----\nMIIEvQIBADAN\n-----END KEY-----" --port 1':
+                ('--private-key "[REDACTED]" --port 1', "MIIEvQIBADAN"),
+            '--token "' + "s" * 5000 + '"': ('--token "[REDACTED]"', "s" * 20),
+            "--password          hunter2": ("--password          [REDACTED]", "hunter2"),
+            "API_KEY:          0123456789abcdef0123": ("API_KEY:          [REDACTED]", "0123456789"),
+            '--token "never closed\nsecond line': ('--token "[REDACTED]', "second line"),
+            # Right after `-` or `_` (code review 2, NB2).
+            "x-eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl": ("x-[REDACTED]", "eyJhbGci"),
+            "key_sk-ABCDEFGHIJKLMNOPQRSTUV": ("key_[REDACTED]", "sk-ABCDEF"),
+            "x-ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123": ("x-[REDACTED]", "ghp_"),
         }
         for text, (kept, gone) in cases.items():
             with self.subTest(text=text):
@@ -963,7 +996,10 @@ class RedactionTest(unittest.TestCase):
         for text in ("Basic navigation works on every page.", "The bearer of bad news is the save button.",
                      "The keyboard shortcut for the token list is missing.", "password field has no label",
                      "Open http://127.0.0.1:15173/login and click Save", "Viewport 390x844 overflows",
-                     "The internationalization keys are shown raw", "git@github.com:org/repo.git"):
+                     "The internationalization keys are shown raw", "git@github.com:org/repo.git",
+                     "the token list is empty", "Basic navigation works",
+                     "Keyboard: Tab skips the Save button", "risk-assessment-overview-dashboard",
+                     "task_ghp_like_name is shown"):
             with self.subTest(text=text):
                 self.assertEqual(self.redact(text), text)
 
@@ -979,14 +1015,22 @@ class RedactionTest(unittest.TestCase):
         cases = {"flag run": "--" + "key-" * 2500, "token run": "token-" * 2000, "key run": "key" * 3000,
                  "kebab identifiers": "-".join(["identifier"] * 800), "jwt starts": "eyJ-" * 2500,
                  "scheme run": "a+" * 5000 + "://", "spaced label": "token" + " " * 10_000 + "x",
-                 "unterminated quotes": "--token '" * 1100, "mixed 50 KB": " ".join(mixed)}
+                 "unterminated quotes": "--token '" * 1100, "mixed 50 KB": " ".join(mixed),
+                 "spaced colon labels": ("key" + " " * 5000 + ":") * 10,
+                 "interleaved quotes 100 KB": ("--key \"" + "--key '") * 7200,
+                 "one open quote then 100 KB": '--key "' + "--key 'x " * 11_200,
+                 "long userinfo runs": ("a://" + "u" * 2000 + " ") * 25}
+        timings = {}
         for label, text in cases.items():
             with self.subTest(case=label, size=len(text)):
                 self.assertGreaterEqual(len(text), 8_000)
                 start = time.perf_counter()
                 result = self.redact(text)
-                self.assertLess(time.perf_counter() - start, 1.0)
+                timings[label] = time.perf_counter() - start
+                self.assertLess(timings[label], 1.0)
                 self.assertIsInstance(result, str)
+        sys.stderr.write("\nredaction timings: " + ", ".join(f"{k} ({len(cases[k])} chars) {v * 1000:.1f} ms"
+                                                              for k, v in timings.items()) + "\n")
         self.assertIn("[REDACTED]", self.redact(" ".join(mixed)))
         self.assertNotIn("hunter2", self.redact(" ".join(mixed)))
 
