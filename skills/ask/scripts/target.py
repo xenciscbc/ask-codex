@@ -20,9 +20,18 @@ Create request (unknown keys are refused):
 
 All checks run before anything is written. Then target-create makes a run directory
 `<base>/ask-codex/run.*` (the ownership convention of consult.py's plan_at) and writes the record
-there, never in the project. In-process callers (the exercise lifecycle, C2) call create() with their own
-run-directory factory, e.g. a prepared run directory, and create_sibling() for a recorded MCP TEMP
-directory (I5).
+there, never in the project; a base inside the project is refused before any directory is created.
+In-process callers (the exercise lifecycle, C2) call create() with their own run-directory factory
+make_run_directory(project final path) -> (run directory, owns it), e.g. a prepared run directory, and
+create_sibling() for a recorded MCP TEMP directory (I5).
+
+Cloud-file placeholders: python.exe runs in placeholder compatibility mode PHCM_DISGUISE_PLACEHOLDER,
+under which a placeholder (e.g. OneDrive, tag 0x9000601A) shows no reparse attribute or tag. create(),
+create_sibling() and remove() therefore run with PHCM_EXPOSE_PLACEHOLDERS set for the calling thread
+(RtlSetThreadPlaceholderCompatibilityMode, restored afterwards; the process-level call only where the
+thread call does not exist), so the root, ancestor, copy and removal checks see placeholders as the
+reparse points they are. As defence in depth, the copy also skips and lists, without opening it for
+reading, any entry with FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, RECALL_ON_OPEN or OFFLINE.
 
 Record `<run directory>/target.json`, always written by atomic replace, and each entry written before
 its directory is created:
@@ -35,14 +44,16 @@ its directory is created:
 
 Copy: the project is walked handle-relative (NtCreateFile with a parent directory handle and
 FILE_OPEN_REPARSE_POINT), so no path is re-resolved and no reparse point of any tag is followed or
-recreated; links are skipped and listed. Only the unnamed data stream is read and written, so no
+recreated; links and recall-on-access entries are skipped and listed in `skipped_links`. Files are
+first opened for attributes only and reopened for reading after these checks. Only the unnamed data stream is read and written, so no
 alternate data stream (e.g. a downloaded file's Zone.Identifier) is ever copied; entries that carry
 one are copied without it and listed in `streams_not_copied`. The read-only attribute is kept. Never
 copied, in any case and at any depth: FIXED_NAMES, the request's extra names, and SECRET_PATTERNS
 (files or directories) unless the request names the file. Reserved device names and invalid names
 (including a name that designates a stream, i.e. holds ':'), paths longer than MAX_PATH_CHARS, the
 limits and any copy error fail the create and remove the partial target through the removal routine;
-nothing falls back to the working tree. Postcondition: no reparse point inside the target.
+nothing falls back to the working tree. Postcondition: no reparse point (and no recall-on-access
+entry) inside the target.
 
 Removal: paths come only from the record. The root is opened by its recorded path without following
 its last component and must match its recorded identity (volume serial + file ID); each entry is
@@ -54,6 +65,7 @@ never changed, so a hard link to a read-only file elsewhere keeps its attributes
 without that class gets the classic disposition, under which a read-only file fails and is reported.
 Any mismatch or failure keeps the entry in the record and reports its location.
 """
+import contextlib
 import ctypes
 import fnmatch
 import json
@@ -95,6 +107,8 @@ FLAG_BACKUP_SEMANTICS, FLAG_OPEN_REPARSE_POINT = 0x02000000, 0x00200000
 OPEN_EXISTING = 3
 ATTR_READONLY, ATTR_DIRECTORY, ATTR_NORMAL, ATTR_REPARSE = 0x1, 0x10, 0x80, 0x400
 CLOUD_ATTRIBUTES = 0x1000 | 0x40000 | 0x80000 | 0x100000 | 0x400000  # offline, recall, pinned, unpinned
+RECALL_ATTRIBUTES = 0x1000 | 0x40000 | 0x400000  # offline, recall on open, recall on data access
+PHCM_EXPOSE_PLACEHOLDERS = 2
 DRIVE_FIXED = 3
 STATUS_NAME_NOT_FOUND, STATUS_PATH_NOT_FOUND = 0xC0000034, 0xC000003A
 STATUS_NAME_COLLISION, STATUS_SHARING_VIOLATION = 0xC0000035, 0xC0000043
@@ -119,6 +133,50 @@ class CopyFailure(Exception):
 def require_windows():
     if sys.platform != "win32":
         raise TargetError("Exercise operations are supported on Windows only")
+
+
+def _placeholder_functions():
+    """The ntdll placeholder-compatibility calls this Windows has, by name."""
+    ntdll, found = ctypes.WinDLL("ntdll"), {}
+    for name, restype, argtypes in (
+            ("RtlSetThreadPlaceholderCompatibilityMode", ctypes.c_byte, [ctypes.c_byte]),
+            ("RtlQueryThreadPlaceholderCompatibilityMode", ctypes.c_byte, []),
+            ("RtlSetProcessPlaceholderCompatibilityMode", ctypes.c_byte, [ctypes.c_byte]),
+            ("RtlQueryProcessPlaceholderCompatibilityMode", ctypes.c_byte, [])):
+        try:
+            function = getattr(ntdll, name)
+        except AttributeError:
+            continue
+        function.restype, function.argtypes = restype, argtypes
+        found[name] = function
+    return found
+
+
+@contextlib.contextmanager
+def _placeholders_exposed():
+    """Run the body with cloud-file placeholders exposed as reparse points; restore the mode after."""
+    require_windows()
+    functions = _placeholder_functions()
+    set_thread = functions.get("RtlSetThreadPlaceholderCompatibilityMode")
+    set_process = functions.get("RtlSetProcessPlaceholderCompatibilityMode")
+    if set_thread is not None:
+        previous = set_thread(PHCM_EXPOSE_PLACEHOLDERS)
+        if previous < 0:
+            raise TargetError("Cloud-file placeholders cannot be exposed on this thread; nothing is done")
+        try:
+            yield
+        finally:
+            set_thread(previous)
+    elif set_process is not None:
+        previous = set_process(PHCM_EXPOSE_PLACEHOLDERS)  # both set calls return the previous mode, < 0 on error
+        if previous < 0:
+            raise TargetError("Cloud-file placeholders cannot be exposed; nothing is done")
+        try:
+            yield
+        finally:
+            set_process(previous)
+    else:
+        yield  # no placeholder API: this Windows has no cloud-files placeholders to disguise
 
 
 # --- Windows API (loaded lazily so that importing this module works on every platform) ---
@@ -300,11 +358,12 @@ def _dispose(handle):
     raise _win_error("Deleting", code)
 
 
-def _fd(handle, flags):
+def _adopt(handle, flags):
+    """A file descriptor that owns `handle`; on failure the handle is closed here, exactly once."""
     import msvcrt
     try:
         return msvcrt.open_osfhandle(handle, flags | os.O_BINARY)
-    except OSError:
+    except BaseException:
         _close(handle)
         raise
 
@@ -535,8 +594,9 @@ class _Copy:
             shown = "/".join(rel)
             if not _valid_component(name):
                 raise CopyFailure(f"reserved or invalid file name: {shown}")
-            if attributes & ATTR_REPARSE:
-                self.skipped.append({"path": shown, "reparse_tag": f"0x{tag:08X}"})
+            if attributes & (ATTR_REPARSE | RECALL_ATTRIBUTES):
+                # Links and cloud placeholders are neither followed, recreated nor opened for reading.
+                self.skipped.append({"path": shown, "reparse_tag": f"0x{tag:08X}", "attributes": f"0x{attributes:08X}"})
                 continue
             folded = tuple(p.casefold() for p in rel)
             if folded[-1] in self.spec["fixed"] or (_secret(folded[-1]) and
@@ -548,20 +608,28 @@ class _Copy:
             self.entries += 1
             if self.entries > self.spec["limits"]["max_entries"]:
                 raise CopyFailure(f"more than {self.spec['limits']['max_entries']} entries")
-            if attributes & ATTR_DIRECTORY:
-                self.directory(source, destination, name, rel, shown)
-            else:
-                self.file(source, destination, name, size, shown)
-                self.named_copied.add(folded)
+            kind = DIRECTORY_FILE if attributes & ATTR_DIRECTORY else NON_DIRECTORY_FILE
+            # Opened for attributes only; reopened for listing or reading only after the checks.
+            meta = _nt_open(source, name, READ_ATTRIBUTES, kind | OPEN_REPARSE_POINT)
+            try:
+                current, current_tag = _attribute_tag(meta)
+                if current & (ATTR_REPARSE | RECALL_ATTRIBUTES):
+                    self.skipped.append({"path": shown, "reparse_tag": f"0x{current_tag:08X}",
+                                         "attributes": f"0x{current:08X}", "changed_during_copy": True})
+                    continue
+                if _has_named_stream(meta):
+                    self.streams.append(shown)  # only the unnamed data stream is ever read and written
+                if attributes & ATTR_DIRECTORY:
+                    self.directory(meta, destination, name, rel)
+                else:
+                    self.file(meta, destination, name, size, current)
+                    self.named_copied.add(folded)
+            finally:
+                _close(meta)
 
-    def directory(self, source, destination, name, rel, shown):
-        child = _nt_open(source, name, LIST_DIRECTORY | READ_ATTRIBUTES, DIRECTORY_FILE | OPEN_REPARSE_POINT)
+    def directory(self, meta, destination, name, rel):
+        child = _nt_open(meta, "", LIST_DIRECTORY | READ_ATTRIBUTES, DIRECTORY_FILE | OPEN_REPARSE_POINT)
         try:
-            if _attribute_tag(child)[0] & ATTR_REPARSE:
-                self.skipped.append({"path": shown, "reparse_tag": "changed during copy"})
-                return
-            if _has_named_stream(child):
-                self.streams.append(shown)  # the directory is created anew; its streams are not copied
             created = _create_directory(destination, name)
             self.directories += 1
             try:
@@ -571,23 +639,16 @@ class _Copy:
         finally:
             _close(child)
 
-    def file(self, source, destination, name, size, shown):
+    def file(self, meta, destination, name, size, attributes):
         limit = self.spec["limits"]["max_bytes"]
         if self.bytes + max(size, 0) > limit:
             raise CopyFailure(f"more than {limit} bytes")
-        child = _nt_open(source, name, READ_DATA | READ_ATTRIBUTES, NON_DIRECTORY_FILE | OPEN_REPARSE_POINT)
-        reader = None
+        reader = _adopt(_nt_open(meta, "", READ_DATA | READ_ATTRIBUTES, NON_DIRECTORY_FILE | OPEN_REPARSE_POINT),
+                        os.O_RDONLY)
         try:
-            attributes, _ = _attribute_tag(child)
-            if attributes & ATTR_REPARSE:
-                raise CopyFailure(f"{shown} became a link during the copy")
-            if _has_named_stream(child):
-                self.streams.append(shown)  # only the unnamed data stream below is read and written
-            reader = _fd(child, os.O_RDONLY)
-            child = None
-            created = _nt_open(destination, name, WRITE_DATA | READ_ATTRIBUTES, NON_DIRECTORY_FILE | OPEN_REPARSE_POINT,
-                               FILE_CREATE, ATTR_READONLY if attributes & ATTR_READONLY else ATTR_NORMAL)
-            writer = _fd(created, os.O_WRONLY)
+            writer = _adopt(_nt_open(destination, name, WRITE_DATA | READ_ATTRIBUTES,
+                                     NON_DIRECTORY_FILE | OPEN_REPARSE_POINT, FILE_CREATE,
+                                     ATTR_READONLY if attributes & ATTR_READONLY else ATTR_NORMAL), os.O_WRONLY)
             try:
                 while chunk := os.read(reader, 1 << 20):
                     self.bytes += len(chunk)
@@ -600,21 +661,19 @@ class _Copy:
                 os.close(writer)
             self.files += 1
         finally:
-            if reader is not None:
-                os.close(reader)
-            _close(child)
+            os.close(reader)
 
 
 def _reparse_points(handle, parts=()):
     found = []
     for name, attributes, _, _ in _list(handle):
         rel = parts + (name,)
-        if attributes & ATTR_REPARSE:
+        if attributes & (ATTR_REPARSE | RECALL_ATTRIBUTES):
             found.append("/".join(rel))
         elif attributes & ATTR_DIRECTORY:
             child = _nt_open(handle, name, LIST_DIRECTORY | READ_ATTRIBUTES, DIRECTORY_FILE | OPEN_REPARSE_POINT)
             try:
-                if _attribute_tag(child)[0] & ATTR_REPARSE:
+                if _attribute_tag(child)[0] & (ATTR_REPARSE | RECALL_ATTRIBUTES):
                     found.append("/".join(rel))
                 else:
                     found += _reparse_points(child, rel)
@@ -626,8 +685,13 @@ def _reparse_points(handle, parts=()):
 # --- create ---
 
 def create(request, make_run_directory):
-    """Check everything, then call make_run_directory() -> (run directory, owns it), record, create, copy."""
+    """Check everything, then call make_run_directory(project) -> (run directory, owns it), record, create, copy."""
     require_windows()
+    with _placeholders_exposed():
+        return _create(request, make_run_directory)
+
+
+def _create(request, make_run_directory):
     spec = _validate(request)
     root_handle, root, root_identity = _open_root(spec["root"])
     project_handle = None
@@ -644,7 +708,7 @@ def create(request, make_run_directory):
                 raise TargetError("The target path already exists; an existing path is never used")
         except OSError:
             raise TargetError("The target path cannot be checked") from None
-        directory, owns = make_run_directory()
+        directory, owns = make_run_directory(project)
         directory = Path(directory)
         if (directory / RECORD).exists():
             raise TargetError("This run directory already has a target record")
@@ -719,6 +783,11 @@ def _discard_record(directory, owns):
 def create_sibling(run_directory, purpose):
     """Create a recorded directory beside the target under the root (an MCP TEMP directory, I5)."""
     require_windows()
+    with _placeholders_exposed():
+        return _create_sibling(run_directory, purpose)
+
+
+def _create_sibling(run_directory, purpose):
     if not isinstance(purpose, str) or not PURPOSE.fullmatch(purpose):
         raise TargetError("Invalid sibling purpose")
     directory, record = record_at(run_directory)
@@ -796,6 +865,11 @@ def _remove_open(handle, deadline):
 def remove(run_directory):
     """Remove every recorded entry that still matches the record; report what is kept and where."""
     require_windows()
+    with _placeholders_exposed():
+        return _remove(run_directory)
+
+
+def _remove(run_directory):
     directory, record = record_at(run_directory)
     root = record.get("root", {}).get("path")
     if not isinstance(root, str) or not isinstance(record.get("entries"), list):
@@ -879,8 +953,10 @@ def create_command(request_path, base):
     try:
         request = json.loads(Path(request_path).read_text(encoding="utf-8-sig"))
 
-        def make_run_directory():
+        def make_run_directory(project):
             parent = Path(base).resolve() / "ask-codex"
+            if _inside(str(parent), project):  # before anything is created (refusal leaves nothing behind)
+                raise TargetError("The run directory must not be inside the project")
             parent.mkdir(parents=True, exist_ok=True)
             return Path(tempfile.mkdtemp(prefix="run.", dir=parent)), True
 

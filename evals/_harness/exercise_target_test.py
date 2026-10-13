@@ -410,7 +410,7 @@ class DisposableTargetTest(unittest.TestCase):
         for kind in (2, 4, 5, 6):  # removable, remote, CD-ROM, RAM disk as reported by GetDriveTypeW
             target._drive_type = lambda path, kind=kind: kind
             with self.subTest(kind=kind), self.assertRaises(target.TargetError) as refused:
-                target.create(self.request(), lambda: self.fail("nothing may be written"))
+                target.create(self.request(), lambda project: self.fail("nothing may be written"))
             self.assertIn("local fixed drive", str(refused.exception))
         self.assertEqual(self.runs(), [])
         self.assertEqual(os.listdir(self.targets), [])
@@ -511,7 +511,7 @@ class DisposableTargetTest(unittest.TestCase):
 
         target._create_directory = spy
 
-        def make_run_directory():
+        def make_run_directory(project):
             (self.base / "ask-codex").mkdir()
             return Path(tempfile.mkdtemp(prefix="run.", dir=self.base / "ask-codex")), True
 
@@ -540,6 +540,105 @@ class DisposableTargetTest(unittest.TestCase):
         self.assert_unchanged(sentinel, self.sentinel)
         record = json.loads((Path(result["directory"]) / "target.json").read_text(encoding="utf-8"))
         self.assertEqual([e["path"] for e in record["entries"]], [str(swapped)], "only the refused entry stays")
+
+    # --- cloud-file placeholders (I2: every reparse tag, placeholders included) ---
+
+    def in_process(self):
+        sys.path.insert(0, str(SCRIPTS))
+        import target
+        return target
+
+    def make_run_directory(self, project):
+        (self.base / "ask-codex").mkdir(exist_ok=True)
+        return Path(tempfile.mkdtemp(prefix="run.", dir=self.base / "ask-codex")), True
+
+    def patch(self, module, name, value):
+        self.addCleanup(setattr, module, name, getattr(module, name))
+        setattr(module, name, value)
+
+    def test_cloud_placeholders_are_skipped_listed_and_never_read(self):
+        target = self.in_process()
+        for name in ("normal.txt", "cloudy.txt", "offline.txt", "tagged.txt", "late-cloudy.txt", "cloud-dir/inner.txt"):
+            write(self.project / name, "content")
+        # As listed by the walk: recall on data access, offline, a OneDrive cloud tag, a recall-on-open directory.
+        listed = {"cloudy.txt": (0x400000, 0), "offline.txt": (0x1000, 0), "tagged.txt": (0x400, 0x9000601A),
+                  "cloud-dir": (0x40000, 0)}
+        late = "late-cloudy.txt"  # a plain entry in the listing whose open handle reports recall on data access
+        names, opens = {}, []
+        list_entries, nt_open, attribute_tag = target._list, target._nt_open, target._attribute_tag
+
+        def fake_list(handle):
+            return [(n, a | listed.get(n, (0, 0))[0], listed.get(n, (0, t))[1] or t, s)
+                    for n, a, t, s in list_entries(handle)]
+
+        def spy_open(parent, name, access, *args, **kwargs):
+            resolved = name or names.get(parent, "?")
+            opens.append((resolved, access))
+            handle = nt_open(parent, name, access, *args, **kwargs)
+            names[handle] = resolved
+            return handle
+
+        def fake_tag(handle):
+            attributes, tag = attribute_tag(handle)
+            return (attributes | 0x400000, tag) if names.get(handle) == late else (attributes, tag)
+
+        self.patch(target, "_list", fake_list)
+        self.patch(target, "_nt_open", spy_open)
+        self.patch(target, "_attribute_tag", fake_tag)
+        result = target.create(self.request(), self.make_run_directory)
+
+        self.assertEqual(result["state"], "created", result)
+        skipped = {s["path"]: s for s in result["skipped_links"]}
+        self.assertEqual(set(skipped), {"cloudy.txt", "offline.txt", "tagged.txt", "cloud-dir", late})
+        self.assertEqual(skipped["tagged.txt"]["reparse_tag"], "0x9000601A")
+        self.assertTrue(skipped[late]["changed_during_copy"])
+        copied = {k for k in snapshot(result["target"]) if k != "."}
+        self.assertEqual(copied, {"README.md", "normal.txt"})
+        never_opened = set(listed) | {"inner.txt"}
+        self.assertEqual([o for o in opens if o[0] in never_opened], [], "listed placeholders are never opened")
+        self.assertEqual([o for o in opens if o[0] == late], [(late, target.READ_ATTRIBUTES)],
+                         "a placeholder found on its handle is never opened for reading")
+        self.assertIn(("normal.txt", target.READ_DATA | target.READ_ATTRIBUTES), opens)
+        self.assertEqual(self.remove(result["directory"])["state"], "removed")
+
+    def placeholder_mode(self, scope):
+        query = getattr(ctypes.WinDLL("ntdll"), f"RtlQuery{scope}PlaceholderCompatibilityMode")
+        query.restype, query.argtypes = ctypes.c_byte, []
+        return query()
+
+    def test_placeholders_are_exposed_during_the_walk_and_the_mode_is_restored(self):
+        target = self.in_process()
+        write(self.project / "sub/file.txt", "content")
+        list_entries, check_ancestors = target._list, target._check_ancestors
+        for scope, functions in (("Thread", None), ("Process", ("RtlSetProcessPlaceholderCompatibilityMode",
+                                                                 "RtlQueryProcessPlaceholderCompatibilityMode"))):
+            with self.subTest(scope=scope):
+                seen = []
+                if functions:  # the thread call unavailable: the process-level fallback
+                    available = target._placeholder_functions
+                    self.patch(target, "_placeholder_functions",
+                               lambda: {k: v for k, v in available().items() if k in functions})
+                self.patch(target, "_list", lambda h: seen.append(self.placeholder_mode(scope)) or list_entries(h))
+                self.patch(target, "_check_ancestors",
+                           lambda root: seen.append(self.placeholder_mode(scope)) or check_ancestors(root))
+                before = (self.placeholder_mode("Thread"), self.placeholder_mode("Process"))
+                result = target.create(self.request(), self.make_run_directory)
+                self.assertEqual(result["state"], "created", result)
+                removed = target.remove(result["directory"])
+                self.assertEqual(removed["state"], "removed", removed)
+                self.assertGreater(len(seen), 3)
+                self.assertEqual(set(seen), {target.PHCM_EXPOSE_PLACEHOLDERS}, "exposed during checks, walk and removal")
+                self.assertEqual((self.placeholder_mode("Thread"), self.placeholder_mode("Process")), before, "restored")
+
+    def test_base_inside_the_project_is_refused_before_anything_is_created(self):
+        project = snapshot(self.project)
+        path = self.requests / "request.json"
+        path.write_text(json.dumps(self.request()), encoding="utf-8")
+        refused = self.call("target-create", path, "--base", self.project / "scratch")
+        self.assertEqual(refused["state"], "failed", refused)
+        self.assertIn("must not be inside the project", refused["reason"])
+        self.assert_unchanged(project, self.project)
+        self.assertEqual(os.listdir(self.targets), [])
 
     # --- I13 ---
 
