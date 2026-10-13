@@ -21,12 +21,12 @@ Live acceptance with all three on codex-cli 0.159.3 (Windows, elevated sandbox),
 
 ## Consequences and honest limits
 
-- Administrator layers are not defended: a legacy managed config (precedence above session flags) or a `requirements.toml` that disallows `never` can override or replace the pinned values; Codex only warns, as a `type:"error"` item in the event stream rather than on stderr.
-- `--ignore-rules` covers user and project rules only. System-level rules (under `%ProgramData%\OpenAI\Codex\` on Windows, a directory ordinary users can create), requirements `prefix_rules` and any rules a plugin layer brings are still loaded.
+- Administrator layers are not defended: a legacy managed config (precedence above session flags) or a `requirements.toml` that disallows `never` can override or replace the pinned values; Codex only warns. Codex reported another configuration warning (enabled under-development features) as a `type:"error"` item in the `--json` event stream rather than on stderr in the adversarial run; the requirements warning itself was never produced.
+- `--ignore-rules` covers user and project rules only (its help text: "user or project execpolicy `.rules` files"). System-level rules (under `%ProgramData%\OpenAI\Codex\` on Windows), requirements `prefix_rules` and rules a plugin layer brings are presumably still loaded — from a static reading of the codex-cli 0.159.3 binary during the adversarial review; not probed.
 - In every live run the model declined to send an escalation request once told the policy is `never`, so Codex's runtime refusal of such a request was never exercised live; it is evidenced only by the refusal strings in the binary. A permissions request in the adversarial run was reported by the model as granting nothing; that result is not visible in the `--json` event stream. The user accepted claim C1 without a passing adversarial review on these two gaps (2026-10-13).
 - Approval-requiring MCP tools on servers the user allows are now refused in consultations instead of being reviewed.
 - The user's own `forbidden` and `prompt` execpolicy rules do not apply in consultations; commands still run inside the read-only sandbox.
-- `--ignore-rules` requires a codex-cli that has the flag (0.159.3 does); an older CLI fails with an unknown-argument error instead of running without it.
+- `--ignore-rules` requires a codex-cli that has the flag (0.159.3 does); an older CLI is expected to fail with an unknown-argument error instead of running without it (not tested).
 - The read-only sandbox does not block loopback on Windows: shell commands reach every localhost service, and Codex configuration cannot prevent it (a network-proxy profile blocks proxied requests, but a command that bypasses the proxy still connects). Documented in the README, not solved.
 - Not verified: older CLIs, Linux, WSL, macOS; the reviewer pin alone; the `.rules` bypass itself; a profile layer (consultations never pass `--profile`, and a project cannot select one).
 - This changes the consultation command line again, as ADR 0008 did.

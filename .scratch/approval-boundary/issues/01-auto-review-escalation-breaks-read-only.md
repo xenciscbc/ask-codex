@@ -19,7 +19,8 @@ Evidence: `evidence/source/p9-*`, `p9b-*`, `p8a-*` (copied from `.scratch/exerci
 
 - [x] Pin `-c approval_policy="never"` as a constant on the consultation command line next to the ADR 0008 pairs (command-line `-c` outranks user and project config); decide whether to also pin `approvals_reviewer`.
 - [x] Check other config layers that could reintroduce approvals (trusted project `.codex/config.toml`, profiles) against the pinned value.
-- [x] Offline oracle and stub argv checks; live probe that escalation is refused with `approvals_reviewer = "auto_review"` in user config and in a trusted project config; README known-risk entry, ADR, patch release.
+- [x] Offline oracle and stub argv checks; live probe that escalation is refused with `approvals_reviewer = "auto_review"` in user config and in a trusted project config; README known-risk entry, ADR, version 1.3.3.
+- [ ] Merge, tag v1.3.3 and push — awaits the user.
 - [ ] The planned exercise skills (`.scratch/exercise-skills/`) must pin the same value.
 
 ## Comments
