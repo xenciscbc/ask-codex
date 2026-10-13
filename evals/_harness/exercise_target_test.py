@@ -742,6 +742,78 @@ class DisposableTargetTest(unittest.TestCase):
         self.assertIn("must be on a local drive", str(refused.exception))
         self.assertEqual(os.listdir(self.base / "ask-codex" / "run.unc"), [], "no record written")
 
+    # --- Git repository layouts under any name (I2: VCS metadata in any case and depth) ---
+
+    def git_layout(self, directory, head="HEAD", objects="objects", refs="refs", head_is_directory=False):
+        directory.mkdir(parents=True, exist_ok=True)
+        if head_is_directory:
+            (directory / head).mkdir()
+        else:
+            write(directory / head, "ref: refs/heads/main\n")
+        if objects:
+            write(directory / objects / "info" / "packs", "")
+        if refs:
+            write(directory / refs / "heads" / "main", "0" * 40)
+        write(directory / "config", "[core]\n\tfsmonitor = project-controlled\n")
+        return directory
+
+    def test_project_directory_with_a_git_repository_layout_is_refused(self):
+        bare = self.git_layout(self.root / "bare")
+        cased = self.git_layout(self.root / "cased", head="head", objects="OBJECTS", refs="Refs")
+        worktree = self.root / "worktree-admin"
+        write(worktree / "HEAD", "ref: refs/heads/main\n")
+        write(worktree / "commondir", "../..\n")
+        write(worktree / "gitdir", "D:/elsewhere/.git\n")
+        for project in (bare, cased, worktree):
+            with self.subTest(project=project.name):
+                self.assert_refused_without_writes(self.request(project=str(project)), "Git repository layout")
+
+    def test_nested_git_repository_layouts_are_excluded_listed_and_never_copied(self):
+        p = self.project
+        self.git_layout(p / "vendor" / "mirror.git")
+        self.git_layout(p / "lib" / "Repo", head="head", objects="OBJECTS", refs="refs")
+        write(p / "admin" / "wt" / "HEAD", "ref: refs/heads/main\n")
+        write(p / "admin" / "wt" / "commondir", "../..\n")
+        # Git also accepts objects and refs as plain files (checked with git rev-parse on Windows).
+        flat = self.git_layout(p / "flat", objects=None, refs=None)
+        write(flat / "objects", "a file")
+        write(flat / "refs", "a file")
+        # Not Git's criterion: no HEAD; HEAD as a directory; no refs.
+        self.git_layout(p / "data" / "store", head="NOT-HEAD")
+        self.git_layout(p / "data" / "odd", head_is_directory=True)
+        self.git_layout(p / "data" / "half", refs=None)
+        result, target = self.created()
+        layouts = ["admin/wt", "flat", "lib/Repo", "vendor/mirror.git"]
+        self.assertEqual(sorted(result["git_layouts_excluded"]), layouts)
+        for layout in layouts:
+            self.assertIn(layout, result["excluded"])
+            self.assertFalse(os.path.lexists(target / layout), layout)
+        copied = {k for k in snapshot(target) if k != "."}
+        for kept in ("vendor", "lib", "admin", "data/store/objects/info/packs", "data/store/refs/heads/main",
+                     "data/odd/HEAD", "data/odd/objects", "data/half/HEAD", "data/half/objects/info/packs"):
+            self.assertIn(kept, copied)
+        self.assertFalse(any(k.startswith(tuple(layouts)) for k in copied))
+        self.assertEqual(self.remove(result["directory"])["state"], "removed")
+
+    def test_a_git_layout_found_after_the_copy_fails_and_removes_the_partial_target(self):
+        target = self.in_process()
+        self.git_layout(self.project / "vendor" / "mirror.git")
+        git_layout, reparse_points, phase = target._git_layout, target._reparse_points, []
+
+        def postcondition(handle, parts=()):
+            phase.append("post")
+            return reparse_points(handle, parts)
+
+        self.patch(target, "_reparse_points", postcondition)
+        self.patch(target, "_git_layout", lambda listing: bool(phase) and git_layout(listing))  # missed while copying
+        result = target.create(self.request(), self.make_run_directory)
+        self.assertEqual(result["state"], "failed", result)
+        self.assertIn("Git repository layout inside the target", result["reason"])
+        self.assertIn("vendor/mirror.git (Git repository layout)", result["reason"])
+        self.assertTrue(result["target_removed"])
+        self.assertEqual(os.listdir(self.targets), [])
+        self.assertEqual(self.runs(), [])
+
     # --- I13 ---
 
     def test_other_platforms_are_refused(self):

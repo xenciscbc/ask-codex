@@ -62,11 +62,15 @@ first opened for attributes only and reopened for reading after these checks. On
 alternate data stream (e.g. a downloaded file's Zone.Identifier) is ever copied; entries that carry
 one are copied without it and listed in `streams_not_copied`. The read-only attribute is kept. Never
 copied, in any case and at any depth: FIXED_NAMES, the request's extra names, and SECRET_PATTERNS
-(files or directories) unless the request names the file. Reserved device names and invalid names
+(files or directories) unless the request names the file. A directory under any name that meets
+Git's repository-directory criterion (_git_layout, a superset: a HEAD file with objects and refs
+entries of any type, or a HEAD file with commondir; names in any case) is VCS metadata too: nested, it is skipped without opening its contents
+and listed in `excluded` and `git_layouts_excluded`; as the project directory itself, the create is
+refused before anything is written. Reserved device names and invalid names
 (including a name that designates a stream, i.e. holds ':'), paths longer than MAX_PATH_CHARS, the
 limits and any copy error fail the create and remove the partial target through the removal routine;
-nothing falls back to the working tree. Postcondition: no reparse point (and no recall-on-access
-entry) inside the target.
+nothing falls back to the working tree. Postcondition: no reparse point, no recall-on-access entry
+and no Git repository layout (the target itself included) inside the target.
 
 Removal: paths come only from the record. The root is opened by its recorded path without following
 its last component and must match its recorded identity (volume serial + file ID); each entry is
@@ -678,9 +682,10 @@ class _Copy:
         self.spec, self.target = spec, target
         self.entries = self.bytes = self.files = self.directories = 0
         self.skipped, self.excluded, self.streams, self.named_copied = [], [], [], set()
+        self.git_layouts = []  # directories excluded as Git repository directories (also in `excluded`)
 
-    def run(self, source, destination, parts=()):
-        for name, attributes, tag, size in _list(source):
+    def run(self, source, destination, parts=(), listing=None):
+        for name, attributes, tag, size in _list(source) if listing is None else listing:
             rel = parts + (name,)
             shown = "/".join(rel)
             if not _valid_component(name):
@@ -708,25 +713,34 @@ class _Copy:
                     self.skipped.append({"path": shown, "reparse_tag": f"0x{current_tag:08X}",
                                          "attributes": f"0x{current:08X}", "changed_during_copy": True})
                     continue
-                if _has_named_stream(meta):
-                    self.streams.append(shown)  # only the unnamed data stream is ever read and written
+                streams = _has_named_stream(meta)
                 if attributes & ATTR_DIRECTORY:
-                    self.directory(meta, destination, name, rel)
+                    copied = self.directory(meta, destination, name, rel, shown)
                 else:
                     self.file(meta, destination, name, size, current)
                     self.named_copied.add(folded)
+                    copied = True
+                if streams and copied:
+                    self.streams.append(shown)  # only the unnamed data stream is ever read and written
             finally:
                 _close(meta)
 
-    def directory(self, meta, destination, name, rel):
+    def directory(self, meta, destination, name, rel, shown):
         child = _nt_open(meta, "", LIST_DIRECTORY | READ_ATTRIBUTES, DIRECTORY_FILE | OPEN_REPARSE_POINT)
         try:
+            listing = _list(child)
+            if _git_layout(listing):  # VCS metadata under any name: never copied, contents never opened
+                self.entries -= 1
+                self.excluded.append(shown)
+                self.git_layouts.append(shown)
+                return False
             created = _create_directory(destination, name)
             self.directories += 1
             try:
-                self.run(child, created, rel)
+                self.run(child, created, rel, listing)
             finally:
                 _close(created)
+            return True
         finally:
             _close(child)
 
@@ -755,9 +769,26 @@ class _Copy:
             os.close(reader)
 
 
+def _git_layout(listing):
+    """Git's repository-directory criterion on a directory listing, as a superset, names compared
+    case-insensitively: HEAD (not a directory; its content is not checked) with objects and refs entries of
+    any type (Git on Windows accepts files there too, checked with git rev-parse), or HEAD with commondir
+    (a linked worktree's administrative directory). Links count, since Git follows them."""
+    kinds = {}
+    for name, attributes, _, _ in listing:
+        kinds[name.casefold()] = bool(attributes & ATTR_DIRECTORY)
+    if kinds.get("head") is not False:
+        return False
+    return ("objects" in kinds and "refs" in kinds) or "commondir" in kinds
+
+
 def _reparse_points(handle, parts=()):
+    """Postcondition: links, recall-on-access entries and Git repository layouts found in the target."""
     found = []
-    for name, attributes, _, _ in _list(handle):
+    listing = _list(handle)
+    if _git_layout(listing):
+        found.append(f"{'/'.join(parts) or '.'} (Git repository layout)")
+    for name, attributes, _, _ in listing:
         rel = parts + (name,)
         if attributes & (ATTR_REPARSE | RECALL_ATTRIBUTES):
             found.append("/".join(rel))
@@ -791,6 +822,9 @@ def _create(request, make_run_directory):
         project_handle, project = _open_project(spec["project"])
         if _inside(root, project) or _inside(project, root):
             raise TargetError("The target root must be neither inside the project nor contain it")
+        if _git_layout(_list(project_handle)):
+            raise TargetError("The project directory itself has a Git repository layout (HEAD with objects and "
+                              "refs, or with commondir); it is VCS metadata and is never copied")
         target = root + ("" if root.endswith("\\") else "\\") + spec["name"]
         if len(target) > MAX_PATH_CHARS:
             raise TargetError("The target path is too long")
@@ -843,7 +877,8 @@ def _create(request, make_run_directory):
                     raise CopyFailure(f"named file not found as a regular file in the project: {', '.join(missing)}")
                 links = _reparse_points(target_handle)
                 if links:
-                    raise CopyFailure(f"reparse point inside the target after the copy: {', '.join(links)}")
+                    raise CopyFailure(f"reparse point or Git repository layout inside the target after the copy: "
+                                      f"{', '.join(links)}")
             finally:
                 _close(target_handle)
             record["copy"] = "done"
@@ -861,7 +896,8 @@ def _create(request, make_run_directory):
                     "target_removed": False, "retained_location": target, "record": str(directory),
                     "removal": removal}
         return {"state": "created", "directory": str(directory), "target": target, "root": root,
-                "skipped_links": copy.skipped, "excluded": copy.excluded, "streams_not_copied": copy.streams,
+                "skipped_links": copy.skipped, "excluded": copy.excluded, "git_layouts_excluded": copy.git_layouts,
+                "streams_not_copied": copy.streams,
                 "env_files": sorted(spec["named"].values()),
                 "copied": {"files": copy.files, "directories": copy.directories, "bytes": copy.bytes}}
     finally:
