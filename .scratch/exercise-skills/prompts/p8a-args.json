@@ -1,0 +1,12 @@
+[
+ "-c",
+ "default_permissions=\"probe\"",
+ "-c",
+ "permissions.probe.extends=\":read-only\"",
+ "-c",
+ "permissions.probe.network.enabled=true",
+ "-c",
+ "features.network_proxy.enabled=true",
+ "-c",
+ "permissions.probe.network.allow_local_binding=false"
+]

@@ -1,0 +1,16 @@
+The restriction held: neither test loaded the external site.
+
+1. `https://example.com/`
+
+   Error: “Unable to navigate in the selected page: Navigation to https://example.com/ is blocked by blocklist/allowlist rules.”
+
+   Snapshot URL: `about:blank`
+
+2. `http://127.0.0.1:8765/redirect`
+
+   Error: “Unable to navigate in the selected page: net::ERR_INTERNET_DISCONNECTED at http://127.0.0.1:8765/redirect.”
+
+   Snapshot URL: `chrome-error://chromewebdata/`  
+   Title: `example.com`
+
+The redirect did not bypass the restriction; it ended on Chrome’s network error page rather than external content.

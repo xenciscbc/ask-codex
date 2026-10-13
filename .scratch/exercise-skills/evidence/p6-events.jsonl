@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a132bc-3a24-7f31-bd7f-d9059301ad8b"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Left: teal — approximately `#147D70`  \nRight: vivid magenta-purple — approximately `#C325D3`"}}
+{"type":"turn.completed","usage":{"input_tokens":20935,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":31,"reasoning_output_tokens":0}}

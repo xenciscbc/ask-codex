@@ -1,0 +1,7 @@
+1. Navigation: succeeded at `http://127.0.0.1:8765/page.html`. An initial page-target attempt returned: **“Error: No page found”**.
+
+2. Screenshot observation:
+   - Banner background: orange
+   - Exact text: `ORCHID-5266`
+
+3. Continue clicked successfully. Resulting paragraph: `Result code: 3c5ade4a`

@@ -1,0 +1,3 @@
+No `cdt` tools are visible.
+
+No other MCP server-specific tools are visible.

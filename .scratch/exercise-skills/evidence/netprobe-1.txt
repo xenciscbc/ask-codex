@@ -1,0 +1,68 @@
+=== T1 default (read-only, network off)
+  http://127.0.0.1:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  http://127.0.0.1:8766/t.txt        via-proxy: PORT8766 [200]
+
+                                     direct:    PORT8766 [200]
+
+  http://localhost:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  https://example.com/               via-proxy: curl: (7) Failed to connect to example.com port 443 after 20 ms: Could not connect to serv
+
+                                     direct:    curl: (7) Failed to connect to example.com port 443 after 6 ms: Could not connect to serve
+
+=== T2 proxy, no allow rules
+  http://127.0.0.1:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  http://127.0.0.1:8766/t.txt        via-proxy: PORT8766 [200]
+
+                                     direct:    PORT8766 [200]
+
+  http://localhost:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  https://example.com/               via-proxy: curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+
+                                     direct:    curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+
+=== T3 proxy, allow 127.0.0.1
+  http://127.0.0.1:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  http://127.0.0.1:8766/t.txt        via-proxy: PORT8766 [200]
+
+                                     direct:    PORT8766 [200]
+
+  http://localhost:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  https://example.com/               via-proxy: curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+
+                                     direct:    curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+
+=== T4 proxy, allow 127.0.0.1:8765
+  http://127.0.0.1:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  http://127.0.0.1:8766/t.txt        via-proxy: PORT8766 [200]
+
+                                     direct:    PORT8766 [200]
+
+  http://localhost:8765/t.txt        via-proxy: PORT8765 [200]
+
+                                     direct:    PORT8765 [200]
+
+  https://example.com/               via-proxy: curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+
+                                     direct:    curl: (35) schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - 
+

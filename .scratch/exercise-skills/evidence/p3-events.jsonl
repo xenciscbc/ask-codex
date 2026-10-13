@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a132b7-6218-7b42-8a91-63bdf3c9a4d3"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"No `cdt` tools are visible.\n\nNo other MCP server-specific tools are visible."}}
+{"type":"turn.completed","usage":{"input_tokens":21341,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":72}}

@@ -12,6 +12,14 @@ _Avoid_: 委派、rescue、把工作交給 Codex 做；英文避免 query、ask�
 把任務本身交給 Codex 執行（可能包含修改檔案），例如官方 codex plugin 的 `/codex:rescue`；不在 ask-codex 的範圍內。
 _Avoid_: 將委派與諮詢混用。
 
+**演練**（exercise）：
+使用者發起、讓 Codex 在可丟棄目標上實際操作或執行以取得證據的互動，例如操作 UI 或證明漏洞；Codex 不修改使用者的專案，結果仍是論點，由 Claude 處置。諮詢維持唯讀，演練是另一種互動，不是放寬後的諮詢。
+_Avoid_: 把演練稱為諮詢或委派。
+
+**可丟棄目標**（disposable target）：
+為一次演練新建的目錄、其中的專案副本與由它啟動的 localhost 服務；Codex 只能寫入這裡，演練結束時整個移除。位置只能由使用者層的來源決定（使用者的全域指示、memory 或對話）；專案自己的指示只能建議，須經使用者確認。
+_Avoid_: 在使用者的工作目錄或既有目錄上演練。
+
 ### 發起
 
 **手動諮詢**（manual consultation）：

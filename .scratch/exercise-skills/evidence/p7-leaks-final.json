@@ -1,0 +1,11 @@
+[
+ {
+  "label": "allowlist + --proxyServer=http://127.0.0.1:9 --chromeArg=--proxy-bypass-list=<-loopback>;127.0.0.1:8765",
+  "navigate": "{\"result\": {\"content\": [{\"type\": \"text\", \"text\": \"Successfully navigated to http://127.0.0.1:8765/leak.html.\\n## Pages\\n1: Leak probe (http://127.0.0.1:8765/leak.html) [selected]\"}]}, \"jsonrpc\": \"2.0\", \"id\": 3}",
+  "far_hits": [
+   "8765/report?page-ext=fail",
+   "8765/report?sw-ext=fail"
+  ],
+  "page_notes": []
+ }
+]

@@ -1,0 +1,2 @@
+Left: teal — approximately `#147D70`  
+Right: vivid magenta-purple — approximately `#C325D3`

@@ -1,0 +1,5 @@
+Exact output:
+
+```json
+{"content":[{"type":"text","text":"## Pages\n1: about:blank [selected]"}]}
+```

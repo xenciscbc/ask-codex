@@ -1,0 +1,24 @@
+Discovered `cdt` tools:
+
+```text
+mcp__cdt__click
+mcp__cdt__fill
+mcp__cdt__navigate_page
+mcp__cdt__take_screenshot
+mcp__cdt__take_snapshot
+mcp__cdt__wait_for
+```
+
+Requested call attempts:
+
+```text
+mcp__cdt__list_pages
+TypeError: tools.mcp__cdt__list_pages is not a function
+```
+
+```text
+mcp__cdt__new_page({"url":"http://127.0.0.1:8765/token.txt"})
+TypeError: tools.mcp__cdt__new_page is not a function
+```
+
+No shell commands were run.

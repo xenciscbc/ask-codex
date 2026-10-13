@@ -1,0 +1,10 @@
+[
+ "-c",
+ "mcp_servers.cdt.command=\"cmd\"",
+ "-c",
+ "mcp_servers.cdt.args=[\"/c\",\"npx\",\"-y\",\"chrome-devtools-mcp@1.10.1\",\"--isolated\",\"--headless\",\"--no-javascript-evaluation\",\"--no-usage-statistics\",\"--no-performance-crux\",\"--allowedUrlPattern=http://127.0.0.1:8765/*\",\"--viewport=1280x720\"]",
+ "-c",
+ "mcp_servers.cdt.env={CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY=\"1\",CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS=\"1\"}",
+ "-c",
+ "mcp_servers.cdt.startup_timeout_sec=90"
+]

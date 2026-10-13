@@ -1,0 +1,2 @@
+curl.exe -sS http://127.0.0.1:8765/token.txt — 26a84d2
+curl.exe -sS -o NUL -w "%{http_code}" https://example.com/ — curl: (7) Failed to connect to example.com port 443 after 5 ms: Couldn't connect to server
