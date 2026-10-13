@@ -1,0 +1,194 @@
+{
+ "control": "root-widened",
+ "definition_args": [
+  "C:/Users/admin/AppData/Local/ask-codex/chrome-devtools-mcp-1.10.1/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+  "--isolated",
+  "--headless",
+  "--no-javascript-evaluation",
+  "--no-usage-statistics",
+  "--no-performance-crux",
+  "--redactNetworkHeaders",
+  "--filesystemRoot=D:/tmp/ui-exercise-targets/c3-live-1791900492",
+  "--viewport=1280x720",
+  "--allowedUrlPattern=http://127.0.0.1:15173/*",
+  "--allowedUrlPattern=http://127.0.0.1:18080/*",
+  "--proxyServer=http://127.0.0.1:9439",
+  "--chromeArg=--proxy-bypass-list=<-loopback>;127.0.0.1:15173;127.0.0.1:18080",
+  "--chromeArg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+ ],
+ "definition_env": {
+  "CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY": "1",
+  "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+  "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
+  "NODE_OPTIONS": "",
+  "TEMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-6253e3cc",
+  "TMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-6253e3cc"
+ },
+ "seconds": 157.6,
+ "guard_passed": false,
+ "failing_items": [
+  {
+   "item": "download-does-not-land-outside-evidence",
+   "ok": false,
+   "detail": "link clicked; evidence: 0; outside: ['C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-76aaed9a79e8-download (1).bin', 'C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-76aaed9a79e8-download.bin']"
+  },
+  {
+   "item": "write-screenshot-dot-dot",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-003.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-003.png']"
+  },
+  {
+   "item": "write-screenshot-alternate-stream-outside",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-009.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-009.png']"
+  },
+  {
+   "item": "write-screenshot-case-variant-outside",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-010.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-010.png']"
+  },
+  {
+   "item": "write-screenshot-trailing-dot-outside",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-011.png.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-011.png.png']"
+  },
+  {
+   "item": "write-screenshot-trailing-space-outside",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-012.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-012.png']"
+  },
+  {
+   "item": "write-screenshot-under-target-outside-evidence",
+   "ok": false,
+   "detail": "ok: Took a screenshot of the current page's viewport.\nSaved screenshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-016.png.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-016.png']"
+  },
+  {
+   "item": "write-snapshot-dot-dot",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-024.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-024.txt']"
+  },
+  {
+   "item": "write-snapshot-alternate-stream-outside",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-030.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-030.txt']"
+  },
+  {
+   "item": "write-snapshot-case-variant-outside",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-031.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-031.txt']"
+  },
+  {
+   "item": "write-snapshot-trailing-dot-outside",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-032.txt.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-032.txt.txt']"
+  },
+  {
+   "item": "write-snapshot-trailing-space-outside",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-033.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-033.txt']"
+  },
+  {
+   "item": "write-snapshot-under-target-outside-evidence",
+   "ok": false,
+   "detail": "ok: Saved snapshot to D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\ask-codex-guard-76aaed9a79e8-037.txt.; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-037.txt']"
+  },
+  {
+   "item": "write-request-body-dot-dot",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-045.network-request']"
+  },
+  {
+   "item": "write-request-body-alternate-stream-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-051.network-request']"
+  },
+  {
+   "item": "write-request-body-case-variant-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-052.network-request']"
+  },
+  {
+   "item": "write-request-body-trailing-dot-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-053.network-request.network-request']"
+  },
+  {
+   "item": "write-request-body-trailing-space-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-054.network-request']"
+  },
+  {
+   "item": "write-request-body-under-target-outside-evidence",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-058.network-request']"
+  },
+  {
+   "item": "write-response-body-dot-dot",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-066.network-response']"
+  },
+  {
+   "item": "write-response-body-alternate-stream-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-072.network-response']"
+  },
+  {
+   "item": "write-response-body-case-variant-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-073.network-response']"
+  },
+  {
+   "item": "write-response-body-trailing-dot-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-074.network-response.network-response']"
+  },
+  {
+   "item": "write-response-body-trailing-space-outside",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-075.network-response']"
+  },
+  {
+   "item": "write-response-body-under-target-outside-evidence",
+   "ok": false,
+   "detail": "ok: ## Request http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post\nStatus: 200\n### Request Headers\n- user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Head; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-079.network-response']"
+  },
+  {
+   "item": "write-lighthouse-under-target-outside-evidence",
+   "ok": false,
+   "detail": "ok: ## Lighthouse Audit Results\nMode: snapshot\nDevice: desktop\nURL: http://127.0.0.1:15173/__ask_codex_guard/76aaed9a79e8/post.html\n### Category Scores\n- Accessibility: 63 (accessibility)\n- Best Practices; outside: ['D:\\\\tmp\\\\ui-exercise-targets\\\\c3-live-1791900492\\\\ask-codex-guard-76aaed9a79e8-087']"
+  },
+  {
+   "item": "path-under-target-outside-evidence-refused",
+   "ok": false,
+   "detail": "failing: ['write-screenshot-under-target-outside-evidence', 'write-snapshot-under-target-outside-evidence', 'write-request-body-under-target-outside-evidence', 'write-response-body-under-target-outside-evidence', 'write-lighthouse-under-target-outside-evidence']"
+  },
+  {
+   "item": "target-unchanged-outside-evidence",
+   "ok": false,
+   "detail": "['ask-codex-guard-76aaed9a79e8-003.png', 'ask-codex-guard-76aaed9a79e8-009.png', 'ask-codex-guard-76aaed9a79e8-010.png', 'ask-codex-guard-76aaed9a79e8-011.png.png', 'ask-codex-guard-76aaed9a79e8-012.png', 'ask-codex-guard-76aaed9a79e8-016.png']"
+  },
+  {
+   "item": "nothing-in-user-downloads",
+   "ok": false,
+   "detail": "['ask-codex-guard-76aaed9a79e8-download (1).bin', 'ask-codex-guard-76aaed9a79e8-download.bin']"
+  }
+ ],
+ "items": 152,
+ "new_chrome_or_node_processes_left": [],
+ "new_probe_named_entries_in_inherited_temp": [],
+ "cleaned_from_inherited_temp": [],
+ "temp_volumes": {
+  "run-owned temp": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-6253e3cc",
+   "drive": "D:"
+  },
+  "inherited temp": {
+   "path": "R:\\Temp",
+   "drive": "R:"
+  },
+  "target": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492",
+   "drive": "D:"
+  }
+ }
+}

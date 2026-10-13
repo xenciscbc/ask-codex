@@ -4,7 +4,11 @@ An exercise request (interaction `exercise`, kind `ui`) goes through the same CL
 
     consult.py prepare <request.json> [--base <scratch base>]   validate, create run directory + target + sibling
                                                                directories, MCP guard (I6), write plan.json
-    consult.py run <run directory>                             re-check, hold the owned proxy port, start Codex
+    consult.py guard <run directory>                           dependency check and browser guard, or a cached
+                                                               pass (guard.py, C3); before any app process
+    consult.py run <run directory>                             re-check, require a current guard pass for the
+                                                               exact fingerprint, hold the owned proxy port,
+                                                               start Codex
     consult.py wait|continue <run directory>                   as for a consultation
     consult.py collect <run directory>                         reply (UI schema, redacted); keeps run directory
                                                                and target for reproduction and evidence
@@ -21,8 +25,8 @@ Request (unknown keys are refused):
 
 Lifecycle (I12, the part that exists without the supervisor of C4): prepare creates the run directory through
 C1's handle-based path (never through a link, never inside the project), the target, two recorded sibling
-directories under the confirmed root (`mcp-temp` for the MCP's TEMP/TMP, `mcp-cwd` for its working directory)
-and `<target>/evidence` (a top-level `evidence` entry copied from the project is replaced by it; deeper entries of
+directories under the confirmed root (`mcp-temp` for the MCP's TEMP/TMP, `mcp-cwd` for its working directory,
+`mcp-profile` for Chrome's profile, seeded with the preferences that block downloads, U16) and `<target>/evidence` (a top-level `evidence` entry copied from the project is replaced by it; deeper entries of
 that name stay). Any failure after the target
 exists removes it at once (target.remove: record, identity, no link followed), then the run directory. `run`
 re-verifies the plan, the target's identity and the guard, holds the owned proxy port while Codex runs, and
@@ -274,7 +278,7 @@ def verify_entries(directory, plan):
         disposable_target._close(root)
         paths = {e.get("path"): e for e in record.get("entries", [])}
         b = plan["browser"]
-        for path in (plan["summary"]["target"], b["temp"], b["cwd"]):
+        for path in (plan["summary"]["target"], b["temp"], b["cwd"], b["profile"]):
             entry = paths.get(path)
             if not entry or entry.get("state") != "created":
                 raise ValueError(f"{path} is not a created entry of the target record; exercise not started")
@@ -329,23 +333,26 @@ def make_evidence(directory):
     return Path(entry["path"]) / EVIDENCE, replaced
 
 
-def placement_problems(directory, target, evidence, temp, cwd):
-    """R4-1 / I5: TEMP and cwd are fresh, empty and neither equal to, inside nor an ancestor of any path the
-    script reads or Codex writes, nor of the target and evidence (and cwd is not inside TEMP)."""
+def placement_problems(directory, target, evidence, temp, cwd, profile):
+    """R4-1 / I5 / U16: TEMP, cwd and the browser profile are neither equal to, inside nor an ancestor of any path
+    the script reads or Codex writes, nor of the target and evidence, nor of each other; TEMP and cwd are empty (the
+    profile holds only its seed, checked by browser.profile_problems)."""
     protected = {"run directory": directory, "target record": directory / disposable_target.RECORD,
                  "plan": directory / "plan.json", "stop request": directory / "0" / "stop-request",
                  "stop status": directory / "0" / "stop-status.json", "reply": directory / "0" / "last-message.json",
                  "events": directory / "0" / "events.jsonl", "guard cache": browser.guard_cache_directory(),
                  "package install": browser.install_directory(), "evidence": evidence, "target": target}
     problems = []
-    for owned, path in (("MCP TEMP", temp), ("MCP cwd", cwd)):
-        if os.listdir(path):
+    for owned, path in (("MCP TEMP", temp), ("MCP cwd", cwd), ("browser profile", profile)):
+        if owned != "browser profile" and os.listdir(path):
             problems.append(f"{owned} is not empty")
         for label, other in protected.items():
             if browser.related(path, other):
                 problems.append(f"{owned} overlaps the {label}")
-    if browser.related(temp, cwd):
-        problems.append("MCP cwd overlaps MCP TEMP")
+    for (a, x), (b, y) in ((("MCP cwd", cwd), ("MCP TEMP", temp)), (("browser profile", profile), ("MCP TEMP", temp)),
+                           (("browser profile", profile), ("MCP cwd", cwd))):
+        if browser.related(x, y):
+            problems.append(f"{a} overlaps {b}")
     return problems
 
 
@@ -387,13 +394,17 @@ def prepare(cli, request, base):
     try:
         temp = disposable_target.create_sibling(directory, "mcp-temp")
         cwd = disposable_target.create_sibling(directory, "mcp-cwd")
+        profile = disposable_target.create_sibling(directory, "mcp-profile")
         evidence, replaced = make_evidence(directory)
         port = browser.free_loopback_port()
         nonce = browser.NAME_PREFIX + secrets.token_hex(8)
-        definition = browser.instantiate(template, nonce, created["target"], cwd, temp, port)
-        problems = placement_problems(directory, Path(created["target"]), evidence, temp, cwd)
+        definition = browser.instantiate(template, nonce, created["target"], cwd, temp, port, profile)
+        if browser.never_listed(definition, profile):
+            raise ValueError("The browser server definition carries a forbidden argument")
+        problems = placement_problems(directory, Path(created["target"]), evidence, temp, cwd, profile)
         if problems:
             raise ValueError("Run-owned directory placement refused: " + "; ".join(problems))
+        browser.seed_profile(profile)  # U16: downloads blocked before any launch
         overrides, disabled = preflight(cli, created["target"], definition)
         _, record = disposable_target.record_at(directory)
         summary = {"interaction": INTERACTION, "kind": KIND, "project": record["project"],
@@ -407,7 +418,7 @@ def prepare(cli, request, base):
         cli.write_json(directory / "plan.json", {
             "version": 1, "interaction": INTERACTION, "request": request, "summary": summary, "timer": cli.timer(),
             "overrides": overrides, "directory": str(directory), "copy": copy,
-            "browser": {"definition": definition, "proxy_port": port, "temp": temp, "cwd": cwd,
+            "browser": {"definition": definition, "proxy_port": port, "temp": temp, "cwd": cwd, "profile": profile,
                         "evidence": str(evidence), "node": str(node), "entry": str(entry)}})
     except Exception as error:
         reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise preparation failed"
@@ -441,17 +452,20 @@ def before_launch(cli, directory, plan):
         node, entry = browser.node_executable(cli.which), browser.entry_script()
         rebuilt = browser.instantiate(_template({"app": plan["summary"]["app"], "headed": request["headed"]}, node, entry),
                                       plan["summary"]["browser_server"], plan["summary"]["target"], b["cwd"], b["temp"],
-                                      b["proxy_port"])
-        if rebuilt != b["definition"]:
+                                      b["proxy_port"], b["profile"])
+        if rebuilt != b["definition"] or browser.never_listed(rebuilt, b["profile"]):
             raise ValueError("Effective browser server definition changed; prepare and review a new exercise")
         verify_entries(directory, plan)
         problems = placement_problems(directory, Path(plan["summary"]["target"]), Path(b["evidence"]),
-                                      b["temp"], b["cwd"])
+                                      b["temp"], b["cwd"], b["profile"]) + browser.profile_problems(b["profile"])
         if problems:
             raise ValueError("Run-owned directory placement refused: " + "; ".join(problems))
         overrides, _ = preflight(cli, plan["summary"]["target"], b["definition"])
         if overrides != plan["overrides"]:
             raise ValueError("Effective configuration changed; prepare and review a new exercise")
+        # I7: a current browser guard pass (at most 12 h old) for this exercise's exact fingerprint, recomputed now.
+        import guard
+        guard.require_current_pass(cli, directory, plan)
         return browser.ProxyHolder(b["proxy_port"])
     except Exception as error:
         reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise launch check failed"
@@ -525,6 +539,10 @@ def collect(cli, directory, plan, after_delivery):
               if (directory / "clock.json").exists() else []}
     if (directory / "launch-error.json").exists():
         output["launch_error"] = cli.read_json(directory / "launch-error.json")
+    if (directory / "guard.json").exists():
+        # Report data: whether the browser guard ran for this exercise or was reused from cache, and when it passed.
+        guarded = cli.read_json(directory / "guard.json")
+        output["guard"] = {"source": guarded.get("source"), "passed_at": guarded.get("passed_at")}
     if run["state"] == "stop_unconfirmed":
         (directory / "retained").touch()
         return {**output, "retained_location": str(directory), "target_kept": target_kept(directory)}

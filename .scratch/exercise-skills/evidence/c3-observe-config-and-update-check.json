@@ -1,0 +1,63 @@
+{
+ "package": "chrome-devtools-mcp 1.10.1",
+ "cwd": "D:\\tmp\\c3-observe\\a\\b\\cwd",
+ "planted_config_files": 48,
+ "planted_names": [
+  ".chrome-devtools-mcp.json",
+  ".chrome-devtools-mcprc",
+  ".chrome-devtools-mcprc.json",
+  ".puppeteerrc",
+  ".puppeteerrc.cjs",
+  ".puppeteerrc.json",
+  "chrome-devtools-mcp.config.cjs",
+  "chrome-devtools-mcp.config.json",
+  "chrome-devtools-mcp.json",
+  "package.json",
+  "puppeteer.config.cjs",
+  "puppeteer.config.json"
+ ],
+ "config_content": {
+  "slim": true,
+  "viewport": "333x333"
+ },
+ "results": [
+  {
+   "run": "discovery variable unset, update checks on",
+   "env": {},
+   "tools_listed": 30,
+   "slim_config_applied": false,
+   "config_js_executed": false,
+   "update_check_cache_files_in_home": [
+    ".cache\\chrome-devtools-mcp",
+    ".cache\\chrome-devtools-mcp\\latest.json"
+   ],
+   "registry_requests_at_local_sentinel": [
+    "GET /chrome-devtools-mcp/latest HTTP/1.1"
+   ]
+  },
+  {
+   "run": "both variables set (the definition's env)",
+   "env": {
+    "CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY": "1",
+    "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1"
+   },
+   "tools_listed": 30,
+   "slim_config_applied": false,
+   "config_js_executed": false,
+   "update_check_cache_files_in_home": [],
+   "registry_requests_at_local_sentinel": []
+  },
+  {
+   "run": "update checks off only",
+   "env": {
+    "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1"
+   },
+   "tools_listed": 30,
+   "slim_config_applied": false,
+   "config_js_executed": false,
+   "update_check_cache_files_in_home": [],
+   "registry_requests_at_local_sentinel": []
+  }
+ ],
+ "source_check": "build/src has no CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY reference; the only config file is --config; bundled puppeteer has no cosmiconfig; the update check (utils/check-for-updates.js) returns at once when CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS is set, otherwise writes ~/.cache/chrome-devtools-mcp/latest.json and spawns check-latest-version.js, which runs `npm config get registry` (reads .npmrc from its cwd) and fetches <registry>/chrome-devtools-mcp/latest"
+}

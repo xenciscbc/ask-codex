@@ -626,7 +626,8 @@ runpy.run_path(sys.argv[0], run_name='__main__')
                     expected[expected.index("<SKILL_DIR>/consultation.schema.json")] = "<SKILL_DIR>/discussion.schema.json"
                 argv = self.normalised_argv(ready["directory"])
                 self.assertEqual(argv, expected)
-                for key in ("mcp_servers.cdt_", "approval_mode", "default_tools", "enabled_tools", "ui-exercise"):
+                for key in ("mcp_servers.cdt_", "approval_mode", "default_tools", "enabled_tools", "ui-exercise",
+                            "userDataDir", "download_restrictions"):
                     self.assertFalse(any(key in arg for arg in argv), key)
                 calls = [json.loads(line) for line in
                          (self.project / ".stub/mcp-list.log").read_text(encoding="utf-8").splitlines()]

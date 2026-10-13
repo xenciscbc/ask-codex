@@ -1,0 +1,119 @@
+{
+ "control": "temp-removed",
+ "definition_args": [
+  "C:/Users/admin/AppData/Local/ask-codex/chrome-devtools-mcp-1.10.1/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+  "--isolated",
+  "--headless",
+  "--no-javascript-evaluation",
+  "--no-usage-statistics",
+  "--no-performance-crux",
+  "--redactNetworkHeaders",
+  "--filesystemRoot=D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence",
+  "--viewport=1280x720",
+  "--allowedUrlPattern=http://127.0.0.1:15173/*",
+  "--allowedUrlPattern=http://127.0.0.1:18080/*",
+  "--proxyServer=http://127.0.0.1:26316",
+  "--chromeArg=--proxy-bypass-list=<-loopback>;127.0.0.1:15173;127.0.0.1:18080",
+  "--chromeArg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+ ],
+ "definition_env": {
+  "CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY": "1",
+  "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+  "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
+  "NODE_OPTIONS": ""
+ },
+ "seconds": 151.0,
+ "guard_passed": false,
+ "failing_items": [
+  {
+   "item": "download-does-not-land-outside-evidence",
+   "ok": false,
+   "detail": "link clicked; evidence: 0; outside: ['C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-7ad71234771d-download (1).bin', 'C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-7ad71234771d-download.bin']"
+  },
+  {
+   "item": "write-screenshot-into-run-owned-temp",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-20de4ea9/ask-codex-guard-7ad71234771d-018.png (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-2"
+  },
+  {
+   "item": "write-snapshot-into-run-owned-temp",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-20de4ea9/ask-codex-guard-7ad71234771d-039.txt (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-2"
+  },
+  {
+   "item": "write-request-body-into-run-owned-temp",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-20de4ea9/ask-codex-guard-7ad71234771d-060.network-request (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492."
+  },
+  {
+   "item": "write-response-body-into-run-owned-temp",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-20de4ea9/ask-codex-guard-7ad71234771d-081.network-response (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492"
+  },
+  {
+   "item": "write-lighthouse-into-run-owned-temp",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-20de4ea9/ask-codex-guard-7ad71234771d-089 (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-20de4"
+  },
+  {
+   "item": "absolute-temp-write-lands-in-run-owned-temp",
+   "ok": false,
+   "detail": "failing: ['write-screenshot-into-run-owned-temp', 'write-snapshot-into-run-owned-temp', 'write-request-body-into-run-owned-temp', 'write-response-body-into-run-owned-temp', 'write-lighthouse-into-run-owned-temp']"
+  },
+  {
+   "item": "no-path-outputs-stay-in-run-owned-directories",
+   "ok": false,
+   "detail": "new in inherited TEMP: ['chrome-devtools-mcp-k3AjYk', 'chrome-devtools-mcp-6C0VAb', 'chrome-devtools-mcp-F6b7DR']; new in run-owned TEMP: []; screenshot error, snapshot ok, lighthouse error"
+  },
+  {
+   "item": "profile-overwrite-keeps-sentinel-and-service-worker-limits",
+   "ok": false,
+   "detail": "profiles: []; written: []; missing reports: []"
+  },
+  {
+   "item": "lighthouse-does-not-reach-another-port",
+   "ok": false,
+   "detail": "error; guard listener hits during lighthouse: 0; other app paths: ['/llms.txt', '/llms.txt', '/llms.txt']"
+  },
+  {
+   "item": "no-probe-named-entry-in-inherited-temp",
+   "ok": false,
+   "detail": "R:\\Temp: ['chrome-devtools-mcp-2W30J6', 'chrome-devtools-mcp-6C0VAb', 'chrome-devtools-mcp-F6b7DR', 'chrome-devtools-mcp-IYx9lc', 'chrome-devtools-mcp-k3AjYk']"
+  },
+  {
+   "item": "nothing-in-user-downloads",
+   "ok": false,
+   "detail": "['ask-codex-guard-7ad71234771d-download (1).bin', 'ask-codex-guard-7ad71234771d-download.bin']"
+  }
+ ],
+ "items": 152,
+ "new_chrome_or_node_processes_left": [],
+ "new_probe_named_entries_in_inherited_temp": [
+  "chrome-devtools-mcp-2W30J6",
+  "chrome-devtools-mcp-6C0VAb",
+  "chrome-devtools-mcp-F6b7DR",
+  "chrome-devtools-mcp-IYx9lc",
+  "chrome-devtools-mcp-k3AjYk"
+ ],
+ "cleaned_from_inherited_temp": [
+  "chrome-devtools-mcp-2W30J6",
+  "chrome-devtools-mcp-6C0VAb",
+  "chrome-devtools-mcp-F6b7DR",
+  "chrome-devtools-mcp-IYx9lc",
+  "chrome-devtools-mcp-k3AjYk"
+ ],
+ "temp_volumes": {
+  "run-owned temp": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-20de4ea9",
+   "drive": "D:"
+  },
+  "inherited temp": {
+   "path": "R:\\Temp",
+   "drive": "R:"
+  },
+  "target": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492",
+   "drive": "D:"
+  }
+ }
+}

@@ -2,8 +2,15 @@
 
 One function, `instantiate(template(...), ...)`, produces the definition for the exercise, the guard (C3) and
 the reproduction (C6). The template keeps the app host:ports and the headed flag and holds placeholders for
-the per-run values (`<nonce>`, `<target>`, `<cwd>`, `<temp>`, `<proxy port>`), so the guard fingerprint (I7)
-can be taken over it.
+the per-run values (`<nonce>`, `<target>`, `<cwd>`, `<temp>`, `<profile>`, `<proxy port>`), so the guard
+fingerprint (I7) can be taken over it.
+
+Chrome profile (U16): chrome-devtools-mcp 1.10.1 sets no download behaviour, so with `--isolated` a download landed
+in the user's Downloads folder. The definition therefore names a run-owned profile directory with
+`--userDataDir=<profile>` (never `--isolated`, and never any other `--userDataDir`); the directory follows the
+run-owned `TEMP` rule (a recorded sibling of the target) and is seeded before launch with `Default/Preferences` =
+PREFERENCES, which blocks every download (`download_restrictions` = 3). `seed_profile` writes it into the fresh,
+empty directory; `profile_problems` checks, before every launch, that the directory holds exactly that seed.
 
 The definition reaches Codex as `-c mcp_servers.<nonce>.<field>=<TOML value>` (`config_overrides`). The
 approval keys are not part of the definition: `approval_constants(name)` generates them from the literal TOOLS
@@ -11,9 +18,9 @@ list at command-line build time only, so they never appear in overrides, the pre
 (A5). `codex mcp get` does not print them (codex-cli 0.159.3, also not `default_tools_approval_mode`).
 
 The node entry script is the one chrome-devtools-mcp 1.10.1 package the script installs under the user-level
-ask-codex state directory (C3 installs it with `npm install --ignore-scripts` and verifies it against a
-committed hash manifest before every use; here only its location and that it is a regular file). The state
-directory is the Local AppData known folder (SHGetKnownFolderPath), never an environment variable (I13).
+ask-codex state directory (install.py installs it with `npm install --ignore-scripts`; `entry_script()` verifies
+the whole install against the committed hash manifest before every use). The state directory is the Local
+AppData known folder (SHGetKnownFolderPath), never an environment variable (I13).
 """
 import ctypes
 import json
@@ -40,12 +47,16 @@ TOOLS = ("navigate_page", "new_page", "list_pages", "select_page", "close_page",
          "get_network_request", "get_css_styles", "lighthouse_audit")
 
 # Placeholders of the template; per-run values replace them in instantiate().
-NONCE, TARGET, CWD, TEMP, PROXY_PORT = "<nonce>", "<target>", "<cwd>", "<temp>", "<proxy port>"
+NONCE, TARGET, CWD, TEMP, PROFILE, PROXY_PORT = "<nonce>", "<target>", "<cwd>", "<temp>", "<profile>", "<proxy port>"
 
-# Never in the argument list (I5).
+# Never in the argument list (I5); `--userDataDir` only as the one run-owned profile (never_listed).
 NEVER = ("--config", "--browserUrl", "--browser-url", "--wsEndpoint", "--ws-endpoint", "--autoConnect",
-         "--auto-connect", "--userDataDir", "--user-data-dir", "--acceptInsecureCerts", "--accept-insecure-certs",
-         "--allowUnrestrictedPaths", "--allow-unrestricted-paths", "--slim", "--category", "--experimental")
+         "--auto-connect", "--isolated", "--userDataDir", "--user-data-dir", "--acceptInsecureCerts",
+         "--accept-insecure-certs", "--allowUnrestrictedPaths", "--allow-unrestricted-paths", "--slim", "--category",
+         "--experimental")
+# The seeded profile preferences (U16): every download is blocked.
+PREFERENCES = {"download_restrictions": 3}
+PREFERENCES_BYTES = json.dumps(PREFERENCES).encode("utf-8")
 
 
 def _posix(path):
@@ -57,7 +68,7 @@ def _posix(path):
 
 def template(app, headed, node, entry):
     """The definition with per-run placeholders; `app` is the list of `host:port` strings (validated)."""
-    args = [_posix(entry), "--isolated"]
+    args = [_posix(entry), f"--userDataDir={PROFILE}"]
     if not headed:
         args.append("--headless")
     args += ["--no-javascript-evaluation", "--no-usage-statistics", "--no-performance-crux", "--redactNetworkHeaders",
@@ -74,13 +85,14 @@ def template(app, headed, node, entry):
             "startup_timeout_sec": STARTUP_TIMEOUT_SEC, "enabled_tools": list(TOOLS)}
 
 
-def instantiate(definition, nonce, target, cwd, temp, proxy_port):
+def instantiate(definition, nonce, target, cwd, temp, proxy_port, profile):
     """The template with every placeholder replaced; refuses values that could alter the structure."""
     if not NAME.fullmatch(nonce):
         raise ValueError("Invalid browser server name")
     if type(proxy_port) is not int or not 1024 <= proxy_port <= 65535:
         raise ValueError("Invalid owned proxy port")
-    values = {NONCE: nonce, TARGET: _posix(target), CWD: _posix(cwd), TEMP: _posix(temp), PROXY_PORT: str(proxy_port)}
+    values = {NONCE: nonce, TARGET: _posix(target), CWD: _posix(cwd), TEMP: _posix(temp), PROFILE: _posix(profile),
+              PROXY_PORT: str(proxy_port)}
     for value in values.values():
         if any(p in value for p in values) or any(c in value for c in "\0\r\n"):
             raise ValueError("A per-run value of the browser server definition is not allowed")
@@ -131,9 +143,50 @@ def approval_constants(name):
     return pairs + ["-c", f'mcp_servers.{name}.default_tools_approval_mode="prompt"']
 
 
-def never_listed(definition):
-    """Arguments of the definition that the never-list forbids (empty when the definition is sound)."""
-    return [arg for arg in definition["args"] if any(arg == flag or arg.startswith(flag) for flag in NEVER)]
+def never_listed(definition, profile=PROFILE):
+    """Arguments of the definition that the never-list forbids (empty when the definition is sound). Exactly one
+    `--userDataDir=<profile>` naming the run-owned profile directory (`profile`, the placeholder for a template) is
+    required and allowed; `--isolated`, any other user data directory and a second one are forbidden."""
+    allowed = f"--userDataDir={_posix(profile)}"
+    found = [arg for arg in definition["args"] if any(arg == flag or arg.startswith(flag) for flag in NEVER)]
+    if allowed in found:
+        found.remove(allowed)  # one occurrence is the required profile; a second one stays forbidden
+    else:
+        found.append(f"(missing) {allowed}")
+    return found
+
+
+def seed_profile(profile):
+    """Write Default/Preferences = PREFERENCES into the fresh, empty run-owned profile directory (exclusive creates,
+    nothing followed: the directory itself must be a plain empty directory)."""
+    status = os.lstat(profile)
+    if getattr(status, "st_file_attributes", 0) & 0x400 or not os.path.isdir(profile) or os.listdir(profile):
+        raise ValueError("The browser profile directory is not a fresh, empty, plain directory")
+    os.mkdir(os.path.join(profile, "Default"))
+    with open(os.path.join(profile, "Default", "Preferences"), "xb") as preferences:
+        preferences.write(PREFERENCES_BYTES)
+
+
+def profile_problems(profile):
+    """Before a launch: the profile directory holds exactly the seed (Default/Preferences with PREFERENCES), plain
+    directories and a regular file only."""
+    def plain(path, directory):
+        status = os.lstat(path)
+        if getattr(status, "st_file_attributes", 0) & 0x400:
+            return False
+        return os.path.isdir(path) if directory else os.path.isfile(path)
+    try:
+        default = os.path.join(profile, "Default")
+        preferences = os.path.join(default, "Preferences")
+        if not plain(profile, True) or os.listdir(profile) != ["Default"] or not plain(default, True) or \
+                os.listdir(default) != ["Preferences"] or not plain(preferences, False):
+            return ["the browser profile directory does not hold exactly Default/Preferences"]
+        with open(preferences, "rb") as source:
+            if source.read() != PREFERENCES_BYTES:
+                return ["the browser profile's Default/Preferences is not the seed that blocks downloads"]
+    except OSError:
+        return ["the browser profile directory cannot be checked"]
+    return []
 
 
 # --- user-level state directory (Windows known folder; no environment variable) ---
@@ -177,7 +230,10 @@ def guard_cache_directory():
 
 
 def entry_script():
-    """The installed entry script; a regular file (not a link) is required. C3 adds the manifest check."""
+    """The installed entry script, after verifying the whole install against the committed manifest (install.py,
+    I5: before every use; any difference refuses)."""
+    import install  # install imports this module
+    install.verify_installed()
     entry = install_directory().joinpath(*ENTRY)
     try:
         status = os.lstat(entry)

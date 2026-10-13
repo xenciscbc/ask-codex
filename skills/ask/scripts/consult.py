@@ -12,6 +12,8 @@ import sys
 import tempfile
 import time
 import exercise
+import guard as exercise_guard
+import install as browser_install
 import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
@@ -598,13 +600,16 @@ def cleanup(directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
-                                           "finish", "target-create", "target-remove"))
-    parser.add_argument("path")
+                                           "finish", "target-create", "target-remove", "guard", "browser-install",
+                                           "exercise-deps"))
+    parser.add_argument("path", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
     parser.add_argument("--recommended", choices=("wait", "stop"), default="stop")
     parser.add_argument("--offered", choices=("wait,stop", "none"), default="none")
     args = parser.parse_args()
+    if args.path is None and args.action not in ("browser-install", "exercise-deps"):
+        parser.error(f"{args.action} needs a path")
     record_failure = True
     after_delivery = []
     try:
@@ -627,6 +632,14 @@ def main():
             result = disposable_target.remove_command(args.path)
         elif args.action == "finish":
             result = exercise.finish(cli(), args.path)
+        elif args.action == "guard":
+            # Dependency check and browser guard of a prepared exercise, before any app process (guard.py, I7).
+            result = exercise_guard.guard_exercise(cli(), args.path)
+        elif args.action == "browser-install":
+            # The pinned browser MCP server into the user-level state directory (install.py, I5).
+            result = browser_install.install(cli())
+        elif args.action == "exercise-deps":
+            result = exercise_guard.dependency_report(cli())
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:

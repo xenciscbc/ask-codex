@@ -1,0 +1,88 @@
+{
+ "control": "root-removed",
+ "definition_args": [
+  "C:/Users/admin/AppData/Local/ask-codex/chrome-devtools-mcp-1.10.1/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+  "--isolated",
+  "--headless",
+  "--no-javascript-evaluation",
+  "--no-usage-statistics",
+  "--no-performance-crux",
+  "--redactNetworkHeaders",
+  "--viewport=1280x720",
+  "--allowedUrlPattern=http://127.0.0.1:15173/*",
+  "--allowedUrlPattern=http://127.0.0.1:18080/*",
+  "--proxyServer=http://127.0.0.1:12427",
+  "--chromeArg=--proxy-bypass-list=<-loopback>;127.0.0.1:15173;127.0.0.1:18080",
+  "--chromeArg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+ ],
+ "definition_env": {
+  "CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY": "1",
+  "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+  "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
+  "NODE_OPTIONS": "",
+  "TEMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-690e69c6",
+  "TMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-690e69c6"
+ },
+ "seconds": 155.0,
+ "guard_passed": false,
+ "failing_items": [
+  {
+   "item": "download-does-not-land-outside-evidence",
+   "ok": false,
+   "detail": "link clicked; evidence: 0; outside: ['C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-fbe32a569b54-download (1).bin', 'C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-fbe32a569b54-download.bin']"
+  },
+  {
+   "item": "write-screenshot-into-evidence",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence/ask-codex-guard-fbe32a569b54-017.png (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\evidence\\ask-codex-guar"
+  },
+  {
+   "item": "write-snapshot-into-evidence",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence/ask-codex-guard-fbe32a569b54-038.txt (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\evidence\\ask-codex-guar"
+  },
+  {
+   "item": "write-request-body-into-evidence",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence/ask-codex-guard-fbe32a569b54-059.network-request (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\evidence\\as"
+  },
+  {
+   "item": "write-response-body-into-evidence",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence/ask-codex-guard-fbe32a569b54-080.network-response (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\evidence\\a"
+  },
+  {
+   "item": "write-lighthouse-into-evidence",
+   "ok": false,
+   "detail": "error: Error: Access denied: path D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence/ask-codex-guard-fbe32a569b54-088 (canonical: D:\\tmp\\ui-exercise-targets\\c3-live-1791900492\\evidence\\ask-codex-guard-fb"
+  },
+  {
+   "item": "write-into-evidence-succeeds",
+   "ok": false,
+   "detail": "failing: ['write-screenshot-into-evidence', 'write-snapshot-into-evidence', 'write-request-body-into-evidence', 'write-response-body-into-evidence', 'write-lighthouse-into-evidence']"
+  },
+  {
+   "item": "nothing-in-user-downloads",
+   "ok": false,
+   "detail": "['ask-codex-guard-fbe32a569b54-download (1).bin', 'ask-codex-guard-fbe32a569b54-download.bin']"
+  }
+ ],
+ "items": 152,
+ "new_chrome_or_node_processes_left": [],
+ "new_probe_named_entries_in_inherited_temp": [],
+ "cleaned_from_inherited_temp": [],
+ "temp_volumes": {
+  "run-owned temp": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-690e69c6",
+   "drive": "D:"
+  },
+  "inherited temp": {
+   "path": "R:\\Temp",
+   "drive": "R:"
+  },
+  "target": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492",
+   "drive": "D:"
+  }
+ }
+}

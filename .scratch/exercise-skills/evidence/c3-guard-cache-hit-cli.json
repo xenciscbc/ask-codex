@@ -1,0 +1,38 @@
+{
+ "result": {
+  "state": "guard_passed",
+  "directory": "D:\\tmp\\c3-base\\ask-codex\\run.da25bf65",
+  "guard": {
+   "source": "cache",
+   "passed_at": 1791904518.2714977,
+   "fingerprint": "ba66d2cdc78852e4d9d1bb00faba07743523e0c0b3f24976610c1da0d5221ab8"
+  }
+ },
+ "seconds": 1.4,
+ "new_chrome_or_node_processes_left": [],
+ "marker_present": false,
+ "user_temp": "R:\\Temp",
+ "new_probe_named_entries_in_user_temp": [],
+ "downloads_baseline": {
+  "directory": "C:\\Users\\admin\\Downloads",
+  "entries_before": 54,
+  "entries_after": 54,
+  "added": [],
+  "removed": [],
+  "changed": [],
+  "names_and_mtimes_before_sha256": "40342d3bce5448d7296986a7a89d99adcc8ae0088e4ea638c6b7c546cf13b4ff",
+  "names_and_mtimes_after_sha256": "40342d3bce5448d7296986a7a89d99adcc8ae0088e4ea638c6b7c546cf13b4ff",
+  "note": "names and mtimes replaced by the SHA-256 of their sorted JSON listing (the user's file names stay out of the repository)"
+ },
+ "user_temp_top_level_change": {
+  "added": [
+   "tmpk8s8r9td",
+   "tmpsunwc638"
+  ],
+  "removed": [
+   "tmp6vvmw5a_",
+   "tmpx0xlb6u2"
+  ],
+  "changed": []
+ }
+}

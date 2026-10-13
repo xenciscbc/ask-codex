@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ask-codex guard check</title>
+</head>
+<body>
+<h1>ask-codex guard check</h1>
+<p>Context: <span id="ctx"></span></p>
+<p><a id="download" href="#">Download probe</a></p>
+<ul id="notes"></ul>
+<div id="frames"></div>
+<script>
+// The browser guard's fixed check page (plan I7). Served by the guard on every app origin; every request it
+// makes to a guard-owned listener other than its own origin must never arrive. Results are reported to the page's
+// own origin (/r), and each probe group reports when it is done, so a page that does not run fails the guard.
+const CFG = __CONFIG__;
+document.getElementById('ctx').textContent = CFG.ctx;
+const dl = document.getElementById('download');
+dl.href = CFG.base + '/download?ctx=' + encodeURIComponent(CFG.ctx);
+dl.setAttribute('download', CFG.download);
+
+function report(k, v) {
+  const url = CFG.base + '/r?ctx=' + encodeURIComponent(CFG.ctx) + '&k=' + encodeURIComponent(k) +
+    '&v=' + encodeURIComponent(String(v));
+  return fetch(url, {cache: 'no-store'}).catch(() => {});
+}
+function note(text) {
+  const li = document.createElement('li');
+  li.textContent = text;
+  document.getElementById('notes').appendChild(li);
+}
+function tag(url, kind) { return url + '/' + encodeURIComponent(CFG.ctx) + '/' + kind; }
+function redirect(url) { return CFG.base + '/redirect307?to=' + encodeURIComponent(url); }
+
+report('script', 'ran');
+fetch(CFG.base + '/post?ctx=' + encodeURIComponent(CFG.ctx), {method: 'POST', body: CFG.body}).catch(() => {});
+
+// Requests to the sentinel (a free loopback port held by the guard) through every spelling.
+for (const s of CFG.sentinels) {
+  const img = new Image(); img.src = tag(s, 'img');
+  const frame = document.createElement('iframe'); frame.width = 10; frame.height = 10; frame.src = tag(s, 'iframe');
+  document.getElementById('frames').appendChild(frame);
+  fetch(tag(s, 'fetch'), {mode: 'no-cors'}).catch(() => {});
+  try { const ws = new WebSocket(tag(s, 'ws').replace(/^http/, 'ws')); ws.onerror = () => {}; } catch (e) {}
+  try { navigator.sendBeacon(tag(s, 'beacon'), 'x'); } catch (e) {}
+  const r = new Image(); r.src = redirect(tag(s, 'r307img'));
+  fetch(redirect(tag(s, 'r307fetch')), {mode: 'no-cors'}).catch(() => {});
+}
+// The external stand-in (a guard listener on a local non-loopback interface address) and an external host.
+const lanImg = new Image(); lanImg.src = tag(CFG.lan, 'img');
+fetch(tag(CFG.lan, 'fetch'), {mode: 'no-cors'})
+  .then(() => report('page-lan', 'reached'), () => report('page-lan', 'failed'));
+fetch(CFG.external, {mode: 'no-cors', cache: 'no-store'})
+  .then(() => report('page-external', 'reached'), () => report('page-external', 'failed'));
+
+// A dedicated worker.
+try {
+  const worker = new Worker(CFG.base + '/worker.js?ctx=' + encodeURIComponent(CFG.ctx));
+  worker.onmessage = m => report('worker', m.data);
+  worker.onerror = () => report('worker', 'error');
+} catch (e) { report('worker', 'throw'); }
+
+// A Service Worker, scoped to this context (its requests do not go through the page).
+if (navigator.serviceWorker) {
+  const scope = CFG.base + '/sw/' + encodeURIComponent(CFG.ctx) + '/';
+  navigator.serviceWorker.register(scope + 'sw.js', {scope})
+    .then(() => report('sw-registered', 'yes'), e => report('sw-registered', 'error ' + e));
+} else { report('sw-registered', 'unsupported'); }
+
+// WebRTC: STUN servers held by the guard (UDP); a server-reflexive candidate means UDP got out.
+try {
+  const pc = new RTCPeerConnection({iceServers: CFG.stun.map(u => ({urls: u}))});
+  pc.createDataChannel('probe');
+  const types = new Set();
+  let done = false;
+  const finish = why => { if (!done) { done = true; report('rtc', [...types].sort().join(',') || 'none').then(() => report('rtc-done', why)); } };
+  pc.onicecandidate = e => { if (e.candidate) { types.add(e.candidate.type); } else { finish('complete'); } };
+  pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => finish('error'));
+  setTimeout(() => finish('timeout'), 6000);
+} catch (e) { report('rtc', 'throw').then(() => report('rtc-done', 'throw')); }
+
+setTimeout(() => { note('done'); report('page-done', 'yes'); }, 7000);
+</script>
+</body>
+</html>

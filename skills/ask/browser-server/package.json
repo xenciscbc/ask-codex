@@ -1,0 +1,8 @@
+{
+  "name": "ask-codex-browser-server",
+  "private": true,
+  "description": "Pinned browser MCP server of the ask-codex UI exercise (installed with npm install --ignore-scripts)",
+  "dependencies": {
+    "chrome-devtools-mcp": "1.10.1"
+  }
+}

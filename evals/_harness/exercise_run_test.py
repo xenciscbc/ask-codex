@@ -37,13 +37,14 @@ TOOLS = ["navigate_page", "new_page", "list_pages", "select_page", "close_page",
          "click", "hover", "fill", "fill_form", "type_text", "press_key", "drag", "handle_dialog", "wait_for",
          "resize_page", "emulate", "list_console_messages", "get_console_message", "list_network_requests",
          "get_network_request", "get_css_styles", "lighthouse_audit"]
-NEVER = ["--config", "--browserUrl", "--browser-url", "--wsEndpoint", "--autoConnect", "--userDataDir",
+# `--userDataDir` appears exactly once, naming the run-owned profile (U16); any other form is never present.
+NEVER = ["--config", "--browserUrl", "--browser-url", "--wsEndpoint", "--autoConnect", "--isolated",
          "--user-data-dir", "--acceptInsecureCerts", "--allowUnrestrictedPaths", "--slim", "--category",
          "--experimental"]
 DISABLED = ('mcp_servers={"blender"={command="ask-codex-disabled",enabled=false},"comfyui"={command="ask-codex-disabled",'
             'enabled=false},"cua_repl"={command="ask-codex-disabled",enabled=false},"node_repl"={command="ask-codex-disabled",'
             'enabled=false},"pencil"={command="ask-codex-disabled",enabled=false}}')
-BROWSER_ARGS = ('["<ENTRY>", "--isolated", "--headless", "--no-javascript-evaluation", "--no-usage-statistics", '
+BROWSER_ARGS = ('["<ENTRY>", "--userDataDir=<PROFILE>", "--headless", "--no-javascript-evaluation", "--no-usage-statistics", '
                 '"--no-performance-crux", "--redactNetworkHeaders", "--filesystemRoot=<TARGET>/evidence", '
                 '"--viewport=1280x720", "--allowedUrlPattern=http://127.0.0.1:15173/*", '
                 '"--allowedUrlPattern=http://localhost:18080/*", "--proxyServer=http://127.0.0.1:<PORT>", '
@@ -98,6 +99,11 @@ seams = json.loads(sys.argv.pop(1))
 sys.path.insert(0, str(Path(script).parent))
 import browser
 browser.local_app_data = lambda: Path(seams["local_app_data"])
+# C3 seams (in-process, plan I13): the fake package install is not the pinned one, and these C2 tests do not run
+# the browser guard; exercise_guard_test.py covers both.
+import guard, install
+install.verify_installed = lambda: "test-manifest"
+guard.require_current_pass = lambda cli, directory, plan, state_dir=None: {"source": "test"}
 if seams.get("code"):
     exec(seams["code"], {"__name__": "seam"})
 if seams.get("platform"):
@@ -259,6 +265,7 @@ class ExerciseRunTest(unittest.TestCase):
         values = {"<TARGET>": Path(plan["summary"]["target"]).as_posix(), "<NONCE>": plan["summary"]["browser_server"],
                   "<NODE>": self.node.as_posix(), "<ENTRY>": self.entry.as_posix(),
                   "<CWD>": Path(b["cwd"]).as_posix(), "<TEMP>": Path(b["temp"]).as_posix(),
+                  "<PROFILE>": Path(b["profile"]).as_posix(),
                   "<PORT>": str(b["proxy_port"]), "<RUN_DIR>": Path(directory).as_posix(),
                   "<SKILL_DIR>": SKILL.as_posix()}
         expected = []
@@ -344,7 +351,9 @@ class ExerciseRunTest(unittest.TestCase):
         self.assertRegex(name, r"^cdt_[0-9a-f]{16}$")
         args = self.toml_value(argv, f"mcp_servers.{name}.args")
         target = Path(plan["summary"]["target"]).as_posix()
-        self.assertEqual(args, [self.entry.as_posix(), "--isolated", "--headless", "--no-javascript-evaluation",
+        profile = Path(plan["browser"]["profile"]).as_posix()
+        self.assertEqual(args, [self.entry.as_posix(), f"--userDataDir={profile}", "--headless",
+                                "--no-javascript-evaluation",
                                 "--no-usage-statistics", "--no-performance-crux", "--redactNetworkHeaders",
                                 f"--filesystemRoot={target}/evidence", "--viewport=1280x720",
                                 "--allowedUrlPattern=http://127.0.0.1:15173/*",
@@ -354,6 +363,9 @@ class ExerciseRunTest(unittest.TestCase):
                                 "--chromeArg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp"])
         for flag in NEVER:
             self.assertFalse(any(arg.startswith(flag) for arg in args), flag)
+        # U16: exactly one user data directory, the run-owned profile; never --isolated.
+        self.assertEqual([arg for arg in args if arg.lower().startswith(("--userdatadir", "--user-data-dir"))],
+                         [f"--userDataDir={profile}"])
         # node is launched directly (no cmd, no npx), so `<` and `>` reach Chrome literally (P7).
         command = self.toml_value(argv, f"mcp_servers.{name}.command")
         self.assertEqual(command, self.node.as_posix())
@@ -509,11 +521,15 @@ class ExerciseRunTest(unittest.TestCase):
     def test_mcp_temp_is_a_fresh_recorded_sibling_apart_from_every_script_read_path(self):
         ready, directory, plan = self.prepared()
         b, target = plan["browser"], Path(plan["summary"]["target"])
-        temp, cwd = Path(b["temp"]), Path(b["cwd"])
-        for owned in (temp, cwd):
+        temp, cwd, profile = Path(b["temp"]), Path(b["cwd"]), Path(b["profile"])
+        for owned in (temp, cwd, profile):
             self.assertEqual(str(owned.parent).casefold(), str(target.parent).casefold(), "sibling of the target")
-            self.assertEqual(os.listdir(owned), [], "fresh and empty")
             self.assertFalse(os.lstat(owned).st_file_attributes & REPARSE)
+        for owned in (temp, cwd):
+            self.assertEqual(os.listdir(owned), [], "fresh and empty")
+        # U16: the profile holds exactly the seed that blocks downloads, written before any launch.
+        self.assertEqual(sorted(tree(profile)), ["Default", "Default/Preferences"])
+        self.assertEqual((profile / "Default" / "Preferences").read_bytes(), b'{"download_restrictions": 3}')
         protected = [directory, directory / "target.json", directory / "plan.json", directory / "0" / "stop-request",
                      directory / "0" / "stop-status.json", directory / "0" / "last-message.json",
                      directory / "0" / "events.jsonl", self.local / "ask-codex" / "guard-cache",
@@ -521,9 +537,12 @@ class ExerciseRunTest(unittest.TestCase):
         for path in protected:
             self.assertFalse(related(temp, path), path)
             self.assertFalse(related(cwd, path), path)
+            self.assertFalse(related(profile, path), path)
         self.assertFalse(related(temp, cwd))
+        self.assertFalse(related(profile, temp))
+        self.assertFalse(related(profile, cwd))
         entries = {e["path"]: e for e in self.record(directory)["entries"]}
-        for owned, purpose in ((temp, "mcp-temp"), (cwd, "mcp-cwd")):
+        for owned, purpose in ((temp, "mcp-temp"), (cwd, "mcp-cwd"), (profile, "mcp-profile")):
             entry = entries[str(owned)]
             self.assertEqual((entry["kind"], entry["purpose"], entry["state"]), ("temp", purpose, "created"))
             self.assertTrue(entry["volume_serial"] and entry["file_id"])
@@ -533,6 +552,72 @@ class ExerciseRunTest(unittest.TestCase):
         self.assertEqual(self.call("finish", directory)["state"], "finished")
         self.assertFalse(os.path.lexists(temp))
         self.assertFalse(os.path.lexists(cwd))
+        self.assertFalse(os.path.lexists(profile))
+
+    def test_profile_swapped_for_a_junction_is_neither_used_nor_followed_on_removal(self):
+        # U16: the profile directory follows the run-owned TEMP rule (recorded identity, never followed).
+        ready, directory, plan = self.prepared()
+        profile = Path(plan["browser"]["profile"])
+        os.rename(profile, str(profile) + ".moved")
+        junction(profile, self.sentinel)
+        sentinel = tree(self.sentinel)
+        refused = self.call("run", directory)
+        self.assertEqual(refused["state"], "failed", refused)
+        self.assertIn("no longer matches the target record", refused["reason"])
+        self.assertEqual(self.exec_calls(), [])
+        self.assertEqual(tree(self.sentinel), sentinel, "the junction was not followed")
+        self.assertTrue(os.lstat(profile).st_file_attributes & REPARSE, "the swapped entry is kept and reported")
+        self.assertFalse(os.path.lexists(plan["summary"]["target"]), "the target itself was removed")
+        self.assertEqual([e["path"] for e in self.record(directory)["entries"]], [str(profile)])
+        os.rmdir(profile)  # the test's own junction, unlinked
+        scrub(str(profile) + ".moved")
+
+    def test_profile_swapped_after_collect_is_not_followed_by_finish(self):
+        ready, directory, plan = self.prepared()
+        self.collect_completed(directory)
+        profile = Path(plan["browser"]["profile"])
+        os.rename(profile, str(profile) + ".moved")
+        junction(profile, self.sentinel)
+        sentinel = tree(self.sentinel)
+        finished = self.call("finish", directory)
+        self.assertEqual(finished["state"], "failed", finished)
+        self.assertEqual(finished["retained_location"], str(profile))
+        self.assertIn("link or junction", finished["reason"])
+        self.assertEqual(tree(self.sentinel), sentinel)
+        self.assertTrue(directory.exists())
+        os.rmdir(profile)
+        scrub(str(profile) + ".moved")
+
+    def test_profile_not_holding_exactly_the_seed_refuses_the_run(self):
+        # U16: before launch the profile must hold exactly Default/Preferences = {"download_restrictions": 3}.
+        cases = [("preferences changed", lambda p: (p / "Default" / "Preferences").write_bytes(b"{}")),
+                 ("another file", lambda p: write(p / "Local State", "{}")),
+                 ("preferences removed", lambda p: (p / "Default" / "Preferences").unlink())]
+        for label, change in cases:
+            with self.subTest(case=label):
+                ready, directory, plan = self.prepared()
+                change(Path(plan["browser"]["profile"]))
+                refused = self.call("run", directory)
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("browser profile", refused["reason"])
+                self.assertIn("the target was removed", refused["reason"])
+                self.assertEqual(self.exec_calls(), [])
+                self.assertEqual(self.call("collect", directory)["state"], "failed")
+                self.assert_all_removed(directory)
+
+    def test_a_definition_with_isolated_or_another_user_data_dir_is_refused(self):
+        for label, replace in (("--isolated", lambda a, profile: "--isolated"),
+                               ("another --userDataDir", lambda a, profile: "--userDataDir=D:/elsewhere")):
+            with self.subTest(case=label):
+                ready, directory, plan = self.prepared()
+                definition = plan["browser"]["definition"]
+                definition["args"] = [replace(a, plan["browser"]["profile"]) if a.startswith("--userDataDir=") else a
+                                      for a in definition["args"]]
+                (directory / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+                refused = self.call("run", directory)
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("definition changed", refused["reason"])
+                self.assertEqual(self.exec_calls(), [])
 
     def test_mcp_temp_swapped_for_a_junction_is_neither_used_nor_followed_on_removal(self):
         ready, directory, plan = self.prepared()
@@ -886,18 +971,21 @@ class BrowserDefinitionTest(unittest.TestCase):
         b = self.browser
         template = b.template(["127.0.0.1:15173"], False, Path("C:/nodejs/node.exe"), Path("D:/state/entry.js"))
         values = {"nonce": "cdt_" + "0" * 16, "target": r"D:\t\target", "cwd": r"D:\t\target.mcp-cwd-1",
-                  "temp": r"D:\t\target.mcp-temp-1", "proxy_port": 40000, **values}
+                  "temp": r"D:\t\target.mcp-temp-1", "proxy_port": 40000,
+                  "profile": r"D:\t\target.mcp-profile-1", **values}
         return b.instantiate(template, **values)
 
     def test_template_placeholders_are_all_replaced_and_paths_are_forward_slashed(self):
         definition = self.instance()
         text = json.dumps(definition)
-        for placeholder in ("<nonce>", "<target>", "<cwd>", "<temp>", "<proxy port>"):
+        for placeholder in ("<nonce>", "<target>", "<cwd>", "<temp>", "<profile>", "<proxy port>"):
             self.assertNotIn(placeholder, text)
         self.assertNotIn("\\\\", text)
         self.assertEqual(definition["env"]["TEMP"], "D:/t/target.mcp-temp-1")
         self.assertEqual(definition["cwd"], "D:/t/target.mcp-cwd-1")
-        self.assertEqual(self.browser.never_listed(definition), [])
+        self.assertIn("--userDataDir=D:/t/target.mcp-profile-1", definition["args"])
+        self.assertNotIn("--isolated", definition["args"])
+        self.assertEqual(self.browser.never_listed(definition, r"D:\t\target.mcp-profile-1"), [])
 
     def test_unsafe_per_run_values_are_refused(self):
         for values in ({"nonce": "cdt_x"}, {"nonce": "other_" + "0" * 16}, {"proxy_port": 80}, {"proxy_port": "40000"},
@@ -928,10 +1016,33 @@ class BrowserDefinitionTest(unittest.TestCase):
 
     def test_never_listed_arguments_are_found(self):
         definition = self.instance()
+        profile = r"D:\t\target.mcp-profile-1"
         for flag in ("--config=x.json", "--browserUrl=http://127.0.0.1:9222", "--userDataDir=D:/p", "--slim",
-                     "--categoryExtensions", "--experimentalScreencast", "--allowUnrestrictedPaths", "--autoConnect"):
+                     "--categoryExtensions", "--experimentalScreencast", "--allowUnrestrictedPaths", "--autoConnect",
+                     "--isolated", "--user-data-dir=D:/p", "--userDataDir=D:/t/target.mcp-profile-1"):
             with self.subTest(flag=flag):
-                self.assertEqual(self.browser.never_listed({**definition, "args": [*definition["args"], flag]}), [flag])
+                self.assertEqual(self.browser.never_listed({**definition, "args": [*definition["args"], flag]},
+                                                           profile), [flag])
+        # The run-owned profile itself is required: a definition without it (or with --isolated instead) is refused.
+        without = [a for a in definition["args"] if not a.startswith("--userDataDir=")]
+        self.assertEqual(self.browser.never_listed({**definition, "args": without}, profile),
+                         ["(missing) --userDataDir=D:/t/target.mcp-profile-1"])
+        self.assertEqual(self.browser.never_listed({**definition, "args": [*without, "--isolated"]}, profile),
+                         ["--isolated", "(missing) --userDataDir=D:/t/target.mcp-profile-1"])
+        # Another profile than the one the script produced is refused.
+        self.assertEqual(self.browser.never_listed(definition, r"D:\t\other-profile"),
+                         ["--userDataDir=D:/t/target.mcp-profile-1", "(missing) --userDataDir=D:/t/other-profile"])
+
+    def test_profile_seed_is_exactly_the_download_block(self):
+        with tempfile.TemporaryDirectory(prefix="ask-codex-c3-") as directory:
+            profile = Path(directory) / "profile"
+            profile.mkdir()
+            self.browser.seed_profile(profile)
+            self.assertEqual(json.loads((profile / "Default" / "Preferences").read_text("utf-8")),
+                             {"download_restrictions": 3})
+            self.assertEqual(self.browser.profile_problems(profile), [])
+            with self.assertRaises(ValueError):
+                self.browser.seed_profile(profile)  # never into a non-empty directory
 
 
 class RedactionTest(unittest.TestCase):

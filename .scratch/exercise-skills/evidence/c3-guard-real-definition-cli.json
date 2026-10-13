@@ -1,0 +1,61 @@
+{
+ "result": {
+  "state": "guard_passed",
+  "directory": "D:\\tmp\\c3-base\\ask-codex\\run.e1a7679e",
+  "guard": {
+   "source": "ran",
+   "passed_at": 1791904518.2714977,
+   "fingerprint": "ba66d2cdc78852e4d9d1bb00faba07743523e0c0b3f24976610c1da0d5221ab8"
+  }
+ },
+ "seconds": 158.0,
+ "new_chrome_or_node_processes_left": [],
+ "marker_present": false,
+ "user_temp": "R:\\Temp",
+ "new_probe_named_entries_in_user_temp": [],
+ "downloads_baseline": {
+  "directory": "C:\\Users\\admin\\Downloads",
+  "entries_before": 54,
+  "entries_after": 54,
+  "added": [],
+  "removed": [],
+  "changed": [],
+  "names_and_mtimes_before_sha256": "40342d3bce5448d7296986a7a89d99adcc8ae0088e4ea638c6b7c546cf13b4ff",
+  "names_and_mtimes_after_sha256": "40342d3bce5448d7296986a7a89d99adcc8ae0088e4ea638c6b7c546cf13b4ff",
+  "note": "names and mtimes replaced by the SHA-256 of their sorted JSON listing (the user's file names stay out of the repository)"
+ },
+ "user_temp_top_level_change": {
+  "added": [
+   "177295b2-16c7-44c9-aa84-3b225ba973a6.tmp",
+   "tmpmm9r7985",
+   "tmpz9jwjdc7"
+  ],
+  "removed": [
+   "36fae6bb-00fe-4f2a-8fdd-5f86ebd6ff04.tmp",
+   "7ca0430c-f3f7-483d-adeb-c81a3ef73e3c.tmp",
+   "d9e5d90e-4305-4991-99c9-5ec9eb35f653.tmp",
+   "tmpxl7zdye6"
+  ],
+  "changed": []
+ },
+ "guard_record": {
+  "fingerprint": "ba66d2cdc78852e4d9d1bb00faba07743523e0c0b3f24976610c1da0d5221ab8",
+  "source": "ran",
+  "passed_at": 1791904518.2714977,
+  "checked_at": 1791904518.2714977,
+  "facts": {
+   "node": "C:/Program Files/nodejs/node.exe",
+   "node_version": "v24.12.0",
+   "manifest_sha256": "002dd742487f88dcb42bcf0c01a849f6a2aee8dfed6186fe8388f93646a73d6d",
+   "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+   "chrome_version": "154.0.8037.98",
+   "codex_version": "codex-cli 0.159.3",
+   "chrome_policy_sha256": "cd09265e6ccf2f70365e986ad6486a9bfc0b34fbd4d8f5eec764be306496d750"
+  },
+  "items": 154
+ },
+ "items_passed": "154/154",
+ "definition": "U16: --userDataDir=<run-owned guard profile seeded with Default/Preferences {\"download_restrictions\": 3}>, no --isolated",
+ "user_temp_note": "top-level churn in R:\\Temp during the run is from other processes on the machine (GUID .tmp and tmp* names, gone or empty, none probe-named); no probe-named entry appeared",
+ "control_none_items": 154
+}

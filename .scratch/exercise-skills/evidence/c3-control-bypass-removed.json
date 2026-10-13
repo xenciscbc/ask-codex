@@ -1,0 +1,78 @@
+{
+ "control": "bypass-removed",
+ "definition_args": [
+  "C:/Users/admin/AppData/Local/ask-codex/chrome-devtools-mcp-1.10.1/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+  "--isolated",
+  "--headless",
+  "--no-javascript-evaluation",
+  "--no-usage-statistics",
+  "--no-performance-crux",
+  "--redactNetworkHeaders",
+  "--filesystemRoot=D:/tmp/ui-exercise-targets/c3-live-1791900492/evidence",
+  "--viewport=1280x720",
+  "--allowedUrlPattern=http://127.0.0.1:15173/*",
+  "--allowedUrlPattern=http://127.0.0.1:18080/*",
+  "--proxyServer=http://127.0.0.1:36819",
+  "--chromeArg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+ ],
+ "definition_env": {
+  "CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY": "1",
+  "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
+  "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1",
+  "NODE_OPTIONS": "",
+  "TEMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-2c78f878",
+  "TMP": "D:/tmp/ui-exercise-targets/c3-live-1791900492.guard-temp-2c78f878"
+ },
+ "seconds": 155.8,
+ "guard_passed": false,
+ "failing_items": [
+  {
+   "item": "extra-http-headers-keep-the-limits",
+   "ok": false,
+   "detail": "host: set, Unable to navigate in the selected page: net::ERR_INVALID_ARGUMENT at http://127; proxy-authorization: set, Unable to navigate in the selected page: net::ERR_INVALID_ARGUMENT at http://127; both: set, Unable to navigate in the selected page: net::ERR_INVALID_ARGUMENT at http://127; ordinary header applied; missing reports: []; guard listener hits: 8"
+  },
+  {
+   "item": "download-does-not-land-outside-evidence",
+   "ok": false,
+   "detail": "link clicked; evidence: 0; outside: ['C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-1ce4f7abff7d-download (1).bin', 'C:\\\\Users\\\\admin\\\\Downloads\\\\ask-codex-guard-1ce4f7abff7d-download.bin']"
+  },
+  {
+   "item": "lighthouse-does-not-reach-another-port",
+   "ok": false,
+   "detail": "ran; guard listener hits during lighthouse: 16; other app paths: ['/llms.txt', '/llms.txt', '/llms.txt', '/llms.txt']"
+  },
+  {
+   "item": "service-worker-to-free-loopback-port-blocked",
+   "ok": false,
+   "detail": "arrived via ['127.0.0.1 ctx=load0', '127.0.0.2 ctx=load0', '::1 ctx=load0', '::1 ctx=load0']"
+  },
+  {
+   "item": "no-unattributed-sentinel-hit",
+   "ok": false,
+   "detail": "[\"127.0.0.1: ''\", \"::1: ''\", \"127.0.0.2: ''\", \"::1: ''\"]"
+  },
+  {
+   "item": "nothing-in-user-downloads",
+   "ok": false,
+   "detail": "['ask-codex-guard-1ce4f7abff7d-download (1).bin', 'ask-codex-guard-1ce4f7abff7d-download.bin']"
+  }
+ ],
+ "items": 152,
+ "new_chrome_or_node_processes_left": [],
+ "new_probe_named_entries_in_inherited_temp": [],
+ "cleaned_from_inherited_temp": [],
+ "temp_volumes": {
+  "run-owned temp": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492.guard-temp-2c78f878",
+   "drive": "D:"
+  },
+  "inherited temp": {
+   "path": "R:\\Temp",
+   "drive": "R:"
+  },
+  "target": {
+   "path": "D:\\tmp\\ui-exercise-targets\\c3-live-1791900492",
+   "drive": "D:"
+  }
+ }
+}
