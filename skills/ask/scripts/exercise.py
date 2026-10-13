@@ -22,7 +22,8 @@ Request (unknown keys are refused):
 Lifecycle (I12, the part that exists without the supervisor of C4): prepare creates the run directory through
 C1's handle-based path (never through a link, never inside the project), the target, two recorded sibling
 directories under the confirmed root (`mcp-temp` for the MCP's TEMP/TMP, `mcp-cwd` for its working directory)
-and `<target>/evidence` (the project's own `evidence` entry is never copied). Any failure after the target
+and `<target>/evidence` (a top-level `evidence` entry copied from the project is replaced by it; deeper entries of
+that name stay). Any failure after the target
 exists removes it at once (target.remove: record, identity, no link followed), then the run directory. `run`
 re-verifies the plan, the target's identity and the guard, holds the owned proxy port while Codex runs, and
 removes the target at once when Codex fails by itself. `collect` returns the reply and keeps everything after a
@@ -38,6 +39,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import time
 
 import browser
 from policy import PLACEHOLDERS, definition_files
@@ -118,12 +120,13 @@ def validate(request):
     scope = request.get("scope")
     if not isinstance(scope, str) or len(scope) > MAX_SCOPE or "\0" in scope:
         raise ValueError(f"The scope must be text of at most {MAX_SCOPE} characters")
+    # <target>\evidence is the exercise's own directory: a top-level `evidence` entry the copy brings is replaced
+    # (make_evidence), so a named env file under it would be lost; entries of that name at any depth below stay.
+    for item in request.get("env_files", []) if isinstance(request.get("env_files"), list) else []:
+        if isinstance(item, str) and re.split(r"[\\/]", item)[0].casefold() == EVIDENCE:
+            raise ValueError(f"Env file {item!r} lies under the project's top-level {EVIDENCE} directory, which the "
+                             "exercise replaces with its own evidence directory")
     target_request = {key: request[key] for key in TARGET_FIELDS if key in request}
-    extra = request.get("exclude_names", [])
-    if not isinstance(extra, list):
-        raise ValueError("Each extra excluded name must be one plain file or directory name")
-    # The evidence directory is created by the exercise; the project's own entry of that name is never copied.
-    target_request["exclude_names"] = [*extra, EVIDENCE]
     return {"app": origins, "headed": request["headed"], "scope": scope, "target_request": target_request}
 
 
@@ -211,10 +214,32 @@ def _new_run_directory(base, project):
 
 
 def _discard_unplanned(directory):
-    """A run directory that never got its plan: only the target record (and its temporary) may be inside."""
+    """A run directory that never got its plan: only the target record (and its temporary) may be inside.
+    Callers make sure the record holds no entry first (_abandon)."""
     for name in (disposable_target.RECORD, disposable_target.RECORD + ".tmp"):
         (directory / name).unlink(missing_ok=True)
     directory.rmdir()
+
+
+def _abandon(directory):
+    """`create` was interrupted: remove what its record holds (C1 removal), then the run directory. Returns None
+    when everything is gone, else the location that is kept (the record is never deleted while it holds an entry)."""
+    entries = []
+    if os.path.lexists(Path(directory) / disposable_target.RECORD):
+        try:
+            record = disposable_target.record_at(directory)[1]
+            entries = record.get("entries") if isinstance(record.get("entries"), list) else [None]
+        except (ValueError, OSError):
+            return str(directory)  # an unreadable record is kept for inspection
+    if entries:
+        removal = remove_target(directory)
+        if removal["state"] != "removed":
+            return removal.get("retained_location", str(directory))
+    try:
+        _discard_unplanned(directory)
+    except OSError:
+        return str(directory)
+    return None
 
 
 def remove_target(directory):
@@ -267,8 +292,12 @@ def verify_entries(directory, plan):
 
 
 def make_evidence(directory):
-    """Create <target>\\evidence relative to the target's handle, after checking the target against the record."""
+    """Create <target>\\evidence relative to the target's handle, after checking the target against the record.
+    A top-level `evidence` entry the copy brought from the project is removed first, handle-relative and without
+    following any link (C1's removal routine); entries of that name deeper in the copy are kept. Returns the
+    evidence path and whether a copied entry was replaced."""
     t = disposable_target
+    replaced = False
     with t._placeholders_exposed():
         _, record = t.record_at(directory)
         [entry] = [e for e in record["entries"] if e.get("kind") == "target" and e.get("state") == "created"]
@@ -280,12 +309,24 @@ def make_evidence(directory):
             try:
                 if not _identity_matches(handle, entry):
                     raise ValueError("The target no longer matches the record; exercise not started")
-                t._close(t._create_directory(handle, EVIDENCE))  # exclusive; the copy never brings this name
+                try:
+                    copied = t._nt_open(handle, EVIDENCE, t.DELETE | t.READ_ATTRIBUTES, t.OPEN_REPARSE_POINT)
+                except t.NtError as error:
+                    if error.status not in (t.STATUS_NAME_NOT_FOUND, t.STATUS_PATH_NOT_FOUND):
+                        raise
+                    copied = None
+                if copied is not None:
+                    try:
+                        t._remove_open(copied, time.monotonic() + t.REMOVAL_PATIENCE_S)
+                    finally:
+                        t._close(copied)
+                    replaced = True
+                t._close(t._create_directory(handle, EVIDENCE))  # exclusive create
             finally:
                 t._close(handle)
         finally:
             t._close(root)
-    return Path(entry["path"]) / EVIDENCE
+    return Path(entry["path"]) / EVIDENCE, replaced
 
 
 def placement_problems(directory, target, evidence, temp, cwd):
@@ -327,12 +368,13 @@ def prepare(cli, request, base):
 
     try:
         created = disposable_target.create(spec["target_request"], make_run_directory)
-    except BaseException:
-        if made:
-            try:
-                _discard_unplanned(made[-1])
-            except OSError:
-                pass
+    except BaseException as error:
+        # Interrupted (an exception or e.g. KeyboardInterrupt) possibly after the target was created: remove it
+        # through its record; the record is deleted only once it holds no entry.
+        kept = _abandon(made[-1]) if made else None
+        if kept is not None and isinstance(error, Exception):
+            reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: target creation failed"
+            raise ValueError(f"{reason}; what was created could not be removed; retained: {kept}") from None
         raise
     if created["state"] != "created":
         if made and created.get("target_removed"):
@@ -345,7 +387,7 @@ def prepare(cli, request, base):
     try:
         temp = disposable_target.create_sibling(directory, "mcp-temp")
         cwd = disposable_target.create_sibling(directory, "mcp-cwd")
-        evidence = make_evidence(directory)
+        evidence, replaced = make_evidence(directory)
         port = browser.free_loopback_port()
         nonce = browser.NAME_PREFIX + secrets.token_hex(8)
         definition = browser.instantiate(template, nonce, created["target"], cwd, temp, port)
@@ -361,6 +403,7 @@ def prepare(cli, request, base):
                    "browser_server": nonce, "disabled_servers": disabled}
         copy = {key: created[key] for key in ("skipped_links", "excluded", "git_layouts_excluded",
                                               "streams_not_copied", "env_files", "copied")}
+        copy["top_level_evidence_replaced"] = replaced
         cli.write_json(directory / "plan.json", {
             "version": 1, "interaction": INTERACTION, "request": request, "summary": summary, "timer": cli.timer(),
             "overrides": overrides, "directory": str(directory), "copy": copy,
@@ -505,11 +548,21 @@ def _settle(cli, directory, plan, output, after_delivery):
     return {**output, "target_removed": True}
 
 
+def refuse_while_launching(directory):
+    """`run` has started its checks (`started`) but has neither started Codex (`clock.json`) nor failed
+    (`execution-error.json`): it may be about to launch Codex on the target, so nothing is removed now."""
+    if (directory / "started").exists() and not (directory / "clock.json").exists() and \
+            not (directory / "execution-error.json").exists():
+        raise ValueError("The exercise run is starting (its launch checks have begun and Codex has not started yet); "
+                         "nothing is removed. Wait for `run` to return, then collect or finish")
+
+
 def finish(cli, directory):
     directory, plan = cli.plan_at(directory)
     if not is_plan(plan):
         raise ValueError("finish applies to exercises only; use cleanup for a consultation")
     require_platform()
+    refuse_while_launching(directory)
     child = directory / "0"
     if (directory / "clock.json").exists():
         stopped = cli.stop_status(child)

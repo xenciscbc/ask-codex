@@ -3,8 +3,8 @@ calls a real Codex service.
 
 Every test works in a fresh directory under the test root (`--test-root`, default D:\\tmp\\ask-codex-tests,
 outside any repository), created and removed by the test. Seams are in-process only (plan I13): a bootstrap
-patches `browser.local_app_data` (the fake package install and guard cache live under the test directory) and
-`shutil.which("node")` (a fake node.exe) in the CLI process; nothing reaches the code through the environment.
+patches `browser.local_app_data` (the fake package install and guard cache live under the test directory) in the
+CLI process; a fake node.exe is found the way the script finds node, on an absolute PATH entry placed first.
 The stub records outside the target (`records` in its scenario), so nothing is written into the copy.
 """
 import ast
@@ -98,8 +98,6 @@ seams = json.loads(sys.argv.pop(1))
 sys.path.insert(0, str(Path(script).parent))
 import browser
 browser.local_app_data = lambda: Path(seams["local_app_data"])
-_which = shutil.which
-shutil.which = lambda name, *a, **k: seams["node"] if name == "node" else _which(name, *a, **k)
 if seams.get("code"):
     exec(seams["code"], {"__name__": "seam"})
 if seams.get("platform"):
@@ -201,7 +199,7 @@ class ExerciseRunTest(unittest.TestCase):
         self.scenario({"exec": {"reply": UI_REPLY}})
         self.env = {**os.environ, "HOME": str(self.home), "USERPROFILE": str(self.home),
                     "CODEX_HOME": str(self.home / ".codex"),
-                    "PATH": str(STUB) + os.pathsep + os.environ["PATH"]}
+                    "PATH": os.pathsep.join([str(self.node.parent), str(STUB), os.environ["PATH"]])}
         self.request = {"interaction": "exercise", "kind": "ui", "project": str(self.project),
                         "prompt": "Exercise the app and report what you find.",
                         "models": [{"model": "gpt-6-sol", "effort": "high"}],
@@ -215,11 +213,12 @@ class ExerciseRunTest(unittest.TestCase):
         write((directory or self.project) / ".stub/scenario.json", json.dumps({"records": str(self.records), **value}))
 
     def seams(self, **extra):
-        return json.dumps({"local_app_data": str(self.local), "node": str(self.node), **extra})
+        return json.dumps({"local_app_data": str(self.local), **extra})
 
-    def call(self, *args, timeout=120, **extra):
+    def call(self, *args, timeout=120, cwd=None, **extra):
         result = subprocess.run([sys.executable, "-c", BOOTSTRAP, str(CLI), self.seams(**extra), *map(str, args)],
-                                env=self.env, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
+                                env=self.env, capture_output=True, text=True, encoding="utf-8", timeout=timeout,
+                                cwd=cwd)
         self.assertTrue(result.stdout.strip(), result.stderr)
         return json.loads(result.stdout)
 
@@ -583,6 +582,88 @@ target.create_sibling = create_sibling
         os.rmdir(swapped)  # the test's own junction, unlinked
         os.rename(str(swapped) + ".moved", swapped)
 
+    # --- interrupted creation, launching run, top-level evidence, node lookup (code review 1: N1, N2, d, N4) ---
+
+    def raw_prepare(self, code):
+        path = self.requests / "request.json"
+        path.write_text(json.dumps(self.request), encoding="utf-8")
+        return subprocess.run([sys.executable, "-c", BOOTSTRAP, str(CLI), self.seams(code=code), "prepare", str(path),
+                               "--base", str(self.base)], env=self.env, capture_output=True, text=True,
+                              encoding="utf-8", timeout=120)
+
+    def test_interrupted_copy_removes_the_created_target_through_its_record(self):
+        interrupt = "import target\ndef run(*args, **kwargs):\n    raise KeyboardInterrupt()\ntarget._Copy.run = run\n"
+        result = self.raw_prepare(interrupt)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("KeyboardInterrupt", result.stderr)
+        self.assertEqual(os.listdir(self.targets), [], "the created target was removed through its record")
+        self.assertEqual(self.runs(), [])
+        self.assertEqual(self.exec_calls(), [])
+
+    def test_interruption_before_the_identity_is_recorded_keeps_record_and_target(self):
+        interrupt = """
+import target
+original, calls = target._write_record, []
+def write(directory, record):
+    calls.append(1)
+    if len(calls) == 2:  # the write that records the created target's identity
+        raise KeyboardInterrupt()
+    return original(directory, record)
+target._write_record = write
+"""
+        result = self.raw_prepare(interrupt)
+        self.assertNotEqual(result.returncode, 0)
+        [directory] = self.runs()
+        entries = self.record(directory)["entries"]
+        self.assertEqual([(e["path"].casefold(), e["state"]) for e in entries],
+                         [(str(self.targets / "exercise-target").casefold(), "pending")])
+        self.assertTrue((self.targets / "exercise-target").exists(), "kept together with its record, never orphaned")
+
+    def test_finish_and_cleanup_refuse_while_run_is_launching(self):
+        ready, directory, plan = self.prepared()
+        (directory / "started").touch()  # run's checks have begun; no clock.json and no execution-error.json yet
+        for action in ("finish", "cleanup"):
+            with self.subTest(action=action):
+                refused = self.call(action, directory)
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("run is starting", refused["reason"])
+                self.assertTrue(Path(plan["summary"]["target"]).exists())
+                self.assertTrue((directory / "plan.json").exists())
+        (directory / "started").unlink()
+        self.assertEqual(self.call("finish", directory)["state"], "finished")
+        self.assert_all_removed(directory)
+
+    def test_only_the_top_level_evidence_entry_is_replaced(self):
+        write(self.project / "src/evidence/keep.txt", "nested, copied")
+        write(self.project / "src/evidence/.env.local", "NESTED=1")
+        self.request["env_files"] = ["src/evidence/.env.local"]
+        ready, directory, plan = self.prepared()
+        target = Path(plan["summary"]["target"])
+        self.assertEqual(os.listdir(target / "evidence"), [], "the project's top-level evidence entry is replaced")
+        self.assertEqual((target / "src/evidence/keep.txt").read_text(encoding="utf-8"), "nested, copied")
+        self.assertEqual((target / "src/evidence/.env.local").read_text(encoding="utf-8"), "NESTED=1")
+        self.assertTrue(ready["copy"]["top_level_evidence_replaced"])
+        self.assertFalse(any("evidence" in name for name in ready["copy"]["excluded"]), ready["copy"]["excluded"])
+        self.assertEqual(self.call("finish", directory)["state"], "finished")
+        for named in (["evidence/.env"], ["Evidence\\sub\\.env.test"]):
+            with self.subTest(env_files=named):
+                self.request["env_files"] = named
+                refused = self.prepare()
+                self.assertEqual(refused["state"], "failed", refused)
+                self.assertIn("top-level evidence", refused["reason"])
+                self.assertEqual(self.runs(), [])
+
+    def test_node_is_found_on_absolute_path_entries_only(self):
+        cwd = self.root / "cwd"
+        write(cwd / "node.exe", "a node.exe in the working directory, never used")
+        write(cwd / "relnode" / "node.exe", "a node.exe on a relative PATH entry, never used")
+        self.env["PATH"] = os.pathsep.join(["relnode", str(self.node.parent), str(STUB), os.environ["PATH"]])
+        ready = self.prepare(cwd=cwd)
+        self.assertEqual(ready["state"], "prepared", ready)
+        plan = json.loads((Path(ready["directory"]) / "plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["browser"]["definition"]["command"], self.node.as_posix())
+        self.assertEqual(self.call("finish", ready["directory"])["state"], "finished")
+
     def test_mcp_temp_swapped_after_collect_is_not_followed_by_finish(self):
         ready, directory, plan = self.prepared()
         self.collect_completed(directory)
@@ -867,6 +948,10 @@ class RedactionTest(unittest.TestCase):
             "app --db-password 'two words'": ("--db-password [REDACTED]", "two words"),
             'app -secret "x y z"': ("-secret [REDACTED]", "x y z"),
             "app --api-key K": ("--api-key [REDACTED]", " K"),
+            # Plan I11 has no digit condition on a labelled run (code review 1, B2).
+            "api_key=AbCdEfGhIjKlMnOpQrStUv": ("api_key=[REDACTED]", "AbCdEfGh"),
+            "Authorization: Token sEcReTsEcReTsEcReTx": ("Token [REDACTED]", "sEcReT"),
+            "password=CorrectHorseBatteryStaple": ("password=[REDACTED]", "CorrectHorse"),
         }
         for text, (kept, gone) in cases.items():
             with self.subTest(text=text):
@@ -881,6 +966,29 @@ class RedactionTest(unittest.TestCase):
                      "The internationalization keys are shown raw", "git@github.com:org/repo.git"):
             with self.subTest(text=text):
                 self.assertEqual(self.redact(text), text)
+
+    def test_hostile_input_is_redacted_in_linear_time(self):
+        # Reply text is attacker-influenced; a catastrophic backtrack would hang `collect` (code review 1, B1).
+        fragments = ["Bearer abcDEF1234567890xyz", "--password hunter2", "api_key=AbCdEfGhIjKlMnOpQrStUv",
+                     "key" * 40, "--" + "key-" * 30, "token-" * 30, "eyJ-" * 30, "http://a:b@127.0.0.1/",
+                     "a+" * 40 + "://", "The basic navigation works.", "sk-ABCDEFGHIJKLMNOPQRST", "token" + " " * 40]
+        mixed, i = [], 0
+        while sum(map(len, mixed)) < 50_000:
+            mixed.append(fragments[i % len(fragments)])
+            i += 1
+        cases = {"flag run": "--" + "key-" * 2500, "token run": "token-" * 2000, "key run": "key" * 3000,
+                 "kebab identifiers": "-".join(["identifier"] * 800), "jwt starts": "eyJ-" * 2500,
+                 "scheme run": "a+" * 5000 + "://", "spaced label": "token" + " " * 10_000 + "x",
+                 "unterminated quotes": "--token '" * 1100, "mixed 50 KB": " ".join(mixed)}
+        for label, text in cases.items():
+            with self.subTest(case=label, size=len(text)):
+                self.assertGreaterEqual(len(text), 8_000)
+                start = time.perf_counter()
+                result = self.redact(text)
+                self.assertLess(time.perf_counter() - start, 1.0)
+                self.assertIsInstance(result, str)
+        self.assertIn("[REDACTED]", self.redact(" ".join(mixed)))
+        self.assertNotIn("hunter2", self.redact(" ".join(mixed)))
 
     def test_values_are_redacted_recursively_and_structure_is_kept(self):
         value = {"a": ["Bearer abcDEF1234567890xyz", 1, None, True], "b": {"c": "--token=x"}}

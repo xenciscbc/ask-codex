@@ -109,8 +109,18 @@ def mcp_get(project, name, overrides=()):
 
 
 def which(name):
-    # Resolved with the environment the script runs Codex with (plan I13, N-1).
-    return shutil.which(name, path=shell_environment().get("PATH"))
+    # Resolved with the environment the script runs Codex with (plan I13, N-1), from PATH's absolute entries only:
+    # never the current directory (shutil.which searches it first on Windows) and never a relative PATH entry.
+    suffixes = (".exe",) if os.name == "nt" else ("",)
+    for entry in shell_environment().get("PATH", "").split(os.pathsep):
+        entry = entry.strip().strip('"')
+        if not entry or not Path(entry).is_absolute():
+            continue
+        for suffix in suffixes:
+            candidate = Path(entry) / (name + suffix)
+            if candidate.is_file():
+                return str(candidate)
+    return None
 
 
 def timer():
@@ -553,6 +563,9 @@ def stop_codex(directory, plan, recommended, offered, only_children=None):
 
 def cleanup(directory):
     directory, plan = plan_at(directory)
+    if exercise.is_plan(plan):
+        exercise.require_platform()
+        exercise.refuse_while_launching(directory)
     if (directory / "clock.json").exists():
         for index in range(len(plan["request"]["models"])):
             child = directory / str(index)
@@ -561,7 +574,6 @@ def cleanup(directory):
             if stop_status(child) is not None and not stop_status(child)["confirmed"]:
                 raise ValueError("Cannot clean up: process-tree stop is unconfirmed")
     if exercise.is_plan(plan):
-        exercise.require_platform()
         removal = exercise.remove_target(directory)
         if removal["state"] != "removed":
             return {"state": "failed", "reason": f"Cannot clean up: the target was kept ({removal.get('reason')})",
