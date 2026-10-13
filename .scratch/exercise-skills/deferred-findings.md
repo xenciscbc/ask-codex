@@ -27,3 +27,7 @@ No open blocking finding. Residual risks per ticket 01 Comments (U13).
 ## C3 — unreviewed by verification/Adversarial (code review call 1: APPROVED at 5f44a3f)
 
 No blocking finding under U15. U16 (downloads blocked through a run-owned profile seeded with `download_restrictions` = 3) landed in 5f44a3f; the live guard passes 154/154 on the real definition. Non-blocking items (security first) are in the handoff record `ui-exercise-followups.md`.
+
+## C4 — unreviewed by verification/Adversarial (code review call 1: APPROVED at da54076)
+
+No blocking finding under U15. Non-blocking items 20–36 (security first) are in `ui-exercise-followups.md`; item 30 (app-start must run as a background execution because a foreground call can outlast the Bash tool's 10-minute limit) is an input to C5 and C7.
