@@ -9,6 +9,15 @@
   job handle, a listener socket or any other handle of the caller.
 - `tcp_listeners()`: the IPv4 and IPv6 TCP listener table with owning PIDs (GetExtendedTcpTable).
 - `image_path(pid)`, `named_streams(path)`, `short_path(path)`: small queries used by the guard.
+
+Supervisor part (plan I8, I15; claim C4):
+- `open_job(name)`, `job_active(handle)`, `job_pids(handle)`, `terminate_job(handle)`: a named job opened by its
+  name (query and terminate rights only), for the stop path's fallback and registered repro jobs.
+- Process identity = PID + creation time (FILETIME). `open_verified` opens a process by PID and returns the handle only
+  when its creation time equals the recorded one; `alive` and `terminate_verified` build on it, so a reused PID is
+  never touched. `processes()` lists PID, parent PID and image name (Toolhelp snapshot); `command_line(pid)`
+  (ProcessCommandLineInformation, limited rights) and `current_directory(pid)` (the process parameters in its PEB)
+  are read for detection only.
 """
 import ctypes
 from ctypes import wintypes
@@ -34,6 +43,13 @@ PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x20002
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 JobObjectBasicAccountingInformation, JobObjectBasicProcessIdList, JobObjectExtendedLimitInformation = 1, 3, 9
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+PROCESS_TERMINATE, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION = 0x1, 0x10, 0x400
+JOB_OBJECT_QUERY, JOB_OBJECT_TERMINATE = 0x4, 0x8
+ERROR_FILE_NOT_FOUND = 2
+TH32CS_SNAPPROCESS = 0x2
+ProcessBasicInformation, ProcessCommandLineInformation = 0, 60
+# FILETIME (100 ns since 1601) -> .NET DateTime ticks (100 ns since 0001), as run.sh records Codex's identity.
+DOTNET_TICKS_AT_1601 = 504911232000000000
 SYNCHRONIZE = 0x100000
 INFINITE = 0xFFFFFFFF
 WAIT_OBJECT_0 = 0
@@ -90,8 +106,37 @@ class _Accounting(ctypes.Structure):
                 ("ActiveProcesses", wintypes.DWORD), ("TotalTerminatedProcesses", wintypes.DWORD)]
 
 
+class _ProcessEntry(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+
+
+class _FileTime(ctypes.Structure):
+    _fields_ = [("low", wintypes.DWORD), ("high", wintypes.DWORD)]
+
+
+_ntdll = ctypes.WinDLL("ntdll") if os.name == "nt" else None
+
+
 def _signatures():
     k = _k32
+    k.OpenJobObjectW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    k.OpenJobObjectW.restype = wintypes.HANDLE
+    k.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    k.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    k.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry)]
+    k.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry)]
+    k.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(_FileTime)] * 4
+    k.GetCurrentProcess.restype = wintypes.HANDLE
+    k.ReadProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t,
+                                    ctypes.POINTER(ctypes.c_size_t)]
+    k.GetSystemDirectoryW.argtypes = [wintypes.LPWSTR, wintypes.UINT]
+    k.GetSystemDirectoryW.restype = wintypes.UINT
+    _ntdll.NtQueryInformationProcess.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.ULONG,
+                                                 ctypes.POINTER(wintypes.ULONG)]
+    _ntdll.NtQueryInformationProcess.restype = ctypes.c_long
     k.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     k.CreateJobObjectW.restype = wintypes.HANDLE
     k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
@@ -161,40 +206,67 @@ class Job:
             _fail("SetInformationJobObject")
 
     def active_processes(self):
-        info = _Accounting()
-        if not _k32.QueryInformationJobObject(self.handle, JobObjectBasicAccountingInformation, ctypes.byref(info),
-                                              ctypes.sizeof(info), None):
-            _fail("QueryInformationJobObject")
-        return info.ActiveProcesses
+        return job_active(self.handle)
 
     def pids(self):
-        count = 256
-        while True:
-            class _List(ctypes.Structure):
-                _fields_ = [("Assigned", wintypes.DWORD), ("Listed", wintypes.DWORD),
-                            ("Ids", ctypes.c_size_t * count)]
-            data = _List()
-            if _k32.QueryInformationJobObject(self.handle, JobObjectBasicProcessIdList, ctypes.byref(data),
-                                              ctypes.sizeof(data), None):
-                return [int(data.Ids[i]) for i in range(data.Listed)]
-            if ctypes.get_last_error() != 234 or count > 65536:  # ERROR_MORE_DATA
-                _fail("QueryInformationJobObject")
-            count *= 4
+        return job_pids(self.handle)
 
     def terminate(self, patience=10.0):
         """End every process in the job; True when the job reports no active process within `patience`."""
-        _k32.TerminateJobObject(self.handle, 1)
-        deadline = time.monotonic() + patience
-        while time.monotonic() < deadline:
-            if self.active_processes() == 0:
-                return True
-            time.sleep(0.1)
-        return self.active_processes() == 0
+        return terminate_job(self.handle, patience)
 
     def close(self):
         if getattr(self, "handle", None):
             _k32.CloseHandle(self.handle)
             self.handle = None
+
+
+def job_active(handle):
+    info = _Accounting()
+    if not _k32.QueryInformationJobObject(handle, JobObjectBasicAccountingInformation, ctypes.byref(info),
+                                          ctypes.sizeof(info), None):
+        _fail("QueryInformationJobObject")
+    return info.ActiveProcesses
+
+
+def job_pids(handle):
+    count = 256
+    while True:
+        class _List(ctypes.Structure):
+            _fields_ = [("Assigned", wintypes.DWORD), ("Listed", wintypes.DWORD), ("Ids", ctypes.c_size_t * count)]
+        data = _List()
+        if _k32.QueryInformationJobObject(handle, JobObjectBasicProcessIdList, ctypes.byref(data),
+                                          ctypes.sizeof(data), None):
+            return [int(data.Ids[i]) for i in range(data.Listed)]
+        if ctypes.get_last_error() != 234 or count > 65536:  # ERROR_MORE_DATA
+            _fail("QueryInformationJobObject")
+        count *= 4
+
+
+def terminate_job(handle, patience=10.0):
+    """End every process in the job; True when it reports no active process within `patience`."""
+    _k32.TerminateJobObject(handle, 1)
+    deadline = time.monotonic() + patience
+    while time.monotonic() < deadline:
+        if job_active(handle) == 0:
+            return True
+        time.sleep(0.1)
+    return job_active(handle) == 0
+
+
+def open_job(name):
+    """The named job with query and terminate rights, or None when no job of that name exists."""
+    handle = _k32.OpenJobObjectW(JOB_OBJECT_QUERY | JOB_OBJECT_TERMINATE, False, name)
+    if not handle:
+        if ctypes.get_last_error() == ERROR_FILE_NOT_FOUND:
+            return None
+        _fail("OpenJobObjectW")
+    return handle
+
+
+def close_handle(handle):
+    if handle:
+        _k32.CloseHandle(handle)
 
 
 class Process:
@@ -242,8 +314,9 @@ def _environment_block(env):
     return "".join(f"{k}={v}\0" for k, v in items) + "\0"
 
 
-def start_suspended(job, argv, cwd, env):
-    """Create argv[0] suspended with piped stdio, assign it to `job`, then resume it."""
+def start_suspended(job, argv, cwd, env, command_line=None):
+    """Create argv[0] suspended with piped stdio, assign it to `job`, then resume it. `command_line`, when given,
+    is passed verbatim instead of the quoted argv (a `cmd /d /s /c "<command>"` line)."""
     child_ends, parent_ends = [], []
     try:
         for parent_writes in (True, False, False):  # stdin, stdout, stderr
@@ -269,7 +342,8 @@ def start_suspended(job, argv, cwd, env):
             startup.StartupInfo.hStdInput, startup.StartupInfo.hStdOutput, startup.StartupInfo.hStdError = child_ends
             startup.lpAttributeList = ctypes.cast(attribute_list, ctypes.c_void_p)
             info = _ProcessInformation()
-            command_line = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
+            command_line = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv) if command_line is None
+                                                        else command_line)
             block = ctypes.create_unicode_buffer(_environment_block(env))
             flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW
             if not _k32.CreateProcessW(str(argv[0]).replace("/", "\\"), command_line, None, None, True, flags,
@@ -348,6 +422,166 @@ def tcp_listeners():
                 text = socket.inet_ntop(socket.AF_INET6, address)
             found.append((text, socket.ntohs(port & 0xFFFF), pid))
     return found
+
+
+def system_directory():
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = _k32.GetSystemDirectoryW(buffer, len(buffer))
+    if not 0 < length < len(buffer):
+        _fail("GetSystemDirectoryW")
+    return buffer.value
+
+
+# --- process identity (PID + creation time) and detection ---
+
+def handle_creation(handle):
+    """Creation time of the process behind `handle` (FILETIME as an integer), or None."""
+    times = [_FileTime() for _ in range(4)]
+    if not _k32.GetProcessTimes(handle, *[ctypes.byref(t) for t in times]):
+        return None
+    return (times[0].high << 32) | times[0].low
+
+
+def _open_process(pid, access):
+    if type(pid) is not int or pid <= 0:
+        return None
+    return _k32.OpenProcess(access, False, pid) or None
+
+
+def creation_time(pid):
+    handle = _open_process(pid, PROCESS_QUERY_LIMITED_INFORMATION)
+    if not handle:
+        return None
+    try:
+        return handle_creation(handle)
+    finally:
+        _k32.CloseHandle(handle)
+
+
+def current_identity():
+    return {"pid": os.getpid(), "created": handle_creation(_k32.GetCurrentProcess())}
+
+
+def dotnet_ticks(created):
+    return created + DOTNET_TICKS_AT_1601
+
+
+def open_verified(pid, created, access):
+    """A handle to process `pid` with `access` only if its creation time equals `created` (else None)."""
+    if type(created) is not int:
+        return None
+    handle = _open_process(pid, access | PROCESS_QUERY_LIMITED_INFORMATION)
+    if not handle:
+        return None
+    if handle_creation(handle) != created:
+        _k32.CloseHandle(handle)
+        return None
+    return handle
+
+
+def wait_handle(handle, timeout):
+    return _k32.WaitForSingleObject(handle, int(timeout * 1000)) == WAIT_OBJECT_0
+
+
+def alive(pid, created):
+    """True while the process with this identity runs (a reused PID is another process: False)."""
+    handle = open_verified(pid, created, SYNCHRONIZE)
+    if not handle:
+        return False
+    try:
+        return not wait_handle(handle, 0)
+    finally:
+        _k32.CloseHandle(handle)
+
+
+def terminate_verified(pid, created, patience=5.0):
+    """End the process with this identity through a handle checked against `created`: "gone" when no such process
+    runs, "terminated" when it ended, "alive" when it still runs after `patience`."""
+    handle = open_verified(pid, created, PROCESS_TERMINATE | SYNCHRONIZE)
+    if not handle:
+        return "gone"
+    try:
+        if wait_handle(handle, 0):
+            return "gone"
+        _k32.TerminateProcess(handle, 1)
+        return "terminated" if wait_handle(handle, patience) else "alive"
+    finally:
+        _k32.CloseHandle(handle)
+
+
+def processes():
+    """[(pid, parent pid, image name)] of every process (Toolhelp snapshot)."""
+    snapshot = _k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot in (None, INVALID_HANDLE_VALUE):
+        _fail("CreateToolhelp32Snapshot")
+    found = []
+    try:
+        entry = _ProcessEntry()
+        entry.dwSize = ctypes.sizeof(_ProcessEntry)
+        more = _k32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            found.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID), entry.szExeFile))
+            more = _k32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        _k32.CloseHandle(snapshot)
+    return found
+
+
+def command_line(pid):
+    """The process's command line (ProcessCommandLineInformation, limited rights), or None if unreadable."""
+    handle = _open_process(pid, PROCESS_QUERY_LIMITED_INFORMATION)
+    if not handle:
+        return None
+    try:
+        size = wintypes.ULONG(0)
+        _ntdll.NtQueryInformationProcess(handle, ProcessCommandLineInformation, None, 0, ctypes.byref(size))
+        if not 16 <= size.value <= 1 << 20:
+            return None
+        buffer = ctypes.create_string_buffer(size.value)
+        if _ntdll.NtQueryInformationProcess(handle, ProcessCommandLineInformation, buffer, size, ctypes.byref(size)):
+            return None
+        length = struct.unpack_from("<H", buffer.raw, 0)[0]
+        pointer = struct.unpack_from("<Q", buffer.raw, 8)[0]
+        if not pointer:
+            return ""
+        return ctypes.wstring_at(pointer, length // 2)
+    finally:
+        _k32.CloseHandle(handle)
+
+
+def _read_memory(handle, address, size):
+    buffer = ctypes.create_string_buffer(size)
+    done = ctypes.c_size_t()
+    if not _k32.ReadProcessMemory(handle, ctypes.c_void_p(address), buffer, size, ctypes.byref(done)) or \
+            done.value != size:
+        return None
+    return buffer.raw
+
+
+def current_directory(pid):
+    """The process's current directory from its process parameters (64-bit layout), or None if unreadable."""
+    if struct.calcsize("P") != 8:
+        return None
+    handle = _open_process(pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ)
+    if not handle:
+        return None
+    try:
+        basic = ctypes.create_string_buffer(48)  # PROCESS_BASIC_INFORMATION
+        if _ntdll.NtQueryInformationProcess(handle, ProcessBasicInformation, basic, 48, None):
+            return None
+        peb = struct.unpack_from("<Q", basic.raw, 8)[0]
+        raw = _read_memory(handle, peb + 0x20, 8) if peb else None  # PEB.ProcessParameters
+        parameters = struct.unpack_from("<Q", raw)[0] if raw else 0
+        raw = _read_memory(handle, parameters + 0x38, 16) if parameters else None  # CurrentDirectory.DosPath
+        if not raw:
+            return None
+        length, _, pointer = struct.unpack_from("<HHxxxxQ", raw)
+        if not pointer or not 0 < length <= 65534:
+            return None
+        text = _read_memory(handle, pointer, length)
+        return text.decode("utf-16-le", "replace") if text else None
+    finally:
+        _k32.CloseHandle(handle)
 
 
 def short_path(path):

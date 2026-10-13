@@ -232,11 +232,13 @@ def run(directory):
     directory, plan = plan_at(directory)
     if exercise.is_plan(plan):
         exercise.require_platform()
-    try:
-        with (directory / "started").open("x"):
-            pass  # Never replay an execution attempt.
-    except FileExistsError:
-        raise AlreadyAttempted() from None
+        exercise.claim_run(cli(), directory)  # `started` with this call's identity (C2 follow-up 7)
+    else:
+        try:
+            with (directory / "started").open("x"):
+                pass  # Never replay an execution attempt.
+        except FileExistsError:
+            raise AlreadyAttempted() from None
     if exercise.is_plan(plan):
         try:
             return run_exercise(directory, plan)
@@ -270,8 +272,10 @@ def run(directory):
 
 
 def run_exercise(directory, plan):
-    # Guard (I6), identities and placement again, then the owned proxy port; a failure removes the target at once.
-    holder = exercise.before_launch(cli(), directory, plan)
+    # Guard (I6), identities, placement and the guard pass again, then the running supervisor, which holds the app
+    # and the owned proxy port (C4, I8); its watcher stops Codex if the supervisor dies (U10). A failure ends the
+    # app and removes the target at once.
+    watcher = exercise.before_launch(cli(), directory, plan)
     try:
         schema = HERE.parent / f"{exercise.REPLY_SCHEMA}.schema.json"
         result = launch(directory, plan,
@@ -279,19 +283,19 @@ def run_exercise(directory, plan):
                         plan["summary"]["target"])
     except Exception as error:
         # launch() returns launch_failed once a process may have started; an exception here is earlier.
-        holder.close()
-        removal = exercise.remove_target(directory)
+        watcher.disarm()
         reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise launch failed"
-        raise ValueError(reason + ("; the target was removed" if removal["state"] == "removed" else
-                                   f"; the target could not be removed, retained: "
-                                   f"{removal.get('retained_location', directory)}")) from None
+        raise ValueError(reason + exercise.removal_note(exercise.end_and_remove(cli(), directory, plan))) from None
     finally:
-        holder.close()  # C4 moves this holder to the supervisor (I8)
-    removal = exercise.after_run(cli(), directory)
-    if removal is not None:
-        result["target_removed"] = removal["state"] == "removed"
-        if removal["state"] != "removed":
-            result["retained_location"] = removal.get("retained_location", str(directory))
+        watcher.disarm()
+    if watcher.fired is not None:
+        result["supervisor_died"] = {"at": watcher.fired, "codex_stop": "requested through the ADR 0004 stop path"}
+    outcome = exercise.after_run(cli(), directory, plan)
+    if outcome is not None:
+        result["target_removed"] = outcome["target_removed"]
+        result["ended"] = outcome["ended"]
+        if not outcome["target_removed"]:
+            result["retained_location"] = outcome.get("retained_location", str(directory))
     return result
 
 
@@ -520,18 +524,9 @@ def stop(directory, recommended, offered, only_children=None):
     directory, plan = plan_at(directory)
     if not exercise.is_plan(plan):
         return stop_codex(directory, plan, recommended, offered, only_children)
-    exercise.require_platform()
-    result = stop_codex(directory, plan, recommended, offered, only_children)
-    # An exercise's target goes once its Codex tree is confirmed ended (I3, I12); an unconfirmed stop keeps it.
-    if result["state"] in ("stopped", "finished"):
-        removal = exercise.remove_target(directory)
-        result["target_removed"] = removal["state"] == "removed"
-        if removal["state"] != "removed":
-            result["retained_location"] = removal.get("retained_location", str(directory))
-            result["removal"] = removal
-    else:
-        result["target_kept"] = exercise.target_kept(directory)
-    return result
+    # An exercise's app and target go once its Codex tree is confirmed ended, then I15's processes and the app
+    # (I3, I8, I12, I15); anything unconfirmed keeps everything.
+    return exercise.stop(cli(), directory, plan, recommended, offered, only_children)
 
 
 def stop_codex(directory, plan, recommended, offered, only_children=None):
@@ -589,10 +584,11 @@ def cleanup(directory):
             if stop_status(child) is not None and not stop_status(child)["confirmed"]:
                 raise ValueError("Cannot clean up: process-tree stop is unconfirmed")
     if exercise.is_plan(plan):
-        removal = exercise.remove_target(directory)
-        if removal["state"] != "removed":
-            return {"state": "failed", "reason": f"Cannot clean up: the target was kept ({removal.get('reason')})",
-                    "retained_location": removal.get("retained_location", str(directory)), "removal": removal}
+        outcome = exercise.cleanup(cli(), directory, plan)
+        if outcome["state"] != "removed":
+            return outcome
+        remove_run(directory, plan)
+        return {"state": "cleaned", "ended": outcome["ended"]}
     remove_run(directory, plan)
     return {"state": "cleaned"}
 
@@ -601,7 +597,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
                                            "finish", "target-create", "target-remove", "guard", "browser-install",
-                                           "exercise-deps"))
+                                           "exercise-deps", "app-start"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
@@ -632,6 +628,9 @@ def main():
             result = disposable_target.remove_command(args.path)
         elif args.action == "finish":
             result = exercise.finish(cli(), args.path)
+        elif args.action == "app-start":
+            # The app's processes of a guarded exercise under its supervisor (supervisor.py, C4).
+            result = exercise.app_start(cli(), args.path)
         elif args.action == "guard":
             # Dependency check and browser guard of a prepared exercise, before any app process (guard.py, I7).
             result = exercise_guard.guard_exercise(cli(), args.path)

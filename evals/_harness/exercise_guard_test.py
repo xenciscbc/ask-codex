@@ -33,6 +33,9 @@ FACTS = {"node": "C:/fake/node.exe", "node_version": "v24.12.0", "manifest_sha25
          "chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe", "chrome_version": "154.0.8037.98",
          "codex_version": "codex-cli 0.159.3", "chrome_policy_sha256": "p" * 64}
 
+sys.path.insert(0, str(HERE))
+from exercise_run_test import FAKE_APP  # noqa: E402  (the fake app of the run tests, C4)
+
 if sys.platform == "win32":
     sys.path.insert(0, str(SCRIPTS))
     import browser
@@ -296,18 +299,39 @@ class GuardLifecycleTest(unittest.TestCase):
                 self.assertEqual(self.exec_calls(), [])
 
     def test_run_with_a_current_pass_starts_codex_and_collect_names_the_guard(self):
-        directory = self.prepare("first")
+        # C4: Codex runs only after the app started (app-start, which also requires the current pass); each
+        # exercise is finished before the next one guards the same app ports.
+        write(self.project / "fakeapp.py", FAKE_APP)
+        commands = {"start": [{"argv": [sys.executable, "fakeapp.py", *self.request["app"]]}]}
+        directory = self.prepare("first", commands=commands)
         passed = self.call("guard", directory, facts=FACTS, items=PASS)
+        self.assertEqual(self.call("app-start", directory, facts=FACTS)["state"], "app_started")
         self.assertEqual(self.call("run", directory, facts=FACTS)["state"], "finished")
         self.assertEqual(len(self.exec_calls()), 1)
         collected = self.call("collect", directory, facts=FACTS)
         self.assertEqual(collected["guard"], {"source": "ran", "passed_at": passed["guard"]["passed_at"]}, collected)
-        cached = self.prepare("second")
+        self.assertEqual(self.call("finish", directory)["state"], "finished")
+        cached = self.prepare("second", commands=commands)
         self.call("guard", cached, facts=FACTS, items=PASS)
+        self.assertEqual(self.call("app-start", cached, facts=FACTS)["state"], "app_started")
         self.call("run", cached, facts=FACTS)
         self.assertEqual(self.call("collect", cached, facts=FACTS)["guard"]["source"], "cache")
-        for d in (directory, cached):
-            self.assertEqual(self.call("finish", d)["state"], "finished")
+        self.assertEqual(self.call("finish", cached)["state"], "finished")
+
+    def test_app_start_requires_a_current_pass_and_the_guard_refuses_after_it(self):
+        write(self.project / "fakeapp.py", FAKE_APP)
+        commands = {"start": [{"argv": [sys.executable, "fakeapp.py", *self.request["app"]]}]}
+        refused = self.call("app-start", self.prepare("nopass", commands=commands), facts=FACTS)
+        self.assertEqual(refused["state"], "failed", refused)
+        self.assertIn("No browser guard pass", refused["reason"])
+        self.assertTrue(refused["target_removed"])
+        directory = self.prepare("first", commands=commands)
+        self.call("guard", directory, facts=FACTS, items=PASS)
+        self.assertEqual(self.call("app-start", directory, facts=FACTS)["state"], "app_started")
+        again = self.call("guard", directory, facts=FACTS, items=PASS)
+        self.assertEqual(again["state"], "failed", again)
+        self.assertIn("guard runs before any app process", again["reason"])
+        self.assertEqual(self.call("finish", directory)["state"], "finished")
 
     def test_production_path_ignores_substitution_environment_variables(self):
         directory = self.prepare("first")

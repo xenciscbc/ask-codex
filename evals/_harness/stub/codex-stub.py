@@ -52,6 +52,11 @@ a violation. Scenario keys for guard tests: `exercise_extra_enabled` (a server n
 browser server is defined, beside it), `mcp_get_patch` (deep-merged into `mcp get` output for the browser server),
 `mcp_get_prints_default_approval` (also print `default_tools_approval_mode` as passed, or this value if a string).
 
+Supervised exercises (plan C4, I15): `exec.leave_process` = {"seconds": N, "outside_tree": bool} makes exec start an
+MCP stand-in (`python -c "import time; time.sleep(N)" <browser server name>`, the run's nonce on its command line)
+that outlives the stub. With `outside_tree` it is created through WMI (Win32_Process.Create), so it is never a
+descendant of Codex; otherwise it is the stub's own detached child. Its PID is appended to `left-processes.jsonl`.
+
 Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
 CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
 `execution.env`, because the first call runs from a neutral dir without a scenario.
@@ -360,6 +365,30 @@ def parse_exec(args):
     return opts
 
 
+def leave_process(records, overrides, how):
+    import base64
+    import subprocess
+    names = sorted(browser_definitions(overrides))
+    nonce = names[0] if names else "cdt_none"
+    argv = [sys.executable, "-c", f"import time; time.sleep({int(how.get('seconds', 120))})", nonce]
+    if how.get("outside_tree"):
+        line = subprocess.list2cmdline(argv).replace("'", "''")
+        script = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='"
+                  + line + "'}; Write-Output (\"$($r.ReturnValue) $($r.ProcessId)\")")
+        out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                              base64.b64encode(script.encode("utf-16-le")).decode()],
+                             capture_output=True, text=True, timeout=120)
+        code, pid = (out.stdout.split() + ["", ""])[:2]
+        if code != "0" or not pid.isdigit():
+            raise SystemExit(f"stub: WMI process creation failed: {out.stdout!r}")
+        pid = int(pid)
+    else:
+        pid = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=0x8).pid
+    append(os.path.join(records, "left-processes.jsonl"),
+           json.dumps({"pid": pid, "nonce": nonce, "outside_tree": bool(how.get("outside_tree"))}) + "\n")
+
+
 def emit(event):
     sys.stdout.write(json.dumps(event) + "\n")
     sys.stdout.flush()
@@ -487,6 +516,8 @@ def exec_(args):
         with open(os.path.join(records, name), "w", encoding="utf-8") as f:
             f.write(payload)
 
+    if (data.get("exec") or {}).get("leave_process"):
+        leave_process(records, opts["c"], data["exec"]["leave_process"])
     mode = (data.get("exec") or {}).get("mode", "valid")
     emit({"type": "thread.started", "thread_id": "stub-thread"})
     emit({"type": "turn.started"})

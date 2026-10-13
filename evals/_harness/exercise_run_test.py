@@ -112,6 +112,27 @@ sys.argv[0] = script
 runpy.run_path(script, run_name="__main__")
 """
 
+# A fake app (plan C4): listens on each host:port given and accepts and closes every connection.
+FAKE_APP = r"""
+import socket, sys, threading, time
+def serve(sock):
+    while True:
+        try:
+            connection, _ = sock.accept()
+        except OSError:
+            return
+        connection.close()
+for spec in sys.argv[1:]:
+    host, port = spec.rsplit(":", 1)
+    sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET)
+    sock.bind((host, int(port)))
+    sock.listen(16)
+    threading.Thread(target=serve, args=(sock,), daemon=True).start()
+print("listening", flush=True)
+while True:
+    time.sleep(3600)
+"""
+
 SPAWN_FAILURE = """
 import subprocess
 original = subprocess.Popen
@@ -200,6 +221,7 @@ class ExerciseRunTest(unittest.TestCase):
         write(self.sentinel / "keep.txt", "sentinel content")
         write(self.project / "index.html", "<h1>app</h1>")
         write(self.project / "evidence/old.png", "the project's own evidence entry")
+        write(self.project / "fakeapp.py", FAKE_APP)
         self.entry = write(self.local.joinpath(*ENTRY), "// fake entry script, never run")
         self.node = write(self.root / "node" / "node.exe", "fake node, never run")
         self.scenario({"exec": {"reply": UI_REPLY}})
@@ -211,7 +233,9 @@ class ExerciseRunTest(unittest.TestCase):
                         "models": [{"model": "gpt-6-sol", "effort": "high"}],
                         "target_root": {"path": str(self.targets), "confirmed_by_user": True},
                         "app": ["127.0.0.1:15173", "localhost:18080"], "headed": False, "scope": "the save form",
-                        "target_name": "exercise-target"}
+                        "target_name": "exercise-target",
+                        "commands": {"start": [{"argv": [sys.executable, "fakeapp.py", "127.0.0.1:15173",
+                                                         "127.0.0.1:18080"]}]}}
 
     # --- helpers ---
 
@@ -238,8 +262,11 @@ class ExerciseRunTest(unittest.TestCase):
         return self.call("prepare", path, "--base", self.base, **extra)
 
     def prepared(self):
+        """Prepared, with the app started under its supervisor (C4: Codex runs only after app-start)."""
         ready = self.prepare()
         self.assertEqual(ready["state"], "prepared", ready)
+        started = self.call("app-start", ready["directory"])
+        self.assertEqual(started["state"], "app_started", started)
         return ready, Path(ready["directory"]), json.loads((Path(ready["directory"]) / "plan.json").read_text("utf-8"))
 
     def runs(self):
@@ -788,7 +815,7 @@ target._write_record = write
     def test_collect_keeps_run_directory_and_target_then_finish_removes_them(self):
         ready, directory, plan = self.prepared()
         target = Path(plan["summary"]["target"])
-        self.assertEqual(sorted(tree(target)), [".stub", ".stub/scenario.json", "evidence", "index.html"])
+        self.assertEqual(sorted(tree(target)), [".stub", ".stub/scenario.json", "evidence", "fakeapp.py", "index.html"])
         collected = self.collect_completed(directory)
         reply = collected["runs"][0]["reply"]
         self.assertEqual(reply["format"], "structured", reply)
@@ -799,7 +826,7 @@ target._write_record = write
         self.assertTrue(target.exists() and directory.exists())
         self.assertEqual(self.call("collect", directory)["runs"][0]["reply"]["content"], UI_REPLY, "collect again")
         # Codex wrote nothing into the copy (records live outside it).
-        self.assertEqual(sorted(tree(target)), [".stub", ".stub/scenario.json", "evidence", "index.html"])
+        self.assertEqual(sorted(tree(target)), [".stub", ".stub/scenario.json", "evidence", "fakeapp.py", "index.html"])
         self.assertEqual(self.call("cleanup", self.root)["state"], "failed", "an arbitrary directory is refused")
         finished = self.call("finish", directory)
         self.assertEqual(finished["state"], "finished", finished)
@@ -839,18 +866,22 @@ target._write_record = write
         self.assert_all_removed(directory)
 
     def test_taken_proxy_port_refuses_the_run_and_removes_the_target(self):
-        ready, directory, plan = self.prepared()
+        # C4: the supervisor holds the owned proxy port from app-start on, so a taken port refuses the app start
+        # (and so the run): no app process, no Codex, target and run directory removed.
+        ready = self.prepare()
+        directory = Path(ready["directory"])
+        plan = json.loads((directory / "plan.json").read_text("utf-8"))
         squatter = socket.socket()
         self.addCleanup(squatter.close)
         squatter.bind(("127.0.0.1", plan["browser"]["proxy_port"]))
         squatter.listen(1)
-        refused = self.call("run", directory)
+        refused = self.call("app-start", directory)
         self.assertEqual(refused["state"], "failed", refused)
         self.assertIn("owned proxy port", refused["reason"])
+        self.assertTrue(refused["target_removed"], refused)
         self.assertEqual(os.listdir(self.targets), [])
         self.assertEqual(self.exec_calls(), [])
-        self.assertEqual(self.call("collect", directory)["state"], "failed")
-        self.assert_all_removed(directory)
+        self.assertEqual(self.runs(), [])
 
     def test_run_is_never_replayed(self):
         ready, directory, plan = self.prepared()
@@ -938,7 +969,8 @@ target._write_record = write
         ready, directory, plan = self.prepared()
         before = tree(self.targets)
         for args in (("run", directory), ("wait", directory, "--seconds", "0"), ("collect", directory),
-                     ("stop", directory), ("cleanup", directory), ("finish", directory), ("continue", directory)):
+                     ("stop", directory), ("cleanup", directory), ("finish", directory), ("continue", directory),
+                     ("app-start", directory)):
             with self.subTest(action=args[0]):
                 result = self.call(*args, platform="linux")
                 self.assertEqual(result["state"], "failed", result)

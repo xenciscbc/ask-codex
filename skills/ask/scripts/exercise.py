@@ -6,14 +6,19 @@ An exercise request (interaction `exercise`, kind `ui`) goes through the same CL
                                                                directories, MCP guard (I6), write plan.json
     consult.py guard <run directory>                           dependency check and browser guard, or a cached
                                                                pass (guard.py, C3); before any app process
+    consult.py app-start <run directory>                       the supervisor starts the app from the target and
+                                                               holds the owned proxy port and the app job
+                                                               (supervisor.py, C4); once, never retried
     consult.py run <run directory>                             re-check, require a current guard pass for the
-                                                               exact fingerprint, hold the owned proxy port,
-                                                               start Codex
+                                                               exact fingerprint and the running supervisor with
+                                                               the app started, start Codex (a watcher stops it
+                                                               if the supervisor dies, U10)
     consult.py wait|continue <run directory>                   as for a consultation
-    consult.py collect <run directory>                         reply (UI schema, redacted); keeps run directory
-                                                               and target for reproduction and evidence
-    consult.py finish <run directory>                          remove the target (C1), then the run directory
-    consult.py stop|cleanup <run directory>                    ADR 0004 stop path, then the target (C1)
+    consult.py collect <run directory>                         reply (UI schema, redacted); keeps run directory,
+                                                               target and app for reproduction and evidence
+    consult.py finish <run directory>                          end Codex's processes (I15) and the app (I8), then
+                                                               remove the target (C1), then the run directory
+    consult.py stop|cleanup <run directory>                    ADR 0004 stop path, then as finish
 
 Request (unknown keys are refused):
 
@@ -21,18 +26,29 @@ Request (unknown keys are refused):
      "models": [<exactly one model choice, as for a consultation>],
      "target_root": {"path": "<absolute directory>", "confirmed_by_user": true},
      "app": ["127.0.0.1:5173", "localhost:8000", "[::1]:3000"], "headed": false, "scope": "<text, may be empty>",
+     "commands": {"install": [...], "start": [...]} (supervisor.py; checked here, required by app-start),
      optional target fields: "target_name", "env_files", "exclude_names", "limits" (target.py)}
 
-Lifecycle (I12, the part that exists without the supervisor of C4): prepare creates the run directory through
+Ending (C4, I3, I12, I15): every path that removes the target after the app may have started (a launch check, a Codex
+failure, collect of a failed or stopped run, finish, stop, cleanup) goes through end_and_remove: Codex's processes
+are confirmed ended first (I15), then the supervisor ends registered repro jobs and the app job and confirms "ended"
+(no active process, no listener on an app port) and only then releases the owned proxy port; the target is removed
+only after all of that is confirmed, otherwise everything is kept and the result is `stop_unconfirmed` with the
+processes (PID, image) and the location. Results report each item (codex, browser, app) as confirmed ended or not.
+
+Lifecycle (I12): prepare creates the run directory through
 C1's handle-based path (never through a link, never inside the project), the target, two recorded sibling
 directories under the confirmed root (`mcp-temp` for the MCP's TEMP/TMP, `mcp-cwd` for its working directory,
 `mcp-profile` for Chrome's profile, seeded with the preferences that block downloads, U16) and `<target>/evidence` (a top-level `evidence` entry copied from the project is replaced by it; deeper entries of
-that name stay). Any failure after the target
-exists removes it at once (target.remove: record, identity, no link followed), then the run directory. `run`
-re-verifies the plan, the target's identity and the guard, holds the owned proxy port while Codex runs, and
-removes the target at once when Codex fails by itself. `collect` returns the reply and keeps everything after a
-completed run; after a failed or stopped run it removes the target before answering and the run directory after
-delivery. `finish` requires the Codex tree finished or its stop confirmed (`stop_unconfirmed` keeps everything).
+that name stay); the owned proxy port is never one of the app ports. Any failure after the target
+exists removes it at once (target.remove: record, identity, no link followed), then the run directory. `app-start`
+hands the app to the supervisor, which holds the owned proxy port from then on (C2 follow-up 1). `run` records its
+identity in `started`, re-verifies the plan, the target's identity, the guard and the supervisor, and ends the app
+and removes the target at once when Codex fails by itself. `collect` returns the reply and keeps everything after a
+completed run; after a failed or stopped run it ends the app and removes the target before answering and the run
+directory after delivery. `finish` requires the Codex tree finished or its stop confirmed (`stop_unconfirmed` keeps
+everything). A `run` that died during its launch checks (its recorded identity no longer runs) no longer blocks
+finish and cleanup: they record its failure and proceed (C2 follow-up 7).
 
 Every exercise operation refuses on non-Windows hosts (target.require_windows). Nothing here reads an
 environment variable (I13).
@@ -49,12 +65,15 @@ import browser
 from policy import PLACEHOLDERS, definition_files
 from redact import redact_value
 from replies import classify
+import supervisor
 import target as disposable_target
+import winjob
 
 INTERACTION, KIND, REPLY_SCHEMA = "exercise", "ui", "ui-exercise"
 EVIDENCE = "evidence"
 TARGET_FIELDS = ("project", "target_root", "target_name", "env_files", "exclude_names", "limits")
-REQUEST_FIELDS = frozenset({"interaction", "kind", "prompt", "models", "app", "headed", "scope", *TARGET_FIELDS})
+REQUEST_FIELDS = frozenset({"interaction", "kind", "prompt", "models", "app", "headed", "scope", "commands",
+                            *TARGET_FIELDS})
 HOSTS = ("127.0.0.1", "localhost", "[::1]")
 ORIGIN = re.compile(r"^(?P<host>\[[^\]]*\]|[^:\[\]]*):(?P<port>[^:]*)$")
 MAX_APP_PORTS = 8
@@ -130,6 +149,8 @@ def validate(request):
         if isinstance(item, str) and re.split(r"[\\/]", item)[0].casefold() == EVIDENCE:
             raise ValueError(f"Env file {item!r} lies under the project's top-level {EVIDENCE} directory, which the "
                              "exercise replaces with its own evidence directory")
+    if "commands" in request:
+        supervisor.validate_commands(request["commands"])  # working directories inside the target only (C4)
     target_request = {key: request[key] for key in TARGET_FIELDS if key in request}
     return {"app": origins, "headed": request["headed"], "scope": scope, "target_request": target_request}
 
@@ -360,6 +381,16 @@ def _template(spec_or_request, node, entry):
     return browser.template(spec_or_request["app"], spec_or_request["headed"], node, entry)
 
 
+def owned_proxy_port(app):
+    """A free loopback port that is none of the app ports (C2 follow-up 1: a collision is never used)."""
+    ports = supervisor.app_ports(app)
+    for _ in range(20):
+        port = browser.free_loopback_port()
+        if port not in ports:
+            return port
+    raise ValueError("No free owned proxy port apart from the app ports was found; exercise not started")
+
+
 def prepare(cli, request, base):
     require_platform()
     spec = validate(request)
@@ -396,7 +427,7 @@ def prepare(cli, request, base):
         cwd = disposable_target.create_sibling(directory, "mcp-cwd")
         profile = disposable_target.create_sibling(directory, "mcp-profile")
         evidence, replaced = make_evidence(directory)
-        port = browser.free_loopback_port()
+        port = owned_proxy_port(spec["app"])
         nonce = browser.NAME_PREFIX + secrets.token_hex(8)
         definition = browser.instantiate(template, nonce, created["target"], cwd, temp, port, profile)
         if browser.never_listed(definition, profile):
@@ -443,10 +474,166 @@ def fail_at_once(cli, directory, plan, reason):
     return result
 
 
+# --- app start (C4, I8) ---
+
+def app_start(cli, directory):
+    """Start the app under the supervisor, after a current guard pass and before `run`. Attempted once: a failed
+    or stopped start is never retried. A failure ends every started process and removes the target; no Codex."""
+    directory, plan = cli.plan_at(directory)
+    if not is_plan(plan):
+        raise ValueError("app-start applies to exercises only")
+    require_platform()
+    if (directory / "started").exists():
+        raise ValueError("The exercise run has started; the app starts before it")
+    commands = plan["request"].get("commands")
+    if not commands:
+        raise ValueError("The exercise request carries no app start commands (commands.start); app-start needs them")
+    timing = dict(supervisor.TIMING)
+    try:
+        with open(directory / supervisor.CONFIG, "x", encoding="utf-8") as config:
+            config.write(json.dumps({"timing": timing}))
+    except FileExistsError:
+        raise ValueError("app-start was already attempted for this exercise; it is never retried") from None
+    try:
+        supervisor.validate_commands(commands)
+        import guard
+        guard.require_current_pass(cli, directory, plan)  # I7: no app start without a current guard pass
+        verify_entries(directory, plan)
+        if plan["browser"]["proxy_port"] in supervisor.app_ports(plan["summary"]["app"]):
+            raise ValueError("The owned proxy port is one of the app ports; refused")
+        identity, process = supervisor.launch(directory)
+    except Exception as error:
+        reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: the app start failed"
+        return fail_at_once(cli, directory, plan, reason + "; no app process was started, no Codex")
+    current = supervisor.wait_started(directory, identity, process, timing, len(commands.get("install", [])))
+    state = current.get("state")
+    base = {"directory": str(directory), "supervisor": {"pid": identity["pid"], "breakaway": identity["breakaway"]}}
+    if state == "app_started":
+        return {"state": "app_started", **base, "app": plan["summary"]["app"], "job": current.get("job"),
+                "proxy_port": plan["browser"]["proxy_port"],
+                "apps": [{k: a.get(k) for k in ("kind", "index", "pid", "command", "exit_code")}
+                         for a in current.get("apps", [])], "output": supervisor.output(directory, current)}
+    if state == "ended":  # a stop request ended the start; that stop removes the target and reports
+        return {"state": "stopped", **base, "reason": "The exercise was stopped during the app start; no Codex",
+                "output": supervisor.output(directory, current)}
+    if state in ("end_unconfirmed", "stop_unconfirmed"):
+        return {"state": "stop_unconfirmed", **base, "retained_location": str(directory),
+                "reason": "The app start could not be ended with confirmation; nothing is removed",
+                "output": supervisor.output(directory, current)}
+    failure = current.get("failure") or {}
+    reason = (failure.get("reason") or "The app start failed") + "; no Codex call was made"
+    outcome = end_and_remove(cli, directory, plan)
+    result = {"state": "failed", **base, "reason": reason, "output": failure.get("output", []),
+              "ended": outcome["ended"], "target_removed": outcome["target_removed"]}
+    if not outcome["target_removed"]:
+        return {**result, "retained_location": outcome.get("retained_location", str(directory)),
+                "removal": outcome.get("removal")}
+    try:
+        cli.remove_run(directory, plan)
+    except OSError:
+        result["retained_location"] = str(directory)
+    return result
+
+
+# --- ending (I3 precondition, I8, I12, I15) ---
+
+def end_exercise(cli, directory, plan):
+    """Codex's processes confirmed ended first (I15); only then the supervisor ends repro jobs and the app job and
+    releases the proxy (I8, I12). Never raises: an unexpected error is an unconfirmed end."""
+    try:
+        exclude = supervisor.own_processes(directory) | {os.getpid()}
+        browser_state = supervisor.codex_processes_ended(directory, plan, exclude)
+    except Exception as error:
+        browser_state = {"confirmed": False, "alive": [], "reason": f"{type(error).__name__}: {error}"}
+    if not browser_state["confirmed"]:
+        return {"confirmed": False, "browser": browser_state,
+                "app": {"confirmed": False, "state": "kept: the browser processes are not confirmed ended",
+                        "proxy_released": False}}
+    try:
+        app = supervisor.end_app(directory, plan)
+    except Exception as error:
+        app = {"confirmed": False, "state": f"{type(error).__name__}: {error}", "proxy_released": False}
+    return {"confirmed": app["confirmed"], "browser": browser_state, "app": app}
+
+
+def _unconfirmed(ended):
+    parts = []
+    alive = ended["browser"].get("alive") or []
+    if alive:
+        parts.append("browser processes still running: " +
+                     ", ".join(f"PID {p['pid']} ({p.get('image')})" for p in alive))
+    elif not ended["browser"]["confirmed"]:
+        parts.append(f"the browser processes could not be checked ({ended['browser'].get('reason')})")
+    app = ended["app"]
+    if ended["browser"]["confirmed"] and not app["confirmed"]:
+        bits = [f"PID {p}" for p in app.get("alive", [])] + list(app.get("listeners", []))
+        parts.append("the app is not confirmed ended" + (f" ({', '.join(bits)})" if bits else
+                                                          f" ({app.get('state') or app.get('how')})"))
+    return "Not confirmed ended: " + "; ".join(parts) + "; nothing is removed"
+
+
+def end_and_remove(cli, directory, plan):
+    """End everything the exercise started, then remove the target; the target stays unless all is confirmed."""
+    ended = end_exercise(cli, directory, plan)
+    if not ended["confirmed"]:
+        return {"state": "stop_unconfirmed", "ended": ended, "target_removed": False,
+                "target_kept": target_kept(directory), "retained_location": str(directory),
+                "reason": _unconfirmed(ended)}
+    removal = remove_target(directory)
+    result = {"state": "removed" if removal["state"] == "removed" else "failed", "ended": ended,
+              "target_removed": removal["state"] == "removed", "removal": removal}
+    if removal["state"] != "removed":
+        result["retained_location"] = removal.get("retained_location", str(directory))
+        result["reason"] = removal.get("reason")
+    return result
+
+
+def removal_note(outcome):
+    if outcome["target_removed"]:
+        return "; the target was removed"
+    if outcome["state"] == "stop_unconfirmed":
+        return f"; {outcome['reason']}; retained: {outcome['retained_location']}"
+    return f"; the target could not be removed ({outcome.get('reason')}); retained: {outcome['retained_location']}"
+
+
+def _supervisor_died(cli, directory, plan):
+    """U10: the supervisor died while `run` runs: stop the Codex tree through the ADR 0004 path at once (once Codex
+    has a recorded identity, so the stop can be verified)."""
+    def stop(armed):
+        try:
+            (directory / "supervisor-died").touch()
+        except OSError:
+            pass
+        child = directory / "0"
+        while armed.is_set():
+            if (child / "pid").exists() or cli.result_for(child) is not None:
+                try:
+                    cli.stop_codex(directory, plan, "stop", "none")
+                except Exception:
+                    pass
+                return
+            time.sleep(0.1)
+    return stop
+
+
 # --- run ---
 
+def claim_run(cli, directory):
+    """Never replay an execution attempt; `started` holds the run call's identity (PID + creation time) from the
+    moment it exists (written aside, then renamed into place: a rename never replaces an existing file here)."""
+    me = winjob.current_identity()
+    temporary = directory / f"started.{me['pid']}.tmp"
+    temporary.write_text(json.dumps(me), encoding="utf-8")
+    try:
+        os.rename(temporary, directory / "started")
+    except FileExistsError:
+        temporary.unlink(missing_ok=True)
+        raise cli.AlreadyAttempted() from None
+
+
 def before_launch(cli, directory, plan):
-    """Every check again, then the owned proxy port; any failure removes the target at once (raised as ValueError)."""
+    """Every check again, then the running supervisor (which holds the owned proxy port and the app) and its
+    watcher; any failure ends the app and removes the target at once (raised as ValueError)."""
     try:
         b, request = plan["browser"], plan["request"]
         node, entry = browser.node_executable(cli.which), browser.entry_script()
@@ -466,16 +653,12 @@ def before_launch(cli, directory, plan):
         # I7: a current browser guard pass (at most 12 h old) for this exercise's exact fingerprint, recomputed now.
         import guard
         guard.require_current_pass(cli, directory, plan)
-        return browser.ProxyHolder(b["proxy_port"])
+        # C4: the supervisor runs with the app started and holds the owned proxy port; `run` no longer holds it.
+        identity = supervisor.require_started(directory, plan)
+        return supervisor.Watcher(identity, _supervisor_died(cli, directory, plan))
     except Exception as error:
         reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise launch check failed"
-        removal = remove_target(directory)
-        if removal["state"] != "removed":
-            reason += f"; the target could not be removed ({removal.get('reason')}); retained: " \
-                      f"{removal.get('retained_location', directory)}"
-        else:
-            reason += "; the target was removed"
-        raise ValueError(reason) from None
+        raise ValueError(reason + removal_note(end_and_remove(cli, directory, plan))) from None
 
 
 def codex_argv(plan, model, child, constants, schema):
@@ -489,12 +672,13 @@ def codex_argv(plan, model, child, constants, schema):
             "--output-schema", Path(schema).as_posix(), "-o", (child / "last-message.json").as_posix(), "-"]
 
 
-def after_run(cli, directory):
-    """Codex failed by itself (no stop involved): the target goes at once. A stop removes it in `stop`."""
+def after_run(cli, directory, plan):
+    """Codex failed by itself (no stop involved): the app is ended and the target goes at once. A stop does both
+    in `stop`."""
     child = directory / "0"
     result, stopped = cli.result_for(child), cli.stop_status(child)
     if result is not None and stopped is None and result.get("exit_code") != 0:
-        return remove_target(directory)
+        return end_and_remove(cli, directory, plan)
     return None
 
 
@@ -557,22 +741,48 @@ def collect(cli, directory, plan, after_delivery):
 
 
 def _settle(cli, directory, plan, output, after_delivery):
-    """Failed or stopped: the target is removed before answering, the run directory after delivery."""
-    removal = remove_target(directory)
-    if removal["state"] != "removed":
-        return {**output, "target_removed": False, "retained_location": removal.get("retained_location", str(directory)),
-                "removal": removal}
+    """Failed or stopped: the app is ended and the target removed before answering, the run directory after
+    delivery; anything not confirmed ended keeps everything."""
+    outcome = end_and_remove(cli, directory, plan)
+    if not outcome["target_removed"]:
+        return {**output, "target_removed": False, "ended": outcome["ended"],
+                "retained_location": outcome.get("retained_location", str(directory)),
+                **({"removal": outcome["removal"]} if "removal" in outcome else {"reason": outcome["reason"]})}
     after_delivery.append(lambda: cli.remove_run(directory, plan))
-    return {**output, "target_removed": True}
+    return {**output, "target_removed": True, "ended": outcome["ended"]}
 
 
 def refuse_while_launching(directory):
     """`run` has started its checks (`started`) but has neither started Codex (`clock.json`) nor failed
-    (`execution-error.json`): it may be about to launch Codex on the target, so nothing is removed now."""
+    (`execution-error.json`): while that run call still runs it may be about to launch Codex on the target, so
+    nothing is removed. A run call that no longer runs (its identity in `started`) will never launch: its failure is
+    recorded and the caller proceeds (C2 follow-up 7)."""
     if (directory / "started").exists() and not (directory / "clock.json").exists() and \
             not (directory / "execution-error.json").exists():
+        if supervisor.run_alive(directory) is False:
+            receipt = {"state": "failed", "reason": "The exercise run ended before Codex started (its process is "
+                                                    "gone); no automatic retry"}
+            try:
+                with open(directory / "execution-error.json", "x", encoding="utf-8") as written:
+                    written.write(json.dumps(receipt))
+            except FileExistsError:
+                pass
+            return
         raise ValueError("The exercise run is starting (its launch checks have begun and Codex has not started yet); "
                          "nothing is removed. Wait for `run` to return, then collect or finish")
+
+
+def _codex_state(cli, directory):
+    """The Codex tree as finish and cleanup see it: not started, finished, stopped, or unconfirmed / running."""
+    child = directory / "0"
+    if not (directory / "clock.json").exists():
+        return {"state": "not_started", "confirmed": True}
+    stopped = cli.stop_status(child)
+    if stopped is not None and not stopped.get("confirmed"):
+        return {"state": "stop_unconfirmed", "confirmed": False}
+    if cli.result_for(child) is None:
+        return {"state": "running", "confirmed": False}
+    return {"state": "stopped" if stopped else "finished", "confirmed": True}
 
 
 def finish(cli, directory):
@@ -581,18 +791,64 @@ def finish(cli, directory):
         raise ValueError("finish applies to exercises only; use cleanup for a consultation")
     require_platform()
     refuse_while_launching(directory)
-    child = directory / "0"
-    if (directory / "clock.json").exists():
-        stopped = cli.stop_status(child)
-        if stopped is not None and not stopped.get("confirmed"):
-            return {"state": "stop_unconfirmed", "directory": str(directory), "retained_location": str(directory),
-                    "target_kept": target_kept(directory),
-                    "reason": "The Codex process-tree stop is unconfirmed; nothing is removed"}
-        if cli.result_for(child) is None:
-            raise ValueError("Codex is still running; stop the exercise first")
-    removal = remove_target(directory)
-    if removal["state"] != "removed":
-        return {"state": "failed", "directory": str(directory), "reason": removal.get("reason"),
+    codex = _codex_state(cli, directory)
+    if codex["state"] == "stop_unconfirmed":
+        return {"state": "stop_unconfirmed", "directory": str(directory), "retained_location": str(directory),
+                "target_kept": target_kept(directory), "ended": {"codex": codex},
+                "reason": "The Codex process-tree stop is unconfirmed; nothing is removed"}
+    if codex["state"] == "running":
+        raise ValueError("Codex is still running; stop the exercise first")
+    outcome = end_and_remove(cli, directory, plan)
+    ended = {"codex": codex, **outcome["ended"]}
+    if outcome["state"] == "stop_unconfirmed":
+        return {"state": "stop_unconfirmed", "directory": str(directory), "retained_location": str(directory),
+                "target_kept": outcome["target_kept"], "ended": ended, "reason": outcome["reason"]}
+    if not outcome["target_removed"]:
+        removal = outcome["removal"]
+        return {"state": "failed", "directory": str(directory), "reason": removal.get("reason"), "ended": ended,
                 "retained_location": removal.get("retained_location", str(directory)), "removal": removal}
     cli.remove_run(directory, plan)
-    return {"state": "finished", "target_removed": True, "removed": removal.get("removed", [])}
+    return {"state": "finished", "target_removed": True, "removed": outcome["removal"].get("removed", []),
+            "ended": ended}
+
+
+def stop(cli, directory, plan, recommended, offered, only_children=None):
+    """ADR 0004 stop path for the Codex tree (when it was launched), then, once that is confirmed, I15's processes,
+    the app and the target (end_and_remove). Each item is reported as confirmed ended or not."""
+    require_platform()
+    refuse_while_launching(directory)
+    if (directory / "0").exists():
+        result = cli.stop_codex(directory, plan, recommended, offered, only_children)
+        codex = {"state": result["state"], "confirmed": result["state"] in ("stopped", "finished")}
+    else:  # Codex never launched (e.g. a stop during the app start)
+        result = {"state": "stopped", "directory": str(directory), "stops": []}
+        codex = {"state": "not_started", "confirmed": True}
+    if not codex["confirmed"]:
+        kept = "kept until the Codex stop is confirmed"
+        return {**result, "target_kept": target_kept(directory),
+                "ended": {"codex": codex, "browser": {"confirmed": False, "state": kept},
+                          "app": {"confirmed": False, "state": kept}}}
+    outcome = end_and_remove(cli, directory, plan)
+    result = {**result, "ended": {"codex": codex, **outcome["ended"]}, "target_removed": outcome["target_removed"]}
+    if outcome["state"] == "stop_unconfirmed":
+        return {**result, "state": "stop_unconfirmed", "target_kept": outcome["target_kept"],
+                "retained_location": outcome["retained_location"], "reason": outcome["reason"]}
+    if not outcome["target_removed"]:
+        result["retained_location"] = outcome["retained_location"]
+        result["removal"] = outcome["removal"]
+    return result
+
+
+def cleanup(cli, directory, plan):
+    """consult.py cleanup of an exercise: end everything (as finish), remove the target; {"state": "removed",
+    "ended"} when the run directory may go, else the failure result."""
+    outcome = end_and_remove(cli, directory, plan)
+    if outcome["state"] == "stop_unconfirmed":
+        return {"state": "failed", "reason": f"Cannot clean up: {outcome['reason']}", "ended": outcome["ended"],
+                "retained_location": outcome["retained_location"]}
+    if not outcome["target_removed"]:
+        removal = outcome["removal"]
+        return {"state": "failed", "reason": f"Cannot clean up: the target was kept ({removal.get('reason')})",
+                "retained_location": removal.get("retained_location", str(directory)), "removal": removal,
+                "ended": outcome["ended"]}
+    return {"state": "removed", "ended": outcome["ended"]}

@@ -1382,6 +1382,8 @@ def guard_exercise(cli, directory, state_dir=None):
     exercise.require_platform()
     if (directory / "started").exists():
         raise ValueError("The exercise run has started; the guard runs before it")
+    if (directory / "supervisor-config.json").exists():
+        raise ValueError("The app start was attempted for this exercise; the guard runs before any app process")
     try:
         template, facts, fp = current_fingerprint(cli, plan, state_dir)
         hit = cached_pass(state_dir, fp)
