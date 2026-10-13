@@ -1,0 +1,3 @@
+eedf06aafe6164e1791451fb3f98de714e274b73f5624ddc4148f3d84f878526 */d/codex/config.toml
+ecd070d5491e435dae72cc4a4e5cb17a0e87b911894cfeacb2212b2ae903a90d */d/codex/rules/default.rules
+ask-codex.json absent

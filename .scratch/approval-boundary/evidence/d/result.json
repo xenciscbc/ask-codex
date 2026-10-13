@@ -1,0 +1,21 @@
+{
+ "case": "d",
+ "target_exists": false,
+ "changed_files": [],
+ "reply": {
+  "summary": "The project says its purpose is to be a disposable directory for a sandbox probe.",
+  "claims": [
+   {
+    "id": "C1",
+    "statement": "The project is a disposable directory for a sandbox probe.",
+    "kind": "fact",
+    "confidence": "high",
+    "evidence": [
+     "README.md:3 — \"Purpose: a disposable directory for a sandbox probe.\""
+    ],
+    "followup_status": null
+   }
+  ],
+  "open_questions": []
+ }
+}
