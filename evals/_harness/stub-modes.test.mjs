@@ -28,7 +28,24 @@ const run = (args, cwd, env = {}, input = "prompt") =>
   spawnSync(python, [stub, ...args], { cwd, input, env: { ...process.env, ...env }, encoding: "utf-8" });
 const execArgs = (dir, out) => ["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-C", dir,
   "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="high"', "--disable", "apps", "-c", "agents.enabled=false",
-  "-c", "features.multi_agent_v2.enabled=false", "--output-schema", "schema.json", "-o", out, "-"];
+  "-c", "features.multi_agent_v2.enabled=false", "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"',
+  "--output-schema", "schema.json", "-o", out, "-"];
+// Probe p9 (approval-boundary ticket 01, recorded 2026-10-13 against codex-cli 0.159.3): the 1.3.2 consultation
+// command line without the approval pins. With approvals_reviewer = "auto_review" in the user's config, Codex
+// requested escalation out of -s read-only, the request was approved and the file was written. Kept verbatim;
+// the replay below swaps only the -C directory and the -o path for the test's own.
+const P9_ARGV = [
+  "codex", "exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json",
+  "-C", "D:/tmp/exercise-probe/ws",
+  "-m", "gpt-5.6-sol",
+  "-c", 'model_reasoning_effort="medium"',
+  "-c", 'mcp_servers={"blender"={command="ask-codex-disabled",enabled=false},"comfyui"={command="ask-codex-disabled",enabled=false},"cua_repl"={command="ask-codex-disabled",enabled=false},"node_repl"={command="ask-codex-disabled",enabled=false},"pencil"={command="ask-codex-disabled",enabled=false}}',
+  "--disable", "apps",
+  "-c", "agents.enabled=false",
+  "-c", "features.multi_agent_v2.enabled=false",
+  "-o", "D:\\work_data\\project\\skill\\ask-codex\\.scratch\\exercise-skills\\evidence\\p9-last.txt",
+  "-",
+];
 
 try {
   // Missing CLI: every command exits 127, nothing else happens.
@@ -180,6 +197,49 @@ try {
     });
     check(probe2 === "exec: unexpected -c features.enable_fanout=true\nexec: unexpected -c features.multi_agent_v2.enabled=true\n"
       + "exec: missing -c features.multi_agent_v2.enabled=false\n", `agents: the live probe 2 argv is refused (got ${JSON.stringify(probe2)})`);
+  }
+  {
+    // No approval lifts a consultation out of read-only (approval-boundary ticket 01): every exec carries exactly one
+    // -c approval_policy="never" and exactly one -c approvals_reviewer="user"; neither belongs on mcp list.
+    const violations = (dir) => fs.readFileSync(path.join(dir, ".stub", "violations.log"), "utf-8").replace(/\r\n/g, "\n");
+    const variant = (name, edit) => {
+      const dir = project(`approval-${name}`, {});
+      run(edit(execArgs(dir, path.join(dir, "last.json"))), dir);
+      return violations(dir);
+    };
+    const present = variant("present", (a) => a);
+    check(present === "", `approval: the consultation argv (each pin once) records no violation (got ${JSON.stringify(present)})`);
+    for (const [tag, PIN, others] of [
+      ["approval_policy", 'approval_policy="never"', ['approval_policy="on-request"',
+        "approval_policy={granular={sandbox_approval=true,rules=true,mcp_elicitations=true,request_permissions=true}}"]],
+      ["approvals_reviewer", 'approvals_reviewer="user"', ['approvals_reviewer="auto_review"']]]) {
+      const at = (args) => args.indexOf(PIN);
+      const missing = variant(`${tag}-missing`, (a) => { a.splice(at(a) - 1, 2); return a; });
+      check(missing === `exec: missing -c ${PIN}\n`, `${tag}: an argv without the pin is a violation (got ${JSON.stringify(missing)})`);
+      others.forEach((other, k) => {
+        const got = variant(`${tag}-other-${k}`, (a) => { a[at(a)] = other; return a; });
+        check(got === `exec: unexpected -c ${other}\nexec: missing -c ${PIN}\n`,
+          `${tag}: ${other} is a violation and leaves the pin missing (got ${JSON.stringify(got)})`);
+        // A second value of the same key next to the pin (the last -c would win in Codex) is refused too.
+        const extra = variant(`${tag}-extra-${k}`, (a) => { a.splice(at(a) + 1, 0, "-c", other); return a; });
+        check(extra === `exec: unexpected -c ${other}\n`, `${tag}: ${other} next to the pin is a violation (got ${JSON.stringify(extra)})`);
+      });
+      const twice = variant(`${tag}-twice`, (a) => { a.splice(at(a) + 1, 0, "-c", PIN); return a; });
+      check(twice === `exec: repeated -c ${PIN}\n`, `${tag}: the pin twice is a violation (got ${JSON.stringify(twice)})`);
+      const dir = project(`${tag}-mcp-list`, {});
+      run(["mcp", "list", "--json", "-c", PIN], dir);
+      check(violations(dir) === `mcp list: unexpected -c ${PIN}\n`, `${tag}: the pin on mcp list is an unexpected -c (got ${JSON.stringify(violations(dir))})`);
+    }
+    // Probe p9's recorded argv, replayed: the full violation set it produces.
+    const dir = project("approval-p9", {});
+    const p9 = P9_ARGV.slice(1);
+    p9[p9.indexOf("-C") + 1] = dir;
+    p9[p9.indexOf("-o") + 1] = path.join(dir, "last.txt");
+    run(p9, dir);
+    const got = violations(dir);
+    check(got === "exec: missing --output-schema\n"
+      + 'exec: missing -c approval_policy="never"\nexec: missing -c approvals_reviewer="user"\n',
+      `approval: the p9 argv is refused (got ${JSON.stringify(got)})`);
   }
   // Per-call reply sequence (discuss ticket 01): numbered records, per-entry replies, last entry reused.
   {

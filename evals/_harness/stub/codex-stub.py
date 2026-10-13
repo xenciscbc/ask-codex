@@ -18,8 +18,11 @@ an optional `-m <slug>`, prompt on stdin (`-`), `--disable apps`, one effort ove
 MCP disable overrides, and exactly one each of `-c agents.enabled=false` and
 `-c features.multi_agent_v2.enabled=false` (child agents off, subagent-boundary / ADR 0008; the second
 because an explicitly enabled multi_agent_v2 feature in config defeats the first): for either pair, missing,
-any other value or a repeat is a violation. `mcp list` accepts only MCP disable overrides, so either pair
-there is an unexpected -c.
+any other value or a repeat is a violation. Likewise exactly one each of `-c approval_policy="never"` and
+`-c approvals_reviewer="user"` (approval-boundary ticket 01: a resolved auto_review reviewer drops exec's
+headless Never and approved an escalation out of read-only): missing, any other value (`"on-request"`, a
+granular table, `"auto_review"`) or a repeat is a violation. `mcp list` accepts only MCP disable overrides,
+so any of these pairs there is an unexpected -c.
 
 `exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
 unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
@@ -110,6 +113,9 @@ SLUG_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 # agents.enabled=false alone lost to `[features.multi_agent_v2] enabled = true` in the user's or a trusted
 # project's config (S2 live probe 2), so the feature is switched off on the command line too.
 AGENTS_OFF = ("agents.enabled=false", "features.multi_agent_v2.enabled=false")
+# No approval can lift a consultation out of read-only (approval-boundary ticket 01): exec only, each exactly once.
+APPROVAL_PINS = ('approval_policy="never"', 'approvals_reviewer="user"')
+PINNED = AGENTS_OFF + APPROVAL_PINS
 
 
 # Root-table disable entries: enabled=false, optionally with a placeholder transport.
@@ -300,14 +306,14 @@ def exec_(args):
     for flag in opts["repeated"]:
         problems.append(f"repeated {flag}")
     effort_seen = False
-    agents_off = dict.fromkeys(AGENTS_OFF, 0)
+    pinned = dict.fromkeys(PINNED, 0)
     disabled_seen = set()
     for kv in opts["c"]:
         if EFFORT_RE.match(kv):
             effort_seen = True
             continue
-        if kv in agents_off:
-            agents_off[kv] += 1
+        if kv in pinned:
+            pinned[kv] += 1
             continue
         names = disabled_names(kv)
         if names is None:
@@ -319,8 +325,8 @@ def exec_(args):
                 disabled_seen.add(name)
     if not effort_seen:
         problems.append("missing effort override")
-    # Any other value of either key is an unexpected -c above, and leaves its required pair missing here.
-    for kv, seen in agents_off.items():
+    # Any other value of a pinned key is an unexpected -c above, and leaves its required pair missing here.
+    for kv, seen in pinned.items():
         if seen == 0:
             problems.append(f"missing -c {kv}")
         elif seen > 1:

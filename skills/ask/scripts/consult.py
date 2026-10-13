@@ -210,8 +210,12 @@ def run(directory):
             # servers (ADR 0008, .scratch/subagent-boundary). The feature switch too, because an enabled
             # multi_agent_v2 feature in the user's or a trusted project's config defeats agents.enabled=false
             # alone; command-line -c outranks config files. Constant, so not in overrides or summary.
+            # No approval lifts the run out of read-only: a resolved auto_review reviewer drops exec's
+            # headless Never and approved an escalation (.scratch/approval-boundary ticket 01, probe p9), and
+            # a trusted project's config can set either key, so both are pinned here; constant as above.
             args += ["-c", f'model_reasoning_effort="{model["effort"]}"', *overrides,
                      "--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
+                     "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"',
                      "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
                      "-o", (child / "last-message.json").as_posix(), "-"]
             invocation = invocation_for([bash(), (HERE / "run.sh").as_posix(), child.as_posix(), "--", *args], child / "argv")
