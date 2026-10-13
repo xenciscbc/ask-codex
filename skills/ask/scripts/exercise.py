@@ -50,8 +50,9 @@ directory after delivery. `finish` requires the Codex tree finished or its stop 
 everything). A `run` that died during its launch checks (its recorded identity no longer runs) no longer blocks
 finish and cleanup: they record its failure and proceed (C2 follow-up 7).
 
-Every exercise operation refuses on non-Windows hosts (target.require_windows). Nothing here reads an
-environment variable (I13).
+Every exercise operation refuses on non-Windows hosts (target.require_windows), unless the eval fake is the
+platform layer (platform_layer.py, I13: selected by its stub check only). Nothing here reads an environment
+variable (I13).
 """
 import json
 import ntpath
@@ -90,7 +91,12 @@ def is_plan(plan):
 
 
 def require_platform():
-    disposable_target.require_windows()
+    """The platform gate (I13): the real layer refuses on non-Windows hosts; the eval fake, selected only by
+    platform_layer's stub check (never by an environment variable), replaces the whole layer, this gate included.
+    A `.eval-stub/` that fails the check refuses every exercise operation."""
+    import platform_layer
+    if not platform_layer.select():
+        disposable_target.require_windows()
 
 
 # --- request validation (before anything is written or any Codex command runs) ---

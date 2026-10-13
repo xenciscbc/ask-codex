@@ -593,23 +593,115 @@ def cleanup(directory):
     return {"state": "cleaned"}
 
 
+# Exercise-only actions: the platform layer is selected (I13) before any of its functions is looked up.
+EXERCISE_ACTIONS = ("target-create", "target-remove", "guard", "browser-install", "exercise-deps", "app-start",
+                    "finish")
+# --result <file>: an operation that can outlast one Bash tool call (the guard's browser checks, app-start's install
+# and start commands, ending and removing a target) runs in the background and leaves its result in a file that
+# `wait-result` waits on in the foreground (C4 review item 30). Seconds after which a pending result is reported lost.
+RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800}
+MAX_RESULT_WAIT = 60
+
+
+def result_bound(action, path):
+    if action != "app-start":
+        return RESULT_BOUNDS[action]
+    import supervisor
+    try:
+        _, plan = plan_at(path)
+        installs = len((plan["request"].get("commands") or {}).get("install") or [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        installs = 0
+    timing = supervisor.TIMING
+    # app-start's own wait (supervisor.wait_started) plus its ending and removal on a failure.
+    return int(timing["install_timeout"] * installs + timing["start_timeout"] + 60 + 300)
+
+
+def start_result(path, action, bound):
+    """Create the result file exclusively with a pending record before the operation does anything."""
+    path = Path(path)
+    if not path.is_absolute() or not path.parent.is_dir():
+        raise ValueError("--result needs an absolute file path in an existing directory")
+    pending = {"state": "pending", "action": action, "started_at": time.time(), "bound_seconds": bound}
+    try:
+        with path.open("x", encoding="utf-8") as written:
+            written.write(json.dumps(pending))
+    except FileExistsError:
+        raise ValueError("The --result file already exists; give a new file name") from None
+
+
+def finish_result(path, result):
+    path = Path(path)
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(result, ensure_ascii=True), encoding="utf-8")
+    temporary.replace(path)
+
+
+def wait_result(path, seconds):
+    """Block in the foreground until the result file holds the operation's result, or `seconds` pass."""
+    if not 0 <= seconds <= MAX_RESULT_WAIT:
+        raise ValueError(f"Wait duration must be between 0 and {MAX_RESULT_WAIT} seconds")
+    path = Path(path)
+    if not path.is_absolute():
+        raise ValueError("wait-result needs the absolute path given to --result")
+    end = time.monotonic() + seconds
+    while True:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            value = None
+        except (OSError, ValueError):
+            value = {"state": "pending"}  # being written
+        if isinstance(value, dict) and value.get("state") != "pending":
+            return value
+        if isinstance(value, dict) and type(value.get("started_at")) in (int, float) and \
+                type(value.get("bound_seconds")) in (int, float) and \
+                time.time() - value["started_at"] > value["bound_seconds"]:
+            return {"state": "lost", "action": value.get("action"),
+                    "elapsed_seconds": round(time.time() - value["started_at"]),
+                    "reason": f"The {value.get('action')} operation recorded no result within "
+                              f"{value['bound_seconds']} seconds; its process may have ended without one"}
+        if time.monotonic() >= end:
+            if value is None:
+                return {"state": "missing", "reason": "No result file yet: the operation has not started"}
+            started = value.get("started_at")
+            return {"state": "pending", "action": value.get("action"),
+                    "elapsed_seconds": round(time.time() - started) if type(started) in (int, float) else None}
+        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
                                            "finish", "target-create", "target-remove", "guard", "browser-install",
-                                           "exercise-deps", "app-start"))
+                                           "exercise-deps", "app-start", "wait-result"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
     parser.add_argument("--recommended", choices=("wait", "stop"), default="stop")
     parser.add_argument("--offered", choices=("wait,stop", "none"), default="none")
+    parser.add_argument("--result")
     args = parser.parse_args()
     if args.path is None and args.action not in ("browser-install", "exercise-deps"):
         parser.error(f"{args.action} needs a path")
+    if args.result is not None and args.action not in (*RESULT_BOUNDS, "app-start"):
+        parser.error(f"--result applies to {', '.join((*RESULT_BOUNDS, 'app-start'))} only")
+    if args.result is not None:
+        try:
+            start_result(args.result, args.action, result_bound(args.action, args.path))
+        except (ValueError, OSError) as error:
+            print(json.dumps({"state": "failed", "reason": str(error) if isinstance(error, ValueError) else
+                              f"{type(error).__name__}: the result file could not be created; nothing was done"},
+                             ensure_ascii=True), flush=True)
+            return 1
     record_failure = True
     after_delivery = []
     try:
-        if args.action == "resolve":
+        if args.action in EXERCISE_ACTIONS:
+            exercise.require_platform()  # I13: the platform layer, before any of it is looked up
+        if args.action == "wait-result":
+            result = wait_result(args.path, args.seconds)
+        elif args.action == "resolve":
             result = model_selection.resolve(read_json(args.path))
         elif args.action == "prepare":
             result = prepare(args.path, args.base)
@@ -656,6 +748,11 @@ def main():
                 write_json(directory / "execution-error.json", result)
         except (OSError, ValueError, KeyError):
             pass
+    if args.result is not None:
+        try:
+            finish_result(args.result, result)
+        except OSError:
+            pass  # stdout still carries the result; wait-result reports the operation lost after its bound
     try:
         # ASCII-safe JSON preserves Unicode values even on Windows legacy code pages.
         print(json.dumps(result, ensure_ascii=True), flush=True)

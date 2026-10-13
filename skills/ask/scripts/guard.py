@@ -2,7 +2,8 @@
 
     consult.py guard <run directory>      dependency check, then the browser guard or a cached pass (before any app
                                           process starts); a failure removes the target at once (I12)
-    consult.py exercise-deps              dependency check only (for /ask-codex:setup)
+    consult.py exercise-deps              dependency check only (for /ask-codex:setup, and for /ask-codex:ui before
+                                          its confirmation: it names the tested codex-cli version, N10)
 
 Dependency check: the pinned package install verifies against the committed manifest (install.py); node.exe is
 found on the run environment's PATH; Chrome stable is the executable chrome-devtools-mcp's launcher picks with the
@@ -60,6 +61,8 @@ HERE = Path(__file__).resolve().parent
 PAGE_DIR = HERE.parent / "guard-page"
 CACHE_SECONDS = 12 * 3600
 MIN_CHROME_MAJOR = 149
+# The codex-cli whose per-tool browser approval probe B1 measured (plan N10, A8); a release reruns B1 to raise it.
+TESTED_CODEX_CLI = "codex-cli 0.159.3"
 PROBE = "ask-codex-guard"
 CHROME_SUFFIX = r"Google\Chrome\Application\chrome.exe"
 # chrome-devtools-mcp 1.10.1 (puppeteer, channel stable on Windows): these variables in this order, then fixed
@@ -1412,9 +1415,15 @@ def guard_exercise(cli, directory, state_dir=None):
             "guard": {"source": record["source"], "passed_at": record["passed_at"], "fingerprint": fp}}
 
 
+def codex_notice(version):
+    """N10: whether the installed codex-cli is the version the browser-tool approval was measured on (probe B1)."""
+    return {"codex_tested_version": TESTED_CODEX_CLI, "codex_untested": str(version).strip() != TESTED_CODEX_CLI}
+
+
 def dependency_report(cli, state_dir=None):
-    """consult.py exercise-deps: node, Chrome (>= 149) and the verified package; no browser is started."""
+    """consult.py exercise-deps: node, Chrome (>= 149) and the verified package; no browser is started. Also names
+    the codex-cli version the plugin was tested with (N10: the skill tells the user and asks when it differs)."""
     disposable_target.require_windows()
     neutral = Path(cli.shell_environment().get("SYSTEMROOT", r"C:\Windows"))
     facts = dependencies(cli, neutral, neutral, state_dir)
-    return {"state": "ready", **facts}
+    return {"state": "ready", **facts, **codex_notice(facts["codex_version"])}

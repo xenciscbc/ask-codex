@@ -1,0 +1,9 @@
+---
+type: tool_used
+tool: Bash
+input_match: 'consult\.py'
+min: 0
+max: 0
+---
+
+No script call (not even resolve).

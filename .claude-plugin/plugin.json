@@ -18,6 +18,7 @@
     "./skills/ask",
     "./skills/setup",
     "./skills/review",
-    "./skills/discuss"
+    "./skills/discuss",
+    "./skills/ui"
   ]
 }

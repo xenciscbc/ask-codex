@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: ui-not-model-invocable
+tags: [ui-skill]
+context:
+  scaffold_script: scaffold.sh
+  add_dirs: [stubbin]

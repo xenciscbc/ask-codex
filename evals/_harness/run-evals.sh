@@ -16,6 +16,13 @@
 # places it can see: the plugin root (`.eval-stub/`) and each case's `stubbin/`
 # (granted to the run via `context.add_dirs`). Both are git-ignored.
 #
+# Exercises (plan .scratch/exercise-skills I13): the eval fake of the exercise platform layer
+# (`stub/exercise_platform_fake.py`) is copied into `.eval-stub/` only; consult.py loads it
+# from there only while `codex` resolves to `.eval-stub/codex` and reports the stub version.
+# Two-turn UI cases resume a session that loaded the ui skill: gen_ui_history.py writes
+# each `evals/ui-*/stubbin/history.jsonl` from its `history.template.jsonl` and the current
+# SKILL.md. Both are removed with the stub directories.
+#
 # Environment:
 #   RUN_EVALS_TMPDIR      parent for this run's temp dir (use when the default temp
 #                         drive cannot host the eval sandbox, e.g. a RAM disk)
@@ -63,6 +70,9 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+cp "$stub_src/exercise_platform_fake.py" "$repo/.eval-stub/"
+python3 "$repo/evals/_harness/gen_ui_history.py" "$repo"
 
 # The eval harness creates its sandboxes under the temp dir; point it at this run's dir.
 export TMPDIR="$run_tmp/tmp"
