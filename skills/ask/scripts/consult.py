@@ -14,6 +14,7 @@ import time
 import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
+import target as disposable_target
 
 HERE = Path(__file__).resolve().parent
 NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -482,7 +483,8 @@ def cleanup(directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup"))
+    parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
+                                           "target-create", "target-remove"))
     parser.add_argument("path")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
@@ -504,6 +506,11 @@ def main():
             result = collect(args.path, after_delivery)
         elif args.action == "stop":
             result = stop(args.path, args.recommended, args.offered)
+        elif args.action == "target-create":
+            # Disposable target of an exercise (target.py; Windows only).
+            result = disposable_target.create_command(args.path, args.base)
+        elif args.action == "target-remove":
+            result = disposable_target.remove_command(args.path)
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:
