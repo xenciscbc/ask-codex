@@ -2,11 +2,11 @@
 
 **What to build:** a machine can be prepared for exercises from `/ask-codex:setup`, both READMEs describe the UI exercise honestly, ADR 0009 is accepted, the version is raised to the next minor release, and one real UI exercise against a throwaway web app with a frontend and a backend passes before tagging (spec: "Setup", "Pinned version policy", "Version", "Testing Decisions — Seam 4"; user stories 61, 67–70; memory: live-verify before release, live testing on this machine).
 
-**Blocked by:** 06 — Claims are verified and the exercise's data stays isolated.
+**Blocked by:** 08 — Attach mode: exercise the user's running dev servers without a copy.
 
 **Status:** ready-for-agent
 
-**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C7 (invariants listed there).
+**Plan:** acceptance amended by `../plan.md` rev 6, claim C7 (invariants listed there).
 
 - [ ] `/ask-codex:setup` checks the exercise dependencies: Chrome version, node, and that the pinned MCP starts.
 - [ ] README (English and Traditional Chinese) describes `/ask-codex:ui`, its boundary and its difference from Codex's own browsers; states that the browser's network limit is Chrome configuration plus an MCP allowlist, not an OS sandbox; states that Codex's shell can reach every localhost service in all ask-codex skills (P2, P8c); lists what was not verified (DNS prefetch, headed mode).

@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Amended by `plan.md` rev 5.1 (user-approved 2026-10-13): where this spec and the plan differ, the plan's invariants I1–I13 and claim acceptance govern. Corrected below: user story 31, "Disposable target lifecycle", "Browser server definition", "Guard cache", "Claude's side", "Stop and cleanup", Seam 2, Out of Scope (Windows only).
+Amended by `plan.md` rev 6 (user-approved 2026-10-13; rev 5.1 before it): where this spec and the plan differ, the plan's invariants I1–I16 and claim acceptance (C1–C8) govern. Corrected below: user story 31, "Disposable target lifecycle", "Browser server definition", "Guard cache", "Claude's side", "Stop and cleanup", Seam 2, Out of Scope (Windows only).
 
 Blocked by: None — `.scratch/approval-boundary/issues/01` was released in 1.3.3 (user decision Q33, 2026-10-13; tag v1.3.3 on 1ca7a0f). The UI exercise command line pins the same constants as consultations since 1.3.3: `approval_policy="never"`, `approvals_reviewer="user"` and `--ignore-rules` (ADR 0010).
 
@@ -17,6 +17,8 @@ Evidence for the technical decisions: `probe-results.md` (P1–P7b, P9; 2026-10-
 Doing that by hand today means giving Codex a browser on my real machine pointed at my real project and data. A browser driven over MCP runs outside Codex's sandbox with full network access, the browser MCPs' own URL restrictions are documented as "not a security boundary", and a URL allowlist alone lets Service Worker requests through (probe P7). Codex's built-in browsers (the Chrome extension, the in-app browser) exist only in the Codex desktop app and cannot be used from `codex exec`.
 
 ## Solution
+
+Attach mode (plan rev 6, U6, I14, ticket 08): at each exercise the user may instead attach to the frontend and backend they already run from the project — no copy, install or app start; the skill never starts or stops those servers; Codex still works from a new empty disposable directory; disclosures per plan I16. The copy described below is copy mode.
 
 A new user-only skill, `/ask-codex:ui [model tokens] [--headed] [scope or focus]`, built on a new interaction, the **exercise**.
 
@@ -41,7 +43,7 @@ Invocation and authority
 
 Disposable target
 
-11. As a user, I want every exercise to run on a newly created, empty directory holding a copy of my project, so that Codex can never change my working tree.
+11. As a user, I want every exercise to run on a newly created, empty directory holding a copy of my project (copy mode; in attach mode, by my choice, on my running dev servers — plan I14), so that Codex can never change my working tree.
 12. As a user, I want the location of that directory to come only from my own instructions, my memory or what I say in the conversation, so that a repository cannot steer where the exercise writes.
 13. As a user, I want a location suggested by the project's own instructions to be offered to me for confirmation rather than used, so that repository text can only suggest.
 14. As a user, I want Claude to ask me for a location when no user-level source names one, so that nothing is guessed.
@@ -163,7 +165,7 @@ A good test exercises external behavior through the highest existing seam and ne
 - Untrusted repositories: the app's commands run as the user outside any sandbox (plan U1, residual risk).
 - Codex's own browsers (Chrome extension, in-app browser): desktop-app only, not usable from `codex exec`.
 - Operating my everyday Chrome profile or any signed-in session.
-- Targets other than localhost services started from the disposable target.
+- Targets other than localhost services started from the disposable target (copy mode; attach mode targets the user's running dev servers, plan I14).
 - Parallel exercises or more than one model.
 - Fixing anything the exercise finds.
 - Blocking Codex's shell from other localhost services (not possible with Codex configuration on this machine, P8c; README note only).

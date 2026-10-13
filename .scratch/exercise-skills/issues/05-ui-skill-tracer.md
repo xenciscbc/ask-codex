@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C5 (invariants listed there).
+**Plan:** acceptance amended by `../plan.md` rev 6, claim C5 (invariants listed there).
 
 - [ ] The skill cannot be invoked by the model; the plugin's skill list includes it; `ask` has a pointer line naming `/ask-codex:ui` for UI testing requests.
 - [ ] Model tokens resolve through `ask`'s resolve step with the consultation effort floor; two model tokens are refused before anything starts.

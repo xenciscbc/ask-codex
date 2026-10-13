@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Plan:** acceptance amended by `../plan.md` rev 5.1, claim C1 (invariants listed there).
+**Plan:** acceptance amended by `../plan.md` rev 6, claim C1 (invariants listed there).
 
 Security-critical (it decides what the exercise writes and what it deletes): needs a security review and an approved plan before any change.
 
