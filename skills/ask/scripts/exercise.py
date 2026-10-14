@@ -16,6 +16,10 @@ An exercise request (interaction `exercise`, kind `ui`) goes through the same CL
     consult.py wait|continue <run directory>                   as for a consultation
     consult.py collect <run directory>                         reply (UI schema, redacted); keeps run directory,
                                                                target and app for reproduction and evidence
+    consult.py repro <run directory> <steps file>             one bug claim's steps in the restricted browser
+                                                               (repro.py, C6, I10); after collect, before finish
+    consult.py evidence-keep <run directory> <keep file>      chosen evidence moved out of the target (repro.py,
+                                                               C6, I9); before finish
     consult.py finish <run directory>                          end Codex's processes (I15) and the app (I8), then
                                                                remove the target (C1), then the run directory
     consult.py stop|cleanup <run directory>                    ADR 0004 stop path, then as finish

@@ -199,7 +199,9 @@ class PlatformLayerTest(unittest.TestCase):
         self.assertEqual(refused["state"], "failed", refused)
         self.assertIn("Windows only", refused["reason"])
         self.assertEqual(self.runs(), [])
-        for args in (("exercise-deps",), ("guard", self.base), ("app-start", self.base), ("finish", self.base)):
+        for args in (("exercise-deps",), ("guard", self.base), ("app-start", self.base), ("finish", self.base),
+                     ("repro", self.base, self.requests / "steps.json"),
+                     ("evidence-keep", self.base, self.requests / "keep.json")):
             with self.subTest(action=args[0]):
                 result = self.call(*args, platform="linux")
                 self.assertEqual(result["state"], "failed", result)
@@ -308,6 +310,62 @@ class PlatformLayerTest(unittest.TestCase):
         self.assertEqual(self.runs(), [])
         self.assertEqual(self.exec_count(), 0)
 
+    def test_the_fake_covers_reproduction_and_evidence_keep_through_the_production_steps(self):
+        # C6, I13: Claude evals in WSL run `repro` and `evidence-keep` on the fake. The fake replaces only the browser
+        # session and the move; validation, the origin check, element resolution, step order and redaction are
+        # production code and run here.
+        stub = self.stage()
+        self.path_with(stub)
+        scenario = json.loads((self.project / ".stub/scenario.json").read_text(encoding="utf-8"))
+        browser = {"snapshot": "uid=1_0 RootWebArea \"Save\"\n  uid=1_1 textbox \"Name\"\n  uid=1_2 button \"Save\"",
+                   "reveals": {"Save": "Saved!"},
+                   "console": "msgid=1 [log] Authorization: Bearer abcdefghijklmnop1234567890"}
+        write(self.project / ".stub/scenario.json", json.dumps({**scenario, "exercise_fake": {"browser": browser}}))
+        directory = Path(self.prepare(platform="linux")["directory"])
+        steps = write(self.requests / "steps.json", json.dumps({"claim": "C1", "steps": [
+            {"action": "navigate", "url": "http://127.0.0.1:15173/"}, {"action": "take_snapshot"}]}))
+        early = self.call("repro", directory, steps, platform="linux")
+        self.assertEqual(early["state"], "failed", early)
+        self.assertIn("after collect", early["reason"])
+        self.assertEqual(self.call("guard", directory, platform="linux")["state"], "guard_passed")
+        self.assertEqual(self.call("app-start", directory, platform="linux")["state"], "app_started")
+        self.assertEqual(self.call("run", directory, platform="linux")["state"], "finished")
+        self.assertEqual(self.call("collect", directory, platform="linux")["state"], "collected")
+        evidence = Path(json.loads((directory / "plan.json").read_text(encoding="utf-8"))["browser"]["evidence"])
+        reproduced = write(self.requests / "reproduced.json", json.dumps({"claim": "C1", "steps": [
+            {"action": "navigate", "url": "http://127.0.0.1:15173/"},
+            {"action": "fill", "element": {"role": "textbox", "name": "Name"}, "value": ""},
+            {"action": "click", "element": {"text": "Save"}},
+            {"action": "wait_for", "text": "Saved!"}, {"action": "list_console_messages"}]}))
+        result = self.call("repro", directory, reproduced, platform="linux")
+        self.assertEqual(result["state"], "completed", result)
+        self.assertNotIn("abcdefghijklmnop1234567890", json.dumps(result), "I11: the repro side redacts")
+        self.assertEqual(sorted(result["screenshots"] + [result["result_file"]]), sorted(os.listdir(evidence)))
+        missing = write(self.requests / "missing.json", json.dumps({"claim": "C2", "steps": [
+            {"action": "navigate", "url": "http://127.0.0.1:15173/"},
+            {"action": "click", "element": {"role": "button", "name": "Delete"}},
+            {"action": "wait_for", "text": "Deleted"}]}))
+        result = self.call("repro", directory, missing, platform="linux")
+        self.assertEqual([s["status"] for s in result["steps"]], ["passed", "failed", "not run"], result)
+        outside = write(self.requests / "outside.json", json.dumps({"claim": "C3", "steps": [
+            {"action": "outside", "step": "Remove-Item server.py"},
+            {"action": "navigate", "url": "https://attacker.example/"}]}))
+        result = self.call("repro", directory, outside, platform="linux")
+        self.assertEqual(result["state"], "refused", result)
+        self.assertTrue((Path(json.loads((directory / "plan.json").read_text("utf-8"))["summary"]["target"])
+                         / "server.py").is_file())
+        kept = self.root / "kept"
+        kept.mkdir()
+        shot = sorted(n for n in os.listdir(evidence) if n.endswith(".png"))[0]
+        keep = write(self.requests / "keep.json", json.dumps({"destination": str(kept), "files": [shot, "../plan.json"]}))
+        result = self.call("evidence-keep", directory, keep, platform="linux")
+        self.assertEqual(result["state"], "partly_kept", result)
+        self.assertEqual(len(os.listdir(kept)), 1)
+        self.assertFalse((evidence / shot).exists())
+        self.assertEqual(self.call("finish", directory, platform="linux")["state"], "finished")
+        self.assertEqual(self.exec_count(), 1)
+        self.assertEqual(self.violations(), "")
+
     def test_the_fake_copy_never_opens_a_non_regular_entry(self):
         # Phase B: every eval that reached prepare failed with PermissionError, because the fake copied the sandbox's
         # /dev/null masks. The fake copies regular files and directories only; any other entry is not opened, not
@@ -336,7 +394,8 @@ class PlatformLayerTest(unittest.TestCase):
         self.assertIn(".eval-stub", refused["reason"])
         self.assertEqual(self.runs(), [])
         for args in (("exercise-deps",), ("guard", self.base), ("app-start", self.base), ("finish", self.base),
-                     ("target-create", self.requests / "none.json")):
+                     ("target-create", self.requests / "none.json"), ("repro", self.base, self.requests / "steps.json"),
+                     ("evidence-keep", self.base, self.requests / "keep.json")):
             with self.subTest(action=args[0], platform=platform):
                 result = self.call(*args, platform=platform)
                 self.assertEqual(result["state"], "failed", result)

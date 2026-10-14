@@ -23,12 +23,21 @@ What the fake does instead:
 - processes: nothing is started, so nothing needs ending; ending reports every item confirmed ended.
 - dependency report: node and Chrome are not looked up; the codex version is the stub's, compared with the tested
   version by guard.codex_notice (production).
+- reproduction (repro.open_session): no browser; a scripted page from `exercise_fake.browser` in the copy's
+  `.stub/scenario.json`: `snapshot` (snapshot lines; default an empty page), `texts` (text `wait_for` finds),
+  `reveals` ({"<accessible name clicked>": "<text that then appears>"}), `console` and `network` (listing texts).
+  The production code still validates the steps, checks every navigate's origin, resolves each element from the
+  latest snapshot and redacts the result; a screenshot is a placeholder file written under the evidence directory.
+- evidence move (repro.move_files): portable lstat checks (plain directories, a regular file with one link, never
+  a link), an exclusive create in the destination, then the source is deleted.
 """
+import contextlib
 import fnmatch
 import json
 import os
 from pathlib import Path
 import random
+import re
 import secrets
 import shutil
 import stat
@@ -37,6 +46,7 @@ import time
 
 import exercise
 import guard
+import repro  # noqa: F401  (the module whose names REPLACEMENTS covers)
 import supervisor
 import target
 
@@ -395,6 +405,118 @@ def run_alive(directory):
     return None  # process identities mean nothing across eval sandbox calls
 
 
+# --- reproduction (repro.open_session, repro.move_files) ---
+
+PLACEHOLDER_PNG = b"\x89PNG\r\n\x1a\n eval fake screenshot\n"
+
+
+class FakeBrowser:
+    def __init__(self, scenario, evidence):
+        self.lines = (scenario.get("snapshot") or 'uid=1_0 RootWebArea ""').splitlines()
+        self.texts = [t for t in scenario.get("texts") or [] if isinstance(t, str)]
+        self.reveals = scenario.get("reveals") if isinstance(scenario.get("reveals"), dict) else {}
+        self.console = scenario.get("console", "No console messages found.")
+        self.network = scenario.get("network", "No requests found.")
+        self.evidence = Path(evidence)
+        self.count = 0
+
+    def node(self, uid):
+        for line in self.lines:
+            match = re.match(r'^\s*uid=(\S+)(?: [^"\s]*)? ?"(.*)"', line)
+            if match and match.group(1) == uid:
+                return match.group(2)
+        return None
+
+    def tool(self, name, timeout=60, **arguments):
+        if name == "navigate_page":
+            return False, f"Successfully navigated to {arguments.get('url')}."
+        if name == "take_snapshot":
+            return False, "## Latest page snapshot\n" + "\n".join(self.lines)
+        if name in ("click", "fill", "hover", "drag"):
+            uids = [arguments[k] for k in ("uid", "from_uid", "to_uid") if k in arguments]
+            if any(self.node(uid) is None for uid in uids):
+                return True, "No such element found in the snapshot."
+            revealed = self.reveals.get(self.node(uids[0])) if name == "click" else None
+            if isinstance(revealed, str) and revealed not in self.texts:
+                self.texts.append(revealed)
+                self.count += 1
+                self.lines.append(f'  uid=9_{self.count} StaticText "{revealed}"')
+            return False, f"Successfully performed {name}."
+        if name in ("press_key", "resize_page", "handle_dialog"):
+            return False, f"Successfully performed {name}."
+        if name == "wait_for":
+            wanted = arguments.get("text") or []
+            if any(text in shown for text in wanted for shown in self.texts):
+                return False, f"Element matching one of {json.dumps(wanted)} found."
+            return True, f"Timed out after waiting {arguments.get('timeout_ms')}ms for {json.dumps(wanted)}."
+        if name == "take_screenshot":
+            path = Path(str(arguments.get("filePath", "")))
+            if not path.is_absolute() or not _inside(path, self.evidence) or os.path.lexists(path):
+                return True, "The screenshot path is not allowed."
+            path.write_bytes(PLACEHOLDER_PNG)
+            return False, f"Saved screenshot to {path}."
+        if name == "list_console_messages":
+            return False, str(self.console)
+        if name == "list_network_requests":
+            return False, str(self.network)
+        return True, f"{name}: not found (eval fake)"
+
+
+@contextlib.contextmanager
+def open_session(cli, directory, plan, session):
+    fake = FakeBrowser(_scenario(plan["summary"]["target"]).get("browser") or {}, plan["browser"]["evidence"])
+    session.tool = fake.tool
+    session.started = True
+    try:
+        yield session
+    finally:
+        session.ended = True
+
+
+def _plain_file(path):
+    status = os.lstat(path)
+    return stat.S_ISREG(status.st_mode) and status.st_nlink == 1
+
+
+def move_files(directory, plan, items, destination):
+    if not os.path.isabs(destination) or not _plain_directory(destination):
+        raise ValueError("The destination does not exist or is not a plain directory; refused")
+    _, record = target.record_at(directory)
+    if _inside(destination, record["root"]["path"]) or _inside(destination, directory):
+        raise ValueError("The destination lies in the target, its sibling directories or the run directory; refused")
+    evidence = Path(plan["browser"]["evidence"])
+    if not _plain_directory(evidence):
+        raise ValueError("The evidence directory is not a plain directory; refused")
+    outcomes = []
+    for reference, parts, name in items:
+        outcome, path, reason = {"reference": reference, "kept": False}, evidence, None
+        for part in parts[:-1]:
+            path = path / part
+            if not _plain_directory(path):
+                reason = f"{part}: not a plain directory under evidence (a link is never followed)"
+                break
+        if reason is None:
+            path = path / parts[-1]
+            if not os.path.lexists(path):
+                reason = "not found under the evidence directory"
+            elif not _plain_file(path):
+                reason = "a link or not a regular file with one link; refused"
+        if reason is None:
+            created = Path(destination) / name
+            try:
+                written = os.open(created, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            except OSError as error:
+                reason = f"the destination file {name} could not be created (nothing is overwritten): {error}"
+            else:
+                with os.fdopen(written, "wb") as sink, open(path, "rb") as source:
+                    shutil.copyfileobj(source, sink)
+                os.unlink(path)
+                outcomes.append({**outcome, "kept": True, "path": str(created)})
+                continue
+        outcomes.append({**outcome, "reason": reason})
+    return outcomes
+
+
 REPLACEMENTS = {
     "target": {"create": create, "create_sibling": create_sibling, "remove": remove},
     "exercise": {"_new_run_directory": new_run_directory, "make_evidence": make_evidence,
@@ -406,4 +528,5 @@ REPLACEMENTS = {
     "supervisor": {"launch": launch, "wait_started": wait_started, "require_started": require_started,
                    "Watcher": Watcher, "own_processes": own_processes, "codex_processes_ended": codex_processes_ended,
                    "end_app": end_app, "run_alive": run_alive},
+    "repro": {"open_session": open_session, "move_files": move_files},
 }

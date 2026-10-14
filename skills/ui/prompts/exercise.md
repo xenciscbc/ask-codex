@@ -25,7 +25,7 @@ You are exercising a running web app for another AI coding agent (Claude). You o
 
 Reply only with JSON matching the provided schema:
 
-- `claims`: each a single observation: `category` (`bug` = the app does something wrong, `layout` = a visual or responsive problem, `ux` = a usability suggestion), `statement`, `steps` (exact reproduction steps in order: the URL, each element by its role and visible name, each input; required for a bug), `expected`, `actual`, `viewport` (`WIDTHxHEIGHT`, or null when it does not matter), `evidence` (screenshot file names under `evidence`, console messages or network entries), `confidence` (`high`/`medium`/`low`) and `in_scope`.
+- `claims`: each a single observation: `category` (`bug` = the app does something wrong, `layout` = a visual or responsive problem, `ux` = a usability suggestion), `statement`, `steps` (exact reproduction steps in order: the URL, each element by its role and visible name, each input, each step one browser action on the app, because Claude reproduces each bug in the same browser; required for a bug), `expected`, `actual`, `viewport` (`WIDTHxHEIGHT`, or null when it does not matter), `evidence` (screenshot file names under `evidence`, console messages or network entries), `confidence` (`high`/`medium`/`low`) and `in_scope`.
 - `out_of_scope`: observations outside the scope, listed and not tested.
 - `coverage`: the `pages`, `flows` and `viewports` you actually exercised.
 

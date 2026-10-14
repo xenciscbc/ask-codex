@@ -17,6 +17,7 @@ import install as browser_install
 import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
+import repro as reproduction
 import target as disposable_target
 
 HERE = Path(__file__).resolve().parent
@@ -595,11 +596,13 @@ def cleanup(directory):
 
 # Exercise-only actions: the platform layer is selected (I13) before any of its functions is looked up.
 EXERCISE_ACTIONS = ("target-create", "target-remove", "guard", "browser-install", "exercise-deps", "app-start",
-                    "finish")
+                    "finish", "repro", "evidence-keep")
+# Actions that take a second file argument: repro <run directory> <steps file>, evidence-keep <run directory> <keep file>.
+SECOND_ARGUMENT = ("repro", "evidence-keep")
 # --result <file>: an operation that can outlast one Bash tool call (the guard's browser checks, app-start's install
 # and start commands, ending and removing a target) runs in the background and leaves its result in a file that
 # `wait-result` waits on in the foreground (C4 review item 30). Seconds after which a pending result is reported lost.
-RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800}
+RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800, "repro": 900}
 MAX_RESULT_WAIT = 60
 
 
@@ -674,8 +677,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
                                            "finish", "target-create", "target-remove", "guard", "browser-install",
-                                           "exercise-deps", "app-start", "wait-result"))
+                                           "exercise-deps", "app-start", "wait-result", "repro", "evidence-keep"))
     parser.add_argument("path", nargs="?")
+    parser.add_argument("file", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
     parser.add_argument("--recommended", choices=("wait", "stop"), default="stop")
@@ -684,6 +688,9 @@ def main():
     args = parser.parse_args()
     if args.path is None and args.action not in ("browser-install", "exercise-deps"):
         parser.error(f"{args.action} needs a path")
+    if (args.file is None) == (args.action in SECOND_ARGUMENT):
+        parser.error(f"{args.action} takes a run directory and a file" if args.action in SECOND_ARGUMENT else
+                     f"{args.action} takes one path")
     if args.result is not None and args.action not in (*RESULT_BOUNDS, "app-start"):
         parser.error(f"--result applies to {', '.join((*RESULT_BOUNDS, 'app-start'))} only")
     if args.result is not None:
@@ -731,6 +738,12 @@ def main():
             result = browser_install.install(cli())
         elif args.action == "exercise-deps":
             result = exercise_guard.dependency_report(cli())
+        elif args.action == "repro":
+            # One reproduction of a bug claim in the exercise's restricted browser (repro.py, C6, I10).
+            result = reproduction.repro(cli(), args.path, args.file)
+        elif args.action == "evidence-keep":
+            # Chosen evidence moved out of the target before finish (repro.py, C6, I9).
+            result = reproduction.keep(cli(), args.path, args.file)
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A whole exercise after the confirmation (history): the stub's reply has a bug with a token in it, a layout and a UX claim, an out-of-scope claim and an out-of-scope observation.
+# A whole exercise after the confirmation (history): the stub's reply has a bug with a token in it (reproduced on the fake's scripted page), a layout and a UX claim, an out-of-scope claim and an out-of-scope observation.
 # The fixture app (signup demo) is never started: in the eval sandbox the exercise platform layer is the eval fake
 # (evals/_harness/stub/exercise_platform_fake.py, plan I13). The stub records go to this workspace's .stub/
 # (`records`), never into the disposable copy.
@@ -81,6 +81,14 @@ EOF
 cat > .stub/scenario.json <<'EOF'
 {
   "records": "__RECORDS__",
+  "exercise_fake": {
+    "browser": {
+      "snapshot": "uid=1_0 RootWebArea \"Sign up\" url=\"http://127.0.0.1:15173/signup.html\"\n  uid=1_1 heading \"Create your account\" level=\"1\"\n  uid=1_2 form\n    uid=1_3 StaticText \"Email \"\n    uid=1_4 textbox \"Email\"\n    uid=1_5 StaticText \"Password \"\n    uid=1_6 textbox \"Password\"\n    uid=1_7 button \"Sign up\"",
+      "reveals": {
+        "Sign up": "Welcome!"
+      }
+    }
+  },
   "exec": {
     "reply": {
       "claims": [

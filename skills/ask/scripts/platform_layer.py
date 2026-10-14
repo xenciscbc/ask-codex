@@ -1,7 +1,8 @@
 """Which platform layer an exercise operation uses (plan `.scratch/exercise-skills/plan.md` I13, R2-1, R2-2, N-1).
 
 The exercise's platform layer is everything that needs Windows: the platform gate, the disposable target and its
-sibling directories, the guard, the supervisor and the process checks. Production uses the real layer and refuses
+sibling directories, the guard, the supervisor and the process checks, the reproduction's browser session and the
+evidence move (C6). Production uses the real layer and refuses
 on every other platform. Claude evals run in WSL, where none of it can run; there the whole layer, gate included,
 is replaced by an eval fake. The fake is selected by no environment variable. It is loaded only when all of this
 holds, checked on every selection:
@@ -20,7 +21,8 @@ that process (CLI calls are short-lived), so real and fake pieces never mix.
 
 What the fake leaves to production code: request validation, the lifecycle and its state checks, the browser server
 definition (I5) and the MCP guard against the stub Codex (I6), the Codex launch, wait, stop, collect with
-redaction (I11), and finish's ordering.
+redaction (I11), finish's ordering, and the reproduction's step validation, origin check, element resolution, step
+order and redaction (I10, I11) and the evidence references' checks (I9).
 """
 import importlib.util
 import os
@@ -41,6 +43,7 @@ REPLACED = {
     "guard": ("guard_exercise", "require_current_pass", "dependency_report"),
     "supervisor": ("launch", "wait_started", "require_started", "Watcher", "own_processes", "codex_processes_ended",
                    "end_app", "run_alive"),
+    "repro": ("open_session", "move_files"),
 }
 
 _installed = None  # the fake module once installed in this process
