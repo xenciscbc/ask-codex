@@ -41,6 +41,37 @@ sys.argv[0] = script
 runpy.run_path(script, run_name="__main__")
 """
 
+# The eval sandbox (bubblewrap) masks project paths such as `.mcp.json` or `.gitconfig` by binding /dev/null onto
+# them: lstat shows a character device and opening it fails with EACCES (nodev mount). Neither a device node nor a
+# FIFO can be made on Windows, so this bootstrap patches the subprocess's own os.lstat and open() for one path: lstat
+# reports a character device and any open() of it raises PermissionError, as in the sandbox.
+DENIED_BOOTSTRAP = r"""
+import builtins, os, stat, sys
+denied = os.path.normcase(os.path.abspath(sys.argv.pop(3)))
+real_lstat, real_open = os.lstat, builtins.open
+
+
+def is_denied(path):
+    try:
+        return os.path.normcase(os.path.abspath(os.fspath(path))) == denied
+    except TypeError:
+        return False
+
+
+def lstat(path, *args, **kwargs):
+    result = real_lstat(path, *args, **kwargs)
+    return os.stat_result((stat.S_IFCHR | 0o666,) + tuple(result)[1:]) if is_denied(path) else result
+
+
+def open_denied(file, *args, **kwargs):
+    if not isinstance(file, int) and is_denied(file):
+        raise PermissionError(13, "Permission denied", str(file))
+    return real_open(file, *args, **kwargs)
+
+
+os.lstat, builtins.open = lstat, open_denied
+""" + BOOTSTRAP
+
 UI_REPLY = {
     "claims": [
         {"category": "bug", "statement": "Saving an empty name shows a success message.",
@@ -128,9 +159,12 @@ class PlatformLayerTest(unittest.TestCase):
     def path_with(self, *first):
         self.env["PATH"] = os.pathsep.join([*map(str, first), self.path_tail])
 
-    def call(self, *args, platform="", timeout=120, expect_json=True):
-        result = subprocess.run([sys.executable, "-c", BOOTSTRAP, str(self.cli), platform, *map(str, args)],
-                                env=self.env, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
+    def call(self, *args, platform="", timeout=120, expect_json=True, denied=None):
+        # argv[3] (the denied path) is removed by DENIED_BOOTSTRAP before BOOTSTRAP reads the script and platform.
+        head = [BOOTSTRAP, str(self.cli), platform] if denied is None else \
+            [DENIED_BOOTSTRAP, str(self.cli), platform, str(denied)]
+        result = subprocess.run([sys.executable, "-c", *head, *map(str, args)], env=self.env, capture_output=True,
+                                text=True, encoding="utf-8", timeout=timeout)
         if not expect_json:
             return result
         self.assertTrue(result.stdout.strip(), result.stderr)
@@ -140,10 +174,10 @@ class PlatformLayerTest(unittest.TestCase):
         return subprocess.Popen([sys.executable, "-c", BOOTSTRAP, str(self.cli), platform, *map(str, args)],
                                 env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    def prepare(self, request=None, platform=""):
+    def prepare(self, request=None, platform="", denied=None):
         path = self.requests / f"request-{time.monotonic_ns()}.json"
         path.write_text(json.dumps(self.request if request is None else request), encoding="utf-8")
-        return self.call("prepare", path, "--base", self.base, platform=platform)
+        return self.call("prepare", path, "--base", self.base, platform=platform, denied=denied)
 
     def runs(self):
         parent = self.base / "ask-codex"
@@ -273,6 +307,25 @@ class PlatformLayerTest(unittest.TestCase):
         self.assertIn("no Codex call was made", failed["reason"])
         self.assertEqual(self.runs(), [])
         self.assertEqual(self.exec_count(), 0)
+
+    def test_the_fake_copy_never_opens_a_non_regular_entry(self):
+        # Phase B: every eval that reached prepare failed with PermissionError, because the fake copied the sandbox's
+        # /dev/null masks. The fake copies regular files and directories only; any other entry is not opened, not
+        # copied, and listed in skipped_links (the real layer's key for entries it leaves behind unread).
+        write(self.project / ".mcp.json", "{}\n")
+        stub = self.stage()
+        self.path_with(stub)
+        ready = self.prepare(platform="linux", denied=self.project / ".mcp.json")
+        self.assertEqual(ready["state"], "prepared", ready)
+        self.assertIn(".mcp.json", ready["copy"]["skipped_links"])
+        target = Path(ready["summary"]["target"])
+        self.assertFalse(os.path.lexists(target / ".mcp.json"), "a non-regular entry is not copied")
+        self.assertTrue((target / "index.html").is_file() and (target / ".stub/scenario.json").is_file())
+        # Without the patch the same file is regular: copied, and not listed.
+        plain = self.prepare(platform="linux")
+        self.assertEqual(plain["state"], "prepared", plain)
+        self.assertNotIn(".mcp.json", plain["copy"]["skipped_links"])
+        self.assertTrue((Path(plain["summary"]["target"]) / ".mcp.json").is_file())
 
     # --- I13: `.eval-stub/` present but the stub check fails ---
 

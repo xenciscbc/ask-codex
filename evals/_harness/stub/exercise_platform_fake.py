@@ -8,8 +8,10 @@ production code: request validation, the lifecycle and its state checks, the bro
 guard against the stub Codex, the Codex launch, wait, stop, collect with redaction, finish's ordering.
 
 What the fake does instead:
-- target: copies the project (plain files and directories; links skipped and listed; the real copy's fixed names,
-  secret patterns and the request's extra names excluded unless a named env file) into a stand-in root
+- target: copies the project (regular files and directories only, decided by lstat and never followed; links and
+  every other entry — device node, FIFO, socket, e.g. the eval sandbox's /dev/null masks on paths such as
+  `.mcp.json` — are never opened, not copied, and listed in `skipped_links`; the real copy's fixed names, secret
+  patterns and the request's extra names excluded unless a named env file) into a stand-in root
   `<base>/ask-codex/eval-root.<run suffix>/<target name>`. It never writes under the requested target root and does
   not check that it exists; it refuses a root that is relative, equal to the project, inside it or containing it,
   and an unconfirmed one. The summary's `target_root` is the requested path, as the real layer reports it.
@@ -29,6 +31,7 @@ from pathlib import Path
 import random
 import secrets
 import shutil
+import stat
 import tempfile
 import time
 
@@ -138,9 +141,14 @@ def create(request, make_run_directory):
                     dirs.remove(entry)
                 continue
             destination = target_path / relative
-            if os.path.isdir(source):
+            mode = os.lstat(source).st_mode  # never followed; nothing but a regular file is ever opened
+            if stat.S_ISDIR(mode):
                 destination.mkdir()
                 copied["directories"] += 1
+            elif not stat.S_ISREG(mode):
+                skipped.append(relative)  # device node, FIFO, socket, ...: left behind unread, like a link
+                if entry in dirs:
+                    dirs.remove(entry)
             else:
                 shutil.copyfile(source, destination)
                 copied["files"] += 1
