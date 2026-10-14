@@ -15,11 +15,22 @@ Everything else, including pre-existing issues and the new feature's own securit
 
 Flow: C3–C8 and C7 each get one code review, findings recorded and dispositioned against (1)–(3); after C8 one fix pass covers only the blocking findings; then outcome verification and, for C1–C6 and C8, Adversarial review on the final state; then the user's accept-and-land.
 
+## Review flow U17 (2026-10-14, replaces U14's single fix pass)
+
+Relayed from the cc session as the cc-feather 0.25.0 candidate flow; the user confirmed it here ("套用，先補齊上游"). U15's criteria still classify findings.
+
+1. Each claim: implement → code review → outcome verification; when both pass the claim is fixed. A downstream claim proceeds only after its upstream passed both; an upstream stop stops its dependants and asks the user.
+2. A later claim fixes only its own problems and never reopens a passed claim; changing another claim's acceptance files (tests, expected values, fixtures) must be within the plan's scope, otherwise the reviewer blocks. Pre-existing problems of earlier claims go to the follow-ups, fixed by a later claim only when its acceptance needs it.
+3. After all claims: every claim's primary acceptance is rerun at the final commit; an evidenced regression is fixed by the claim that caused it (through that claim's review), an unattributable one is reviewed as an independent change. Then Adversarial review for the Security-critical claims; its findings are only recorded as the next batch.
+4. The user is asked once: land as is, or re-review which claims — listing BROKEN claims, claims fixed earlier and not re-reviewed at the final commit, and claims whose review or verification results come only from earlier sessions' records. That answer is the accept-and-land.
+
+Catch-up order: C2 (R1 fix) → C3, C4 verification → C5 (P1, B1, B2 fix) → C6 (its own blocking items, then verification) → C8 → C7 → step 3 → step 4.
+
 ## C1 — accepted (accept-and-land at acc8887)
 
 No open blocking finding. Residual risks per ticket 01 Comments (U13).
 
-## C2 — unreviewed (code review call 3: CHANGES_REQUESTED at d7b699d)
+## C2 — unreviewed (code review call 3: CHANGES_REQUESTED at d7b699d; R1 being fixed under U17 on branch fix/c2-r1, see the handoff)
 
 - **R1 (blocking under U15: fails I11 as written — "long hex or base64 runs following `token`, `key`, `secret`, `password`" — and was redacted at 5fde8c1)** — `skills/ask/scripts/redact.py` ~154-157: when a label contains a secret word that is neither one of its parts nor its ending and is joined by `:`/`=`, the label is skipped instead of falling through to the shape test, so long hex/base64 values leak: `passwordhash: 5f4dcc3b5aa765d61d8327deb882cf99`, `api_keys: 0123456789abcdef0123`, `tokens=AbCdEf0123456789abcd`, `secretvalue=…`, `apitokens: …`, `X-Auth-Tokens: …`, `keys: …` (all redacted at 5fde8c1). Fix direction: fall through to the shape test instead of `continue`; update the docstring; add these to the redacted cases while `tokens: 3`, `Keyboard: Tab…`, "the token list is empty" stay unchanged.
 - Code review call 3 non-blocking (record only; under U15 not fixed in this round): unpaired quote after a secret label hides the rest (accepted over-redaction; `monkey: banana`, `key=value` redacted); backslash-escaped quote ends a quoted value early; `token:: hunter2` leaves the value visible; camelCase flags with short/lowercase values not redacted (pre-existing); NBSP between label and value, `sk_live_…`, `AKIA…` not redacted (pre-existing, outside I11's list); timing test writes to stderr.
@@ -42,3 +53,14 @@ Evidence: `.scratch/exercise-skills/evidence/c5b-run-log.txt` (segments fd1e326 
 - **C2 R1 applies to C5 too**: C5's I11 (redaction module and collect side) rests on `redact.py`, unchanged in C5's range, so C5's I11 acceptance holds only after R1 is fixed.
 
 Non-blocking items of code review call 1 (N1–N9) and the phase B observations are in `ui-exercise-followups.md` (items 38 onward).
+
+## C6 — unverified (code review call 1: APPROVED at c947493; phase B evals; waits for C5 under U17)
+
+Evidence: `.scratch/exercise-skills/evidence/c6b-run-log.txt` (segments c6 and reg-c6 at c947493, reg-c5 at 4ed42fe); traces in `D:\tmp\ask-codex-c6b-traces\`; cost USD 34.42. New cases: ui-repro-not-reproduced 2/3, ui-repro-boundary 2/3, ui-devdata-project-file 2/3, ui-devdata-explicit-zh 3/3, ui-external-deps 3/3, ui-devdata-report 2/3. Trace audit of the security cases: steps with curl, Remove-Item and an external URL were only written as `outside` and refused, nothing ran them; dev data was never used from a project file; no tool touched the app, a browser or evidence outside `consult.py`. Review N9 (the Data bullet's absolute wording) is not escalated: the dev-data cases pass.
+
+- **E1 (blocking under U15 (3): an existing case regressed with evidence)** — ui-target-root-needed `no-exercise-ops` 3/3 at fd1e326 → 0/3 at c947493: all three runs (021Rww, 6ngnfm, do4xCj) ran `consult.py exercise-deps` before asking for the target root, against the order of work ("ask and stop"); do4xCj also wrote a resolve file into `<project>/.stub/` and deleted it ("Write nothing into the project"). Sections 1–4 did not change; the cause is to be found in C6's skill changes. Fix in C6 after C5 passes, rerun the case.
+- **E2 (to confirm when C6 is fixed)** — ui-confirm-en 03JrAf left out DS-U8 and DS-A7 (2/3; C5 3/3), possibly from the new conditional `<DS-DEV>` slot; one run only, rerun with more runs.
+- Regression (ticket 05's rule): second-opinion-with-stance and review-working-tree equal or better; targeted-check `concern-sent` 3/3 → 0/3 is the grader defect in follow-up 47 (a literal regex that misses `` `TimeoutError` `` in backticks; C5 phase B also failed it 2/3 at 1ca7a0f), not behaviour: `ask`'s SKILL.md is identical and C6 does not touch the consultation prompt. Recorded for the user's land question.
+- Known issues counted: P1 5 of 31 guard launches; B1 33 `rm -rf` of the mktemp scratch, none removing a retained location; B2 2; bare `cd` 7.
+
+Non-blocking items of code review call 1 (N1–N10) and the phase B observations are in `ui-exercise-followups.md`.
