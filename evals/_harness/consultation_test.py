@@ -14,6 +14,9 @@ SKILL = REPO / "skills/ask"
 sys.path.insert(0, str(SKILL / "scripts"))
 from replies import classify  # noqa: E402
 
+# Replies nested past Python's recursion limit (C2 outcome verification): valid and unclosed deep JSON.
+DEEP_REPLIES = ["[" * 1000 + "]" * 1000, "[" * 5000 + "]" * 5000, "[" * 5000, '{"a":' * 1000 + "1" + "}" * 1000]
+
 # Codex command line of a request without reply_schema, captured from baseline 6266c3e
 # (the stub's .stub/exec-argv.json), run directory / project path / skill directory replaced by placeholders,
 # plus one deliberate change: child agents off, `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`
@@ -730,6 +733,23 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(classify(json.dumps({"summary": "x", "claims": "wrong", "open_questions": []}))["format"], "unstructured")
         self.assertEqual(classify(json.dumps(reply), "discussion")["format"], "unstructured")
         self.assertEqual(classify("plain text", "discussion")["format"], "unstructured")
+
+    def test_classifier_treats_deeply_nested_replies_as_unstructured_without_raising(self):
+        # C2 outcome verification: a reply nested past the parser's recursion limit raised RecursionError.
+        for schema in ("consultation", "discussion"):
+            for text in DEEP_REPLIES:
+                with self.subTest(schema=schema, length=len(text), start=text[:6], end=text[-6:]):
+                    self.assertEqual(classify(text, schema), {"format": "unstructured", "content": text})
+
+    def test_deeply_nested_reply_is_collected_unstructured(self):
+        ready = self.prepare()
+        self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+        text = "[" * 5000
+        (Path(ready["directory"]) / "0" / "last-message.json").write_text(text, encoding="utf-8")
+        result = self.call("collect", ready["directory"])
+        self.assertEqual(result["state"], "collected", result)
+        self.assertEqual(result["runs"][0]["state"], "completed", result)
+        self.assertEqual(result["runs"][0]["reply"], {"format": "unstructured", "content": text})
 
     def test_discussion_schema_follows_the_structural_rules(self):
         schema = json.loads((SKILL / "discussion.schema.json").read_text(encoding="utf-8"))

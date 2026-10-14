@@ -152,6 +152,11 @@ def extended(path):
     return path if path.startswith("\\\\?\\") else "\\\\?\\" + path
 
 
+def deep_replies():
+    """Replies nested past Python's recursion limit (C2 outcome verification): valid and unclosed deep JSON."""
+    return ["[" * 1000 + "]" * 1000, "[" * 5000 + "]" * 5000, "[" * 5000, '{"a":' * 1000 + "1" + "}" * 1000]
+
+
 def write(path, text="x"):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -961,6 +966,26 @@ target._write_record = write
         self.assertEqual(self.call("finish", directory)["state"], "finished")
         self.assert_all_removed(directory)
 
+    def test_deeply_nested_reply_is_collected_unstructured_and_redacted(self):
+        # C2 outcome verification: a reply nested past the parser's recursion limit made `collect` exit with a
+        # RecursionError traceback. It is collected as an unstructured reply, redacted like any other.
+        ready, directory, plan = self.prepared()
+        self.assertEqual(self.call("run", directory)["state"], "finished")
+        self.assertEqual(self.call("wait", directory, "--seconds", "5")["state"], "finished")
+        text = "[" * 5000 + '"Run the app with --password hunter2"' + "]" * 5000
+        (directory / "0" / "last-message.json").write_text(text, encoding="utf-8")
+        collected = self.call("collect", directory)
+        self.assertEqual(collected["state"], "collected", collected)
+        run = collected["runs"][0]
+        self.assertEqual(run["state"], "completed", run)
+        self.assertEqual(run["reply"]["format"], "unstructured", run)
+        content = run["reply"]["content"]
+        self.assertNotIn("hunter2", content)
+        self.assertIn("[REDACTED]", content)
+        self.assertTrue(content.startswith("[" * 5000 + '"Run the app with --password [REDACTED]'), content[5000:5100])
+        self.assertEqual(self.call("finish", directory)["state"], "finished")
+        self.assert_all_removed(directory)
+
     # --- I13 ---
 
     def test_exercise_operations_refuse_on_other_platforms(self):
@@ -1635,6 +1660,13 @@ class UiSchemaTest(unittest.TestCase):
                 self.assertEqual(self.classify(json.dumps(value), "ui-exercise")["format"], "unstructured")
         for text in ("plain text", "[1, 2]", "null", "true", ""):
             self.assertEqual(self.classify(text, "ui-exercise")["format"], "unstructured")
+
+    def test_deeply_nested_reply_is_unstructured_without_raising(self):
+        # C2 outcome verification: a reply nested past the parser's recursion limit raised RecursionError, which
+        # crashed `collect`. Valid and unclosed deep JSON alike is unstructured, its text kept as is.
+        for text in deep_replies():
+            with self.subTest(length=len(text), start=text[:6], end=text[-6:]):
+                self.assertEqual(self.classify(text, "ui-exercise"), {"format": "unstructured", "content": text})
 
 
 if __name__ == "__main__":

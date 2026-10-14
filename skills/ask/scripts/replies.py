@@ -28,7 +28,9 @@ def classify(text, schema_name="consultation"):
     schema = json.loads((Path(__file__).resolve().parent.parent / f"{schema_name}.schema.json").read_text())
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
+        # RecursionError: JSON nested past the parser's recursion limit is unstructured like any malformed reply.
+        # `matches` needs no such guard: it descends only as deep as the schema does.
         return {"format": "unstructured", "content": text}
     if matches(value, schema):
         return {"format": "structured", "content": value}
