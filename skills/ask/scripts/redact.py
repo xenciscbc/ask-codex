@@ -4,26 +4,37 @@ Every pattern lives here, and only here; `collect` (C2) and later `repro` (C6) a
 they return. A match is replaced by MARK (labels, schemes and flag names are kept so the text stays
 readable). Redaction errs towards over-matching: a removed harmless word costs less than a leaked secret.
 
-Every match is judged on its own. Each rule below is applied to the original text, and every match it finds there (a
-scheme, a flag, a keyword, a JWT or key start, a label) is judged as if it were the only one in the text: never
-skipped because an earlier match of the same rule covers it (`--token=a/--password x`, `Bearer a/b/basic x`), and
-never hidden because another rule redacted its name (`--token=x_password: y`, `Bearer abcd/efgh/password=y`,
-`sk-…_password=y`, `--token=Bearer y`). The rules are also applied in order, each to the text the earlier ones left
-(as before; a value read up to the next whitespace then runs on past a quoted value an earlier rule replaced). A
-character is redacted when any of these redacts it: all spans are unioned and replaced once, so touching spans
-become one MARK.
+Two phases find what to redact; a character is redacted when either redacts it. All spans are unioned and replaced
+once, so touching spans become one MARK.
+- Phase (1), every match judged on its own (RULES): each rule below is applied to the original text, and every match
+  it finds there (a scheme, a flag, a keyword, a JWT or key start, a label) is judged as if it were the only one in
+  the text: never skipped because an earlier match of the same rule covers it (`--token=a/--password x`,
+  `Bearer a/b/basic x`), and never hidden because another rule redacted its name (`--token=x_password: y`,
+  `Bearer abcd/efgh/password=y`, `sk-…_password=y`, `--token=Bearer y`).
+- Phase (2), the pipeline of commit 460de71 (SEQUENTIAL_RULES): that revision's rules with its own semantics (a flag
+  inside an earlier flag's value skipped, bearer and provider matches not overlapping, a JWT start inside an earlier
+  JWT skipped), applied in the same order, each to the text the earlier ones left; there a value read up to the next
+  whitespace runs on past a quoted value an earlier rule replaced (`password=--secret="p q"x` -> `x` redacted).
+  Phase (1)'s spans never change phase (2)'s intermediate texts.
+Phase (2) reproduces 460de71's redaction exactly, so the result redacts every original character 460de71 redacted
+(and so every one d7b699d redacted, which 460de71 covers) by construction, whatever phase (1) finds. RedactionTest
+checks this against a frozen copy of 460de71 (evals/_harness/redact_oracle_460de71.py).
 
 The text is attacker-influenced (Codex's reply, app content), so every rule runs in linear time, and no rule has
 a length cap whose excess would let a secret through (exceeding any limit redacts more, never less):
 - a match starts only where the preceding character cannot continue the same run (a look-behind on the run's
   own class), so no match starts inside another's name and the names one rule finds are disjoint;
-- what a match reads after its start (blanks, the next whitespace, the closing quote, a run's end and its
-  secret-like test, a JWT segment's or a key's end) comes from tables built for the whole text in O(n) passes (each
-  on first use), so a match costs O(1) plus its own name's length, however many matches lie inside one another's
-  values (`--token=--token=…`, `token=key=key=…`, `x_eyJ…_eyJ…`); a bearer keyword reads its own blanks and token
-  with the pattern, and no two keywords read the same blanks or token characters;
-- the ordered pass keeps, for every character of each intermediate text, the original range it stands for (a MARK
-  stands for the whole span it replaced), so its spans map back to the original text in O(n) per rule.
+- phase (1): what a match reads after its start (blanks, the next whitespace, the closing quote, a run's end and
+  its secret-like test, a JWT segment's or a key's end) comes from tables built for the whole text in O(n) passes
+  (each on first use), so a match costs O(1) plus its own name's length, however many matches lie inside one
+  another's values (`--token=--token=…`, `token=key=key=…`, `x_eyJ…_eyJ…`); a bearer keyword reads its own blanks
+  and token with the pattern, and no two keywords read the same blanks or token characters;
+- phase (2): each rule reads every character at most a bounded number of times, because it skips what an earlier
+  match of its own consumed (flags, JWTs) or its matches do not overlap (bearer, provider keys, URL userinfo), and
+  the labelled rule is phase (1)'s; the pass keeps, for every character of each intermediate text, the original
+  range it stands for (a MARK stands for the whole span it replaced), so its spans map back to the original text in
+  O(n) per rule; a rule adds at most one MARK per match and its matches start at distinct characters, so each
+  intermediate text stays within a constant factor of the original's length.
 
 Rules, in the order they are applied:
 - URL userinfo: `scheme://user:pass@` and `scheme://token@` -> `scheme://[REDACTED]@` (any length)
@@ -319,8 +330,93 @@ def _labelled(text, facts):
                    if any(word in label.group().casefold() for word in _WORDS) and (span := facts.label_span(label))])
 
 
+# Phase (1): every rule on the original text, every match judged on its own.
 RULES = (("url-userinfo", _url_userinfo), ("secret-flag", _flags), ("bearer-basic", _bearer), ("jwt", _jwt),
          ("provider-key", _provider), ("labelled-value", _labelled))
+
+
+# Phase (2): the pipeline of 460de71, rule by rule with that revision's own semantics. Each function is 460de71's
+# rule with its final `_replace(text, spans)` (or `.sub`) left out: it returns the spans that rule replaced in the
+# text it is given, in order and apart (a span may be empty: `--token=""` puts MARK between the quotes). Do not
+# change what these redact; they are the floor every later revision must cover (`redact`).
+_SEQ_BEARER = re.compile(r"(?<![A-Za-z0-9_-])(?i:bearer|basic)[ \t]+([A-Za-z0-9._~+/-]{8,}=*)")
+_SEQ_SEGMENT = re.compile(r"[A-Za-z0-9_-]*")
+_SEQ_PROVIDER = re.compile(r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}"
+                           r"|github_pat_[A-Za-z0-9_]{20,}|xox[abposr]-[A-Za-z0-9-]{10,})")
+_SEQ_SPACE = re.compile(r"[ \t]*")
+
+
+def _seq_value(text, i):
+    """(start, end) of the value at i, or None: quoted -> to the closing quote, else to the end of the text;
+    unquoted -> up to the next whitespace."""
+    if i >= len(text):
+        return None
+    if text[i] in "\"'":
+        close = text.find(text[i], i + 1)
+        return (i + 1, close if close != -1 else len(text))
+    match = _NONSPACE.match(text, i)
+    return match.span() if match else None
+
+
+def _seq_url_userinfo(text):
+    return [(match.end(1), match.end() - 1) for match in _URL.finditer(text)]  # 460de71: `_URL.sub(\1 MARK @)`
+
+
+def _seq_flags(text):
+    # A flag inside an earlier flag's value is skipped (phase (1) judges it); every value is read once, so linear.
+    spans, last = [], 0
+    for flag in _FLAG.finditer(text):
+        if flag.start() < last or not _COMPONENTS.intersection(_FLAG_PARTS.split(flag.group().lstrip("-").casefold())):
+            continue
+        i = flag.end()
+        if i < len(text) and text[i] == "=":
+            start = i + 1
+        else:
+            start = _SEQ_SPACE.match(text, i).end()
+            if start == i:
+                continue  # no separator: not a flag with a value
+        span = _seq_value(text, start)
+        if span:
+            spans.append(span)
+            last = span[1]
+    return spans
+
+
+def _seq_bearer(text):
+    return [match.span(1) for match in _SEQ_BEARER.finditer(text) if _secret_like(match.group(1))]
+
+
+def _seq_jwt(text):
+    spans, skip, n = [], 0, len(text)
+    for candidate in _JWT_START.finditer(text):
+        start = candidate.start()
+        if start < skip:
+            continue
+        end1 = _SEQ_SEGMENT.match(text, start).end()
+        skip = end1  # a later candidate in this segment ends at the same place and is shorter
+        if end1 - start < 7 or end1 >= n or text[end1] != ".":
+            continue
+        end2 = _SEQ_SEGMENT.match(text, end1 + 1).end()
+        if end2 - end1 - 1 < 4 or end2 >= n or text[end2] != ".":
+            continue
+        end3 = _SEQ_SEGMENT.match(text, end2 + 1).end()
+        spans.append((start, end3))
+        skip = end3
+    return spans
+
+
+def _seq_provider(text):
+    return [match.span() for match in _SEQ_PROVIDER.finditer(text)]  # 460de71: `_SEQ_PROVIDER.sub(MARK, text)`
+
+
+def _seq_labelled(text):
+    # 460de71 already judged every label on its own; `_labelled` and `_Facts.label_span` are unchanged since then
+    # (only the width of the position tables changed), so phase (2) uses them as they are.
+    return _labelled(text, _Facts(text))
+
+
+SEQUENTIAL_RULES = (("url-userinfo", _seq_url_userinfo), ("secret-flag", _seq_flags), ("bearer-basic", _seq_bearer),
+                    ("jwt", _seq_jwt), ("provider-key", _seq_provider), ("labelled-value", _seq_labelled))
 
 
 def _mapped(starts, ends, spans):
@@ -347,35 +443,37 @@ def _advance(view, starts, ends, spans, mapped):
     return "".join(out), new_starts, new_ends
 
 
-def redact(text):
-    """The text with every token-like string replaced by MARK."""
-    if not isinstance(text, str):
-        return text
-    n = len(text)
-    # Every rule on the original text, every match judged on its own.
-    facts = _Facts(text)
-    found = [rule(text, facts) for _, rule in RULES]
-    del facts
-    spans = [span for own in found for span in own]
-    # The rules in order, each on the text the earlier ones left, its spans mapped back to the original text. Until
-    # a rule redacts something that text is the original, whose spans are already known (and already in `spans`).
-    view, starts, ends, view_facts = text, None, None, None
-    for index, ((_, rule), own) in enumerate(zip(RULES, found)):
-        if starts is None:
-            if not own:
-                continue
+def _sequential(text):
+    """Phase (2): the spans of SEQUENTIAL_RULES, each rule on the text the earlier ones left (as 460de71's `redact`
+    did), mapped back to the original text. Only these rules' own replacements shape the views."""
+    n, found = len(text), []
+    view, starts, ends = text, None, None
+    for index, (_, rule) in enumerate(SEQUENTIAL_RULES):
+        own = rule(view)
+        if not own:
+            continue
+        if starts is None:  # the view is still the original text: its spans are original ranges already
             code = _code(n + 1)
             starts, ends = array(code, range(n + 1)), array(code, range(1, n + 1))
             mapped = own
         else:
-            own = rule(view, view_facts)
-            if not own:
-                continue
             mapped = _mapped(starts, ends, own)
-            spans += mapped
-        if index + 1 < len(RULES):  # a later rule reads the new view
+        found += mapped
+        if index + 1 < len(SEQUENTIAL_RULES):  # a later rule reads the new view
             view, starts, ends = _advance(view, starts, ends, own, mapped)
-            view_facts = _Facts(view)
+    return found
+
+
+def redact(text):
+    """The text with every token-like string replaced by MARK."""
+    if not isinstance(text, str):
+        return text
+    # Phase (1): every rule on the original text, every match judged on its own.
+    facts = _Facts(text)
+    spans = [span for _, rule in RULES for span in rule(text, facts)]
+    del facts
+    # Phase (2): 460de71's pipeline, independent of phase (1). The union holds both.
+    spans += _sequential(text)
     return _replace(text, _union(spans)) if spans else text
 
 

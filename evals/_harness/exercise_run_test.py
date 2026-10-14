@@ -9,6 +9,8 @@ The stub records outside the target (`records` in its scenario), so nothing is w
 """
 import ast
 import ctypes
+import importlib.util
+import itertools
 import json
 import os
 from pathlib import Path
@@ -1390,6 +1392,91 @@ class RedactionTest(unittest.TestCase):
                         self.assertNotIn(token, result)
                 for secret in ("hunter2", "hunter 2"):
                     self.assertNotIn(secret, result)
+
+    # A value an earlier rule's pipeline step read past an already redacted quoted value (C2 R1 code review 4): 460de71
+    # redacted `hunter2` here, a1574c0 did not. Text -> the prefix kept before the first MARK.
+    BEHIND_A_QUOTE = {'--token a/--password="x y_password=--secret="p q"hunter2 end': "--token ",
+                      'Bearer abcdefgh1/basic AbCd1234.password=--secret="p q"hunter2 end': "Bearer ",
+                      'auth: Bearer abcdefgh1/basic AbCd1234.password=--secret="p q"hunter2': "auth: Bearer ",
+                      '--token a/--password="x y_token=--password="p q"hunter2 end': "--token ",
+                      '--secret a/-api-key="x y_secret=--token=\'p q\'hunter2 end': "--secret ",
+                      'Bearer abcdefgh1/basic AbCd1234.token=-api-key="p q"hunter2 end': "Bearer ",
+                      'basic abcdefgh1/Bearer AbCd1234.x_key=--password="p q"hunter2 end': "basic "}
+
+    def test_a_value_behind_an_earlier_redacted_quote_stays_redacted(self):
+        for text, kept in self.BEHIND_A_QUOTE.items():
+            with self.subTest(text=text):
+                result = self.redact(text)
+                self.assertTrue(result.startswith(kept + "[REDACTED]"), result)
+                for secret in ("hunter2", "p q", "AbCd1234"):
+                    self.assertNotIn(secret, result)
+
+    def redacted_characters(self, text):
+        """The original indices `redact(text)` replaces. `redact` replaces once, `_replace(text, spans)` with the spans
+        in order and apart (the module docstring), so that one call is recorded, and the output is rebuilt here from
+        its spans to show they are what was replaced."""
+        import redact
+        calls, replace = [], redact._replace
+
+        def recording(given, spans):
+            calls.append((given, list(spans)))
+            return replace(given, spans)
+
+        redact._replace = recording
+        try:
+            result = redact.redact(text)
+        finally:
+            redact._replace = replace
+        if not calls:
+            self.assertEqual(result, text)
+            return set()
+        self.assertEqual(len(calls), 1)
+        given, spans = calls[0]
+        self.assertEqual(given, text)
+        out, last = [], 0
+        for start, end in spans:
+            self.assertLessEqual(last, start)
+            self.assertLessEqual(start, end)
+            out += [text[last:start], "[REDACTED]"]
+            last = end
+        self.assertEqual(result, "".join(out + [text[last:]]))
+        return {index for start, end in spans for index in range(start, end)}
+
+    def test_every_character_the_460de71_pipeline_redacts_stays_redacted(self):
+        # The current module re-runs 460de71's pipeline as its phase (2), so by construction it redacts every original
+        # character that revision redacted. The test oracle is a frozen copy of 460de71's module
+        # (evals/_harness/redact_oracle_460de71.py, verbatim, never the code under test); its `covered` gives the
+        # original characters that pipeline redacts. Corpus: values glued to flags, labels and keywords inside other
+        # values, quotes opened and closed in between, and random soups of the same pieces.
+        oracle_path = Path(__file__).resolve().parent / "redact_oracle_460de71.py"
+        spec = importlib.util.spec_from_file_location("redact_oracle_460de71", oracle_path)
+        oracle = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(oracle)
+        names = ["--token", "--password", "--secret", "-api-key", "password", "y_password", "x_token", ".password",
+                 "token", "x_key", "apiKey"]
+        flags = ["--secret", "--token", "-api-key", "--password", "--port"]
+        values = ['"p q"', "'p q'", '"p q', "p", '""', "AbCd1234", '"x y']
+        tails = ["hunter2 end", "hunter2", " hunter2", "_password=hunter2", '"hunter2"', ""]
+        texts = list(self.BEHIND_A_QUOTE) + list(self.FLAG_LEAKS) + list(self.HIDDEN) + list(self.LEAKS)
+        for name, sep, flag, value, tail in itertools.product(names, ("=", ": ", " "), flags, values, tails):
+            texts.append(f"{name}{sep}{flag}={value}{tail}")
+            texts.append(f"Bearer abcdefgh1/basic AbCd1234.{name}{sep}{flag}={value}{tail}")
+            texts.append(f'--token a/--password="x y_{name}{sep}{flag} {value}{tail}')
+        pieces = ['--password="x ', "a/", '"p q"', ".password=", '--secret="', "basic ", "abcdefgh1/", "--token ",
+                  "y_password=", "AbCd1234", "hunter2 ", "--token", "--password", "-api-key", "--secret", "-k",
+                  "--port", "token", "password", "key", "_password", "x_token", "apiKey", "Bearer", "basic", "eyJ",
+                  "eyJhbGciOiJI", "eyJzdWIi", ".", "sk-", "xoxb-", "ghp_", "https://", "a://", "@", "=", ":", " ",
+                  "  ", "\t", "\n", "\"", "'", "/", ";", ",", "_", "-", "A", "1", "AbCdEfGh", "abcdefgh1",
+                  "0123456789abcdef", "hunter2", "Zm9v", "[REDACTED]", "==", "\u00a0", "x"]
+        rng = random.Random(1107)
+        for _ in range(6000):
+            texts.append("".join(rng.choice(pieces) for _ in range(rng.randint(1, 14))))
+        missing = []
+        for text in texts:
+            lost = oracle.covered(text) - self.redacted_characters(text)
+            if lost:
+                missing.append((text, "".join(text[i] for i in sorted(lost))))
+        self.assertEqual(missing[:5], [], f"{len(missing)} of {len(texts)} inputs show what 460de71 redacted")
 
     def test_ordinary_text_is_left_alone(self):
         for text in ("Basic navigation works on every page.", "The bearer of bad news is the save button.",
