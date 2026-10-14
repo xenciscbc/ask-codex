@@ -12,6 +12,7 @@ import ctypes
 import json
 import os
 from pathlib import Path
+import random
 import re
 import socket
 import stat
@@ -1162,6 +1163,104 @@ class RedactionTest(unittest.TestCase):
                 self.assertNotIn("AbCdEfGh", result)
                 self.assertNotIn("/etc/ssl", result)
 
+    # Every label is judged on its own (C2 R1 code review 2): a secret's name at the end of a value another label
+    # redacts, followed by spaces, a quote or a colon, keeps its own value redacted.
+    LEAKS = {"token AbCdEfGhIjKlMnOpQr_key=x_token AbCdEfGhIjKlMnOpQr12": "token [REDACTED] [REDACTED]",
+             "keys: /etc/ssl/private/server_key=x_token: hunter2": "keys: [REDACTED] [REDACTED]",
+             "tokens=AbCdEfGhIjKlMnOpQr_password=foo_token : hunter2": "tokens=[REDACTED] : [REDACTED]",
+             'tokens=AbCdEfGhIjKlMnOpQr_password="a_token" AbCdEfGhIjKlMnOpQr12':
+                 'tokens=[REDACTED]"[REDACTED]" [REDACTED]',
+             "token=AbCdEfGhIjKlMnOpQr_password: hunter2": "token=[REDACTED] [REDACTED]",
+             "password=abc_token : hunter2": "password=[REDACTED] : [REDACTED]",
+             "api_key=abc/db_password  =  hunter2": "api_key=[REDACTED]  =  [REDACTED]",
+             'token=a_key="hunter2 x"': 'token=[REDACTED]"'}
+
+    def test_a_label_inside_another_value_is_judged_on_its_own(self):
+        for text, expected in self.LEAKS.items():
+            with self.subTest(text=text):
+                result = self.redact(text)
+                for secret in ("hunter2", "AbCdEfGhIjKlMnOpQr12", "/etc/ssl", " x\""):
+                    self.assertNotIn(secret, result)
+                self.assertEqual(result, expected)
+
+    def test_labelled_values_are_the_union_of_each_label_judged_alone(self):
+        # The labelled-value rule of plan I11 written here naively (O(n) scans per label, never the code under
+        # test): each label's span is computed with no knowledge of any other label, and the output must redact
+        # exactly their union. The fragments trigger no other rule.
+        words = ("password", "passwd", "passphrase", "token", "secret", "key")
+        components = {*words, "apikey", "accesskey", "privatekey"}
+        quotes = ("\"", "'")
+
+        def blank(text, i):
+            return re.compile(r"[ \t]*").match(text, i).end()
+
+        def value(text, k):
+            if k >= len(text):
+                return None
+            if text[k] in quotes:
+                close = text.find(text[k], k + 1)
+                return (k + 1, close if close != -1 else len(text))
+            match = re.compile(r"\S+").match(text, k)
+            return match.span() if match else None
+
+        def run(text, k):
+            if text[k:k + 1] in quotes:
+                k += 1
+            match = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,3}").match(text, k)
+            if match and (re.search(r"[0-9+/=]", match.group()) or re.search(r"[A-Z]", match.group()[1:])):
+                return match.span()
+            return None
+
+        def alone(text, label):
+            name, i = label.group(), label.end()
+            if not any(word in name.casefold() for word in words):
+                return None
+            if text[i:i + 1] in quotes:
+                i += 1
+            j = blank(text, i)
+            if text[j:j + 1] in (":", "="):
+                parts = {part.casefold() for part in re.split(r"[-_]|(?<=[a-z0-9])(?=[A-Z])", name) if part}
+                k = blank(text, j + 1)
+                return value(text, k) if parts & components or name.casefold().endswith(words) else run(text, k)
+            return run(text, j) if j > i else None
+
+        def expected(text):
+            spans = sorted(span for label in re.finditer(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]+", text)
+                           if (span := alone(text, label)))
+            union = []  # overlapping or touching spans merged
+            for start, end in spans:
+                if union and start <= union[-1][1]:
+                    union[-1][1] = max(union[-1][1], end)
+                else:
+                    union.append([start, end])
+            out, last = [], 0
+            for start, end in union:
+                out += [text[last:start], "[REDACTED]"]
+                last = end
+            return "".join(out + [text[last:]])
+
+        rng = random.Random(1104)
+        labels = ["token", "tokens", "key", "keys", "password", "api_key", "passwordhash", "X-Auth-Tokens",
+                  "client_secret", "apiKey", "db_password", "Keyboard", "note"]
+        seps = ["=", ":", " ", " : ", "  =  ", "", "\t", ": ", " ="]
+        values = ["AbCdEfGhIjKlMnOpQr", "AbCdEfGhIjKlMnOpQr12", "/etc/ssl/private/server", "abc", "hunter2", "x",
+                  "AbCd/EfGh+IjKl_MnOp==", "0123456789abcdef0123", ""]
+        joiners = ["_", "/", "+", "", "=", " ", ": ", "  "]
+        tails = ["", " x", "\"", "'", ": hunter2", " AbCdEfGhIjKlMnOpQr12", "\n"]
+        texts = list(self.LEAKS)
+        for _ in range(4000):
+            parts = []
+            for _ in range(rng.randint(1, 4)):
+                quote = rng.choice(["", "", "\"", "'"])
+                key_quote = rng.choice(["", "\""])
+                closing = quote if rng.random() < 0.8 else ""
+                parts += [key_quote + rng.choice(labels) + key_quote + rng.choice(seps) + quote + rng.choice(values)
+                          + closing, rng.choice(joiners)]
+            texts.append("".join(parts[:-1]) + rng.choice(tails))
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertEqual(self.redact(text), expected(text))
+
     def test_ordinary_text_is_left_alone(self):
         for text in ("Basic navigation works on every page.", "The bearer of bad news is the save button.",
                      "The keyboard shortcut for the token list is missing.", "password field has no label",
@@ -1196,7 +1295,9 @@ class RedactionTest(unittest.TestCase):
                  "many matching runs": "token AbCdEfGhIjKlMnOpQr1234 " * 300,
                  "one run of many labels": "token " + "AbCd/token_key+" * 2000 + "=: x",
                  "chained runs": "token " + "AbCdEfGhIjKlMnOpQr_token " * 400 + "x",
-                 "glued names, spaced separators": "tokens=AbCdEfGhIjKlMnOpQr_secret" + " " * 5000 + ": x " * 1000}
+                 "glued names, spaced separators": "tokens=AbCdEfGhIjKlMnOpQr_secret" + " " * 5000 + ": x " * 1000,
+                 # Every label is judged on its own, also inside another label's value (C2 R1 code review 2).
+                 **self.CHAINS}
         timings = {}
         for label, text in cases.items():
             with self.subTest(case=label, size=len(text)):
@@ -1215,6 +1316,27 @@ class RedactionTest(unittest.TestCase):
             "tokens=[REDACTED]" + " " * 5000 + ": [REDACTED] : x"))
         self.assertIn("[REDACTED]", self.redact(" ".join(mixed)))
         self.assertNotIn("hunter2", self.redact(" ".join(mixed)))
+
+    # Labels inside other labels' values, about 50 KB each; `test_chained_labels_scale_linearly` scales them.
+    CHAINS = {"token=key=key=...": "token=" + "key=" * 12_500, "key: key: ...": "key: " * 10_000,
+              "a: b: c: ...": "a: b: c: " * 5_000, "key = key = ...": "key = " * 8_500,
+              "many quoted values": "password=\"a b\" token='c d' " * 1_800, "many open quotes": "key=\"" * 10_000,
+              "quoted key chain": "\"key\":\"key\":" * 4_000, "one long matching run": "token " + "AbCd0123" * 6_000,
+              "labels inside one long run": "tokens=" + "AbCd_password" * 4_000 + ": x"}
+
+    def test_chained_labels_scale_linearly(self):
+        # Sixteen times the text takes far less than the 256 times a quadratic scan would.
+        for label, text in self.CHAINS.items():
+            with self.subTest(case=label):
+                times = []
+                for size in (len(text), 16 * len(text)):
+                    big = (text * 16)[:size]
+                    start = time.perf_counter()
+                    self.redact(big)
+                    times.append(time.perf_counter() - start)
+                sys.stderr.write(f"\n{label}: {len(text)} chars {times[0] * 1000:.1f} ms, "
+                                 f"x16 {times[1] * 1000:.1f} ms")
+                self.assertLess(times[1], 60 * max(times[0], 0.005))
 
     def test_values_are_redacted_recursively_and_structure_is_kept(self):
         value = {"a": ["Bearer abcDEF1234567890xyz", 1, None, True], "b": {"c": "--token=x"}}
