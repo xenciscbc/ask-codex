@@ -1145,6 +1145,23 @@ class RedactionTest(unittest.TestCase):
                 self.assertIn(kept, result)
                 self.assertNotIn(gone, result)
 
+    def test_a_secret_name_glued_to_a_redacted_run_keeps_its_value_redacted(self):
+        # A run redacted by the shape test can end in a secret's name and a separator; that name's value is redacted
+        # too (C2 R1 code review, B1 on the `=`/`:` path and N1 on the space-joined path).
+        cases = {"keys: /etc/ssl/private/server_key=hunter2": "keys: ",
+                 "tokens=AbCdEfGhIjKlMnOpQr_password=hunter2": "tokens=",
+                 "tokens=AbCdEfGhIjKlMnOpQr_password: hunter2": "tokens=",
+                 "token AbCdEfGhIjKlMnOpQr_password: hunter2": "token ",
+                 "tokens=AbCdEfGhIjKlMnOpQr_password  =  'hunter2 x'": "tokens=",
+                 "token AbCdEfGh/IjKlMnOp/client_secret\": \"hunter2\"": "token "}
+        for text, kept in cases.items():
+            with self.subTest(text=text):
+                result = self.redact(text)
+                self.assertTrue(result.startswith(kept + "[REDACTED]"), result)
+                self.assertNotIn("hunter2", result)
+                self.assertNotIn("AbCdEfGh", result)
+                self.assertNotIn("/etc/ssl", result)
+
     def test_ordinary_text_is_left_alone(self):
         for text in ("Basic navigation works on every page.", "The bearer of bad news is the save button.",
                      "The keyboard shortcut for the token list is missing.", "password field has no label",
@@ -1173,7 +1190,13 @@ class RedactionTest(unittest.TestCase):
                  "interleaved quotes 100 KB": ("--key \"" + "--key '") * 7200,
                  "one open quote then 100 KB": '--key "' + "--key 'x " * 11_200,
                  "long userinfo runs": ("a://" + "u" * 2000 + " ") * 25,
-                 "word-holding labels then runs": ("tokens:" + "a" * 2000 + " ") * 5 + "tokens=a/" * 1000}
+                 "word-holding labels then runs": ("tokens:" + "a" * 2000 + " ") * 5 + "tokens=a/" * 1000,
+                 # Runs that match, with labels inside them that are examined (C2 R1 code review, B1).
+                 "secret names glued to runs": "tokens=AbCdEfGhIjKlMnOpQr_password=x " * 300,
+                 "many matching runs": "token AbCdEfGhIjKlMnOpQr1234 " * 300,
+                 "one run of many labels": "token " + "AbCd/token_key+" * 2000 + "=: x",
+                 "chained runs": "token " + "AbCdEfGhIjKlMnOpQr_token " * 400 + "x",
+                 "glued names, spaced separators": "tokens=AbCdEfGhIjKlMnOpQr_secret" + " " * 5000 + ": x " * 1000}
         timings = {}
         for label, text in cases.items():
             with self.subTest(case=label, size=len(text)):
@@ -1185,6 +1208,11 @@ class RedactionTest(unittest.TestCase):
                 self.assertIsInstance(result, str)
         sys.stderr.write("\nredaction timings: " + ", ".join(f"{k} ({len(cases[k])} chars) {v * 1000:.1f} ms"
                                                               for k, v in timings.items()) + "\n")
+        for label in ("secret names glued to runs", "chained runs", "glued names, spaced separators"):
+            self.assertNotIn("AbCd", self.redact(cases[label]))
+        self.assertNotIn("password=x", self.redact(cases["secret names glued to runs"]))
+        self.assertTrue(self.redact(cases["glued names, spaced separators"]).startswith(
+            "tokens=[REDACTED]" + " " * 5000 + ": [REDACTED] : x"))
         self.assertIn("[REDACTED]", self.redact(" ".join(mixed)))
         self.assertNotIn("hunter2", self.redact(" ".join(mixed)))
 

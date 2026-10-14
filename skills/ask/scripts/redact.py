@@ -26,7 +26,8 @@ Rules, in the order they are applied:
   `"client_secret": "…"`, `apiKey: …`): the value is redacted whatever its shape (QUOTED VALUES below, else up to
   the next whitespace). Any other word holding one of those words, joined by `=` or `:` (`passwordhash: …`,
   `api_keys=…`, `X-Auth-Tokens: …`) or by spaces only (`token abc…`): a hex or base64 run of 16 or more
-  characters that looks like a secret.
+  characters that looks like a secret. Words inside such a run are read as labels too, so a run that ends in a
+  secret's name and a separator (`tokens=AbCd…_password=x`, `keys: /etc/…/server_key=x`) has that value redacted.
 
 QUOTED VALUES: a value opening with `"` or `'` is redacted up to the matching closing quote, across lines (a
 PEM block in quotes); without a closing quote, up to the end of the text (the safer choice: the secret may run
@@ -149,6 +150,11 @@ def _secret_run(text, k):
 
 
 def _labelled(text):
+    # `last` is the end of the last value redacted whatever its shape; labels starting before it are skipped. A run
+    # redacted by the shape test does not move it: a label inside the run is still read, because the run can end
+    # in a secret's name whose value follows the run (`tokens=AbCd…_password=x`, `keys: /etc/…/server_key=x`).
+    # Labels inside a run do not overlap and only the last can be followed by a separator, so the work stays
+    # linear; a span that overlaps or touches the previous one is merged into it.
     spans, last, n = [], 0, len(text)
     for label in _LABEL.finditer(text):
         if label.start() < last:
@@ -167,6 +173,8 @@ def _labelled(text):
             k = _skip_space(text, j + 1)
             if _COMPONENTS.intersection(_components(name)) or folded.endswith(_WORDS):
                 span = _value(text, k)
+                if span:
+                    last = span[1]
             else:
                 span = _secret_run(text, k)
         elif j > i:
@@ -174,9 +182,12 @@ def _labelled(text):
             span = _secret_run(text, j)
         else:
             continue
-        if span:
+        if not span:
+            continue
+        if spans and span[0] <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(spans[-1][1], span[1]))
+        else:
             spans.append(span)
-            last = span[1]
     return _replace(text, spans)
 
 
