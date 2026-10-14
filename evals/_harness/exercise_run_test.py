@@ -1261,6 +1261,136 @@ class RedactionTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(self.redact(text), expected(text))
 
+    # Every secret-bearing flag is judged on its own (C2 R1 code review 3, N-c): a flag inside another flag's value
+    # (glued after `/`, `;`, `,` or `=`, or inside a quoted value) keeps its own value redacted. Text -> (output, secret).
+    FLAG_LEAKS = {"--token=a/--password hunter2": ("--token=[REDACTED] [REDACTED]", "hunter2"),
+                  '--api-key=x;--password "hunter 2"': ('--api-key=[REDACTED] "[REDACTED]"', "hunter 2"),
+                  "--password=x,--secret hunter2": ("--password=[REDACTED] [REDACTED]", "hunter2"),
+                  "--secret=a/--token hunter2 --port 80": ("--secret=[REDACTED] [REDACTED] --port 80", "hunter2"),
+                  "--token=x;-api-key hunter2": ("--token=[REDACTED] [REDACTED]", "hunter2"),
+                  "-api-key=a/--token\thunter2": ("-api-key=[REDACTED]\t[REDACTED]", "hunter2"),
+                  "--token=--token=--token hunter2": ("--token=[REDACTED] [REDACTED]", "hunter2"),
+                  # A quoted value spanning a later flag, whose own quoted value runs past it.
+                  "--token \"a --password 'x\" hunter2 b' c": ("--token \"[REDACTED]' c", "hunter2"),
+                  # An unclosed quote: up to the end of the text.
+                  '--token=x;--password "hunter2 never closed\nsecond line': ('--token=[REDACTED] "[REDACTED]',
+                                                                              "hunter2"),
+                  "--api-key=a/--secret 'hunter2\nsecond line": ("--api-key=[REDACTED] '[REDACTED]", "hunter2")}
+
+    # No rule hides another rule's match by redacting its name (the audit after N-c): each rule also reads the
+    # original text, so a label, flag or keyword inside a value another rule redacts keeps its own value redacted.
+    HIDDEN = {"--token=x_password: hunter2": ("--token=[REDACTED] [REDACTED]", "hunter2"),
+              '--token "x_password": hunter2': ('--token "[REDACTED]": [REDACTED]', "hunter2"),
+              "--token=x_token AbCdEfGhIjKlMnOpQr12": ("--token=[REDACTED] [REDACTED]", "AbCdEfGh"),
+              "--token=Bearer abcdefgh1hunter2": ("--token=[REDACTED] [REDACTED]", "hunter2"),
+              '--token=a_--password="hunter 2"': ('--token=[REDACTED]"', "2"),
+              "https://x,--token=@hunter2 end": ("https://[REDACTED] end", "hunter2"),
+              "https://u:x_token=@hunter2 end": ("https://[REDACTED] end", "hunter2"),
+              "Bearer abcdefgh/password=hunter2": ("Bearer [REDACTED]", "hunter2"),
+              "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.sig_password=hunter2": ("[REDACTED]=[REDACTED]", "hunter2"),
+              "sk-AbCdEfGhIjKlMnOpQr_password=hunter2": ("[REDACTED]=[REDACTED]", "hunter2"),
+              "xoxb-1234567890-password=hunter2": ("[REDACTED]=[REDACTED]", "hunter2"),
+              "github_pat_11ABCDEFG0123456789_password=hunter2": ("[REDACTED]=[REDACTED]", "hunter2"),
+              # Every bearer keyword, JWT start and key start is judged on its own too.
+              "Bearer abcdefgh1/basic Zm9vYmFyYmF6MTIzNDU2 end": ("Bearer [REDACTED] [REDACTED] end", "Zm9v"),
+              "eyJhbGciOiJI.x-eyJzdWIiOiIx.c2ln.dGFpbA end": ("[REDACTED] end", "dGFpbA"),
+              "eyJhbGciOiJI.eyJz.x_eyJzdWIiOiIx.c2ln.dGFpbA end": ("[REDACTED] end", "c2ln"),
+              "xoxb-1234567890-sk-AbCdEfGhIjKlMnOp_tail end": ("[REDACTED] end", "_tail"),
+              "xoxb-1234567890-github_pat_AbCdEfGhIjKlMnOpQrStUv end": ("[REDACTED] end", "AbCdEf")}
+
+    def test_every_flag_and_match_is_judged_on_its_own(self):
+        for text, (expected, secret) in {**self.FLAG_LEAKS, **self.HIDDEN}.items():
+            with self.subTest(text=text):
+                result = self.redact(text)
+                self.assertNotIn(secret, result)
+                self.assertEqual(result, expected)
+
+    def test_secret_flags_are_the_union_of_each_flag_judged_alone(self):
+        # The flag rule of plan I11 ("the value after `--password`/`--token`/`--secret`-style flags of any length",
+        # as the module docstring defines it) written here character by character, never the code under test: each
+        # flag's span is computed with no knowledge of any other flag. The rule must return exactly their union, and
+        # `redact` must leave no character of any such span visible.
+        import redact
+        rule = dict(redact.RULES)["secret-flag"]
+        components = {"password", "passwd", "passphrase", "token", "secret", "key", "apikey", "accesskey", "privatekey"}
+        ascii_alnum = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+        def alone(text, at):
+            """The span of the flag starting at `at`, or None. A flag: `-` or `--` where the character before is not a
+            word character or `-`, an ASCII letter or digit, then ASCII letters, digits, `_` or `-`."""
+            n = len(text)
+            if text[at] != "-" or at and (text[at - 1].isalnum() or text[at - 1] in "_-"):
+                return None
+            i = at + 2 if text[at + 1:at + 2] == "-" else at + 1
+            if i >= n or text[i] not in ascii_alnum:
+                return None
+            end = i
+            while end < n and (text[end] in ascii_alnum or text[end] in "_-"):
+                end += 1
+            # A component of the name (between `-` and `_`) is a secret's name.
+            if not components & set(re.split(r"[-_]", text[i:end].casefold())):
+                return None
+            # Then `=`, or spaces and tabs.
+            if end < n and text[end] == "=":
+                start = end + 1
+            else:
+                start = end
+                while start < n and text[start] in " \t":
+                    start += 1
+                if start == end:
+                    return None
+            if start >= n:
+                return None
+            # Quoted: up to the matching closing quote, else the end of the text; otherwise up to the next whitespace.
+            if text[start] in "\"'":
+                close = text.find(text[start], start + 1)
+                return (start + 1, n if close == -1 else close)
+            stop = start
+            while stop < n and not text[stop].isspace():
+                stop += 1
+            return (start, stop) if stop > start else None
+
+        def union(text):
+            merged = []
+            for start, end in sorted(span for at in range(len(text)) if (span := alone(text, at))):
+                if merged and start <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                else:
+                    merged.append((start, end))
+            return merged
+
+        rng = random.Random(1106)
+        names = ["--token", "--password", "-api-key", "--secret", "--db-password", "--private-key", "--Token_Key",
+                 "--port", "-k", "--keys", "--tokens", "---token"]
+        seps = ["=", " ", "  ", "\t", "", ":", " = "]
+        joiners = [" ", "/", ";", ",", "", "=", "\n", "\"", "'", "_", "x", " -"]
+        texts, serial = [(text, []) for text in self.FLAG_LEAKS], iter(range(10 ** 6))
+        for _ in range(3000):
+            text, tokens = "", []
+
+            def secret():
+                tokens.append(f"Q{next(serial):06d}Z")
+                return tokens[-1]
+
+            for _ in range(rng.randint(1, 5)):
+                shape = rng.randrange(7)
+                value = (secret() if shape == 0 else f"\"{secret()} {secret()}\"" if shape == 1 else f"'{secret()}'"
+                         if shape == 2 else f"\"{secret()} {secret()}" if shape == 3 else secret() + "/"
+                         if shape == 4 else "" if shape == 5 else "\"\"")
+                text += rng.choice(names) + rng.choice(seps) + value + rng.choice(joiners)
+            texts.append((text, tokens))
+        for text, tokens in texts:
+            with self.subTest(text=text):
+                expected = union(text)
+                self.assertEqual(rule(text, redact._Facts(text)), expected)
+                result = self.redact(text)
+                for token in tokens:
+                    at = text.index(token)
+                    if any(start < at + len(token) and at < end for start, end in expected):
+                        self.assertNotIn(token, result)
+                for secret in ("hunter2", "hunter 2"):
+                    self.assertNotIn(secret, result)
+
     def test_ordinary_text_is_left_alone(self):
         for text in ("Basic navigation works on every page.", "The bearer of bad news is the save button.",
                      "The keyboard shortcut for the token list is missing.", "password field has no label",
@@ -1324,19 +1454,39 @@ class RedactionTest(unittest.TestCase):
               "quoted key chain": "\"key\":\"key\":" * 4_000, "one long matching run": "token " + "AbCd0123" * 6_000,
               "labels inside one long run": "tokens=" + "AbCd_password" * 4_000 + ": x"}
 
-    def test_chained_labels_scale_linearly(self):
-        # Sixteen times the text takes far less than the 256 times a quadratic scan would.
-        for label, text in self.CHAINS.items():
+    def assert_scales_linearly(self, cases, factors=(16,)):
+        # Sixteen times the text takes far less than the 256 times a quadratic scan would. Each time is the least of
+        # up to three runs (a run slowed by load is retried), so a busy machine does not fail the ratio.
+        def least(text, tries, limit=0.0):
+            best = float("inf")
+            for _ in range(tries):
+                start = time.perf_counter()
+                self.redact(text)
+                best = min(best, time.perf_counter() - start)
+                if best < limit:
+                    break
+            return best
+
+        for label, text in cases.items():
             with self.subTest(case=label):
-                times = []
-                for size in (len(text), 16 * len(text)):
-                    big = (text * 16)[:size]
-                    start = time.perf_counter()
-                    self.redact(big)
-                    times.append(time.perf_counter() - start)
-                sys.stderr.write(f"\n{label}: {len(text)} chars {times[0] * 1000:.1f} ms, "
-                                 f"x16 {times[1] * 1000:.1f} ms")
-                self.assertLess(times[1], 60 * max(times[0], 0.005))
+                base = max(least(text, 3), 0.005)
+                times = {factor: least(text * factor, 3, limit=factor * 3.75 * base) for factor in factors}
+                sys.stderr.write(f"\n{label}: {len(text)} chars {base * 1000:.1f} ms, "
+                                 + ", ".join(f"x{f} {t * 1000:.1f} ms" for f, t in times.items()))
+                for factor, elapsed in times.items():
+                    self.assertLess(elapsed, factor * 3.75 * base)
+
+    def test_chained_labels_scale_linearly(self):
+        self.assert_scales_linearly(self.CHAINS)
+
+    # Flags inside other flags' values, about 64 KB each (C2 R1 code review 3, N-c), scaled to about 1 MB.
+    FLAG_CHAINS = {"--token=--token=...": "--token=" * 8_000,
+                   '--password "--token "--token ...': '--password "' + '--token "' * 7_000,
+                   "--token --token ...": "--token " * 8_000, "-api-key=a/-api-key=a/...": "-api-key=a/" * 6_000,
+                   "--token 'x --token \"y ...": "--token 'x --token \"y " * 2_800}
+
+    def test_chained_flags_scale_linearly(self):
+        self.assert_scales_linearly(self.FLAG_CHAINS, factors=(4, 16))
 
     def test_values_are_redacted_recursively_and_structure_is_kept(self):
         value = {"a": ["Bearer abcDEF1234567890xyz", 1, None, True], "b": {"c": "--token=x"}}
