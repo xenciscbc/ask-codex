@@ -1128,6 +1128,16 @@ class RedactionTest(unittest.TestCase):
             "x-eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl": ("x-[REDACTED]", "eyJhbGci"),
             "key_sk-ABCDEFGHIJKLMNOPQRSTUV": ("key_[REDACTED]", "sk-ABCDEF"),
             "x-ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123": ("x-[REDACTED]", "ghp_"),
+            # A label holding a secret word that is not its name, then `=` or `:`: a long run that looks like a
+            # secret (C2 R1; plan I11 "long hex or base64 runs following token, key, secret, password").
+            "passwordhash: 5f4dcc3b5aa765d61d8327deb882cf99": ("passwordhash: [REDACTED]", "5f4dcc3b"),
+            "api_keys: 0123456789abcdef0123": ("api_keys: [REDACTED]", "0123456789abcdef"),
+            "tokens=AbCdEf0123456789abcd": ("tokens=[REDACTED]", "AbCdEf0123"),
+            "secretvalue=Zm9vYmFyYmF6cXV4MTIzNDU2": ("secretvalue=[REDACTED]", "Zm9vYmFy"),
+            "apitokens: 9f86d081884c7d659a2feaa0c55ad015": ("apitokens: [REDACTED]", "9f86d081"),
+            "X-Auth-Tokens: 9f86d081884c7d659a2feaa0c55ad015": ("X-Auth-Tokens: [REDACTED]", "9f86d081"),
+            "keys: aGVsbG8gd29ybGQgMTIzNDU2": ("keys: [REDACTED]", "aGVsbG8g"),
+            '"passwordhash": "5f4dcc3b5aa765d61d8327deb882cf99"': ('"passwordhash": "[REDACTED]"', "5f4dcc3b"),
         }
         for text, (kept, gone) in cases.items():
             with self.subTest(text=text):
@@ -1142,7 +1152,7 @@ class RedactionTest(unittest.TestCase):
                      "The internationalization keys are shown raw", "git@github.com:org/repo.git",
                      "the token list is empty", "Basic navigation works",
                      "Keyboard: Tab skips the Save button", "risk-assessment-overview-dashboard",
-                     "task_ghp_like_name is shown"):
+                     "task_ghp_like_name is shown", "tokens: 3"):
             with self.subTest(text=text):
                 self.assertEqual(self.redact(text), text)
 
@@ -1162,7 +1172,8 @@ class RedactionTest(unittest.TestCase):
                  "spaced colon labels": ("key" + " " * 5000 + ":") * 10,
                  "interleaved quotes 100 KB": ("--key \"" + "--key '") * 7200,
                  "one open quote then 100 KB": '--key "' + "--key 'x " * 11_200,
-                 "long userinfo runs": ("a://" + "u" * 2000 + " ") * 25}
+                 "long userinfo runs": ("a://" + "u" * 2000 + " ") * 25,
+                 "word-holding labels then runs": ("tokens:" + "a" * 2000 + " ") * 5 + "tokens=a/" * 1000}
         timings = {}
         for label, text in cases.items():
             with self.subTest(case=label, size=len(text)):

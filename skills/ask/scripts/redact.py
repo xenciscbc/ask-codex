@@ -24,8 +24,9 @@ Rules, in the order they are applied:
 - labelled values: a word followed by an explicit `=` or `:` (spaces and a quote around the word allowed), whose
   name ends with or has a component password, passwd, passphrase, token, secret or key (`DB_PASSWORD=…`,
   `"client_secret": "…"`, `apiKey: …`): the value is redacted whatever its shape (QUOTED VALUES below, else up to
-  the next whitespace). Joined by spaces only (`token abc…`), any word holding one of those words: a hex or
-  base64 run of 16 or more characters that looks like a secret.
+  the next whitespace). Any other word holding one of those words, joined by `=` or `:` (`passwordhash: …`,
+  `api_keys=…`, `X-Auth-Tokens: …`) or by spaces only (`token abc…`): a hex or base64 run of 16 or more
+  characters that looks like a secret.
 
 QUOTED VALUES: a value opening with `"` or `'` is redacted up to the matching closing quote, across lines (a
 PEM block in quotes); without a closing quote, up to the end of the text (the safer choice: the secret may run
@@ -138,6 +139,15 @@ def _provider(text):
     return _PROVIDER.sub(MARK, text)
 
 
+def _secret_run(text, k):
+    """(start, end) of the hex or base64 run of 16 or more characters at k (after one opening quote) when it looks
+    like a secret, else None."""
+    if k < len(text) and text[k] in "\"'":
+        k += 1
+    run = _RUN.match(text, k)
+    return run.span() if run and _secret_like(run.group()) else None
+
+
 def _labelled(text):
     spans, last, n = [], 0, len(text)
     for label in _LABEL.finditer(text):
@@ -152,15 +162,16 @@ def _labelled(text):
             i += 1  # the closing quote of a quoted key ("client_secret": …)
         j = _skip_space(text, i)
         if j < n and text[j] in ":=":
-            # Explicit separator: the value whatever its shape, when the name is a secret's name.
-            if not (_COMPONENTS.intersection(_components(name)) or folded.endswith(_WORDS)):
-                continue
-            span = _value(text, _skip_space(text, j + 1))
+            # Explicit separator: the value whatever its shape when the name is a secret's name, else (the word
+            # only inside the name: `passwordhash`, `api_keys`) a long run that looks like a secret.
+            k = _skip_space(text, j + 1)
+            if _COMPONENTS.intersection(_components(name)) or folded.endswith(_WORDS):
+                span = _value(text, k)
+            else:
+                span = _secret_run(text, k)
         elif j > i:
             # Joined by spaces only: a long run that looks like a secret.
-            k = j + 1 if j < n and text[j] in "\"'" else j
-            run = _RUN.match(text, k)
-            span = run.span() if run and _secret_like(run.group()) else None
+            span = _secret_run(text, j)
         else:
             continue
         if span:
