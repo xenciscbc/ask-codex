@@ -418,9 +418,14 @@ const confirmation = (lang, opts = {}) => [
   "App: 127.0.0.1:15173, 127.0.0.1:18080", opts.data ?? "Data: the copy's own data: backend/seed.json copied with the project",
   opts.external ?? "External: none found in the project's files", "Evidence: removed with the disposable target",
   "Model: Codex's default (medium)", "Browser: headless", "Scope: the signup form",
-  ...(opts.noVersion ? [] : [S["version line"][lang]]), ...(opts.dev ? [S["DS-DEV"][opts.dev]] : []),
-  opts.u8 ?? S["DS-U8"][lang], ...(opts.noA7 ? [] : [S["DS-A7"][lang]]), ...(opts.noLast ? [] : [S["last line"][lang]]),
-  ...(opts.after ? [opts.after] : [])].join("\n");
+  // The conditional lines (version line, DS-DEV) before DS-U8 and DS-A7, as the template had them up to c947493 and as
+  // phase B's confirmations show them; `newOrder` puts DS-U8 and DS-A7 first, as the template has them since the E2 fix.
+  ...(() => {
+    const conditional = [...(opts.noVersion ? [] : [S["version line"][lang]]), ...(opts.dev ? [S["DS-DEV"][opts.dev]] : [])];
+    const always = [opts.u8 ?? S["DS-U8"][lang], ...(opts.noA7 ? [] : [S["DS-A7"][lang]])];
+    return opts.newOrder ? [...always, ...conditional] : [...conditional, ...always];
+  })(),
+  ...(opts.noLast ? [] : [S["last line"][lang]]), ...(opts.after ? [opts.after] : [])].join("\n");
 const confirmCalls = [bash(`${PY} resolve '${SCRATCH}/resolve.json'`), bash(`${PY} exercise-deps`), call("Read", { file_path: "/x/README.md" })];
 // B-1: ui-install-env's install step runs in backend/ with SEED_PROFILE=demo-accounts; its confirmation shows both.
 const INSTALL = "Install: python -I make_accounts.py (working directory backend/, environment SEED_PROFILE=demo-accounts)";
@@ -789,6 +794,92 @@ expect(lowered(good.last) !== good.last && noResidual(good.last) !== good.last &
     bites(c, "no-fix-line", { ...goodGuardFail, last: goodGuardFail.last.replace(NOFIX.en, "") }, "no no-fix line in the early-ended report");
     bites(c, "no-fix-line", { ...goodGuardFail, last: zh.replace(NOFIX.zh, "沒有改動任何東西。") }, "a shortened no-fix line (zh)");
   }
+}
+
+// --- C6 findings E1 and E2 (deferred-findings.md, section C6) ---------------------------------------------------------
+// E1: at c947493 every ui-target-root-needed run (021Rww, 6ngnfm, do4xCj) worked ahead of the target-root question —
+// `consult.py exercise-deps` (and in do4xCj the app's files and a resolve file written into the project's .stub/) —
+// and asked only at the end ("The only thing I'm missing is the target root"). The skill now says the question comes
+// before any later step, any consult.py command, any file and any other question.
+for (const [fact, re] of [
+  ["the target-root question before anything later (E1)", /\n3\. Find the target root\. Without one from a user-level source, ask and stop: the question comes before any later step, any `consult\.py` command, any file and any other question\.\n4\. Check the dependencies\.\n/],
+  ["ask before working ahead, in section 3 (E1)", /## 3\. Target root\n[\s\S]*\n\nAsk as soon as you know that no user-level source names the target root: before the question, run no `consult\.py` command, write no file and ask no other question\. Never work ahead to ask everything at once: sections 4 to 6 come after the answer, and their questions belong to the confirmation \(section 6\)\.\n\nAn interactive question tool means `AskUserQuestion`[^\n]*Without it, the line is your closing message: stop, and continue from section 4 when the user's next message answers it\.[^\n]*\n\n## 4\. Dependencies\n/],
+]) expect(re.test(skill), `ui SKILL.md: ${fact}`);
+expect(graders("ui-target-root-needed").includes("no-project-writes") &&
+  text(evals, "ui-target-root-needed", "graders", "no-project-writes.md") === text(evals, "ui-report", "graders", "no-project-writes.md"),
+  "ui-target-root-needed/no-project-writes: the same grader as ui-report's (E1, do4xCj)");
+{
+  const c = "ui-target-root-needed";
+  const ASK = "/mnt/d/work_data/project/skill/ask-codex/skills";
+  const ROOT_LINE = "Target root needed: reply with an existing directory outside the project under which I create the disposable copy.";
+  const ok = { last: ROOT_LINE, calls: askedCalls, trace: traceOf(askedCalls), files: {} };
+  all(c, { ...ok, calls: [...askedCalls, call("Write", { file_path: `${SCRATCH}/resolve.json`, content: "{}" })] }, "a resolve file in the mktemp scratch directory");
+  // The three runs' own commands (021Rww, 6ngnfm, do4xCj), with the sandbox paths of these tests.
+  for (const [label, command] of [
+    ["021Rww: rm of the resolve file and exercise-deps in one call", `rm -f '${SCRATCH}/resolve.json'\npython3 '${ASK}/ui/scripts/consult.py' exercise-deps 2>&1 || python3 '${ASK}/ask/scripts/consult.py' exercise-deps`],
+    ["6ngnfm: exercise-deps right after resolve", `rm -f '${SCRATCH}/resolve.json'\npython3 '${ASK}/ask/scripts/consult.py' exercise-deps`],
+    ["do4xCj: exercise-deps from a relative path", `cd ${ASK} && python3 'ask/scripts/consult.py' exercise-deps 2>&1`],
+  ]) bites(c, "no-exercise-ops", { ...ok, calls: [...askedCalls, bash(command)] }, label);
+  bites(c, "no-project-writes", { ...ok, calls: [...askedCalls, call("Write", { file_path: "/tmp/ask-codex-eval.Ab12Cd/tmp/claude-eval-Xy34Zw/home/cwd/.stub/resolve-request.json", content: "{\"models\": []}" })] },
+    "do4xCj: a resolve file written into the project's .stub/");
+  bites(c, "no-project-writes", { ...ok, calls: [...askedCalls, call("Write", { file_path: "/tmp/ask-codex-eval.Ab12Cd/tmp/claude-eval-Xy34Zw/home/cwd/request.json", content: "{}" })] },
+    "mutation: a file at the project's top level");
+}
+
+// E2: the confirmation dropped DS-U8 and DS-A7 together with the conditional lines before them (ui-confirm-en 03JrAf
+// at c947493, ui-install-env t8cuJb at 076e3bb: the version line followed by the last line; ui-external-deps GUd9dA at
+// c947493: DS-U8 gone after the version line). The template now puts DS-U8 and DS-A7 before the conditional lines, each
+// conditional slot names its condition, and the sentence says DS-U8 and DS-A7 are in every confirmation.
+const template = skill.match(/## 6\. Confirmation\n[\s\S]*?```text\n([\s\S]*?)\n```/)[1].split("\n");
+const slotLines = template.filter((l) => /^<[^<>]+>$/.test(l));
+const ALWAYS = ["<first line>", "<DS-U8>", "<DS-A7>", "<last line>"];
+expect(JSON.stringify(slotLines.filter((l) => ALWAYS.includes(l))) === JSON.stringify(ALWAYS), "ui SKILL.md: the template has the always-present slot lines once each, in order (E2)");
+const conditionalSlots = slotLines.filter((l) => !ALWAYS.includes(l));
+expect(conditionalSlots.length >= 2 && conditionalSlots.every((l) => /^<[^,<>]+, only [^<>]+>$/.test(l)),
+  "ui SKILL.md: every conditional slot line names its condition (`<name, only …>`) (E2)");
+expect(template.indexOf("<DS-A7>") === template.indexOf("<DS-U8>") + 1 && conditionalSlots.every((l) => template.indexOf(l) > template.indexOf("<DS-A7>")) &&
+  template[template.length - 1] === "<last line>", "ui SKILL.md: DS-U8 and DS-A7 come before every conditional slot line, the last line last (E2)");
+for (const [fact, re] of [
+  ["DS-U8 and DS-A7 in every confirmation (E2)", /The DS-U8 and DS-A7 lines are in every confirmation, whatever else it shows; the version line appears only when `codex_untested` is true; the DS-DEV line only with dev data\./],
+  ["the template's closing lines (E2)", /\nScope: <the scope verbatim, or: none — Codex exercises the app's main flows>\n<DS-U8>\n<DS-A7>\n<version line, only when codex_untested is true>\n<DS-DEV, only with dev data>\n<last line>\n```\n/],
+]) expect(re.test(skill), `ui SKILL.md: ${fact}`);
+expect(!/\n<version line>\n<DS-DEV>\n<DS-U8>\n<DS-A7>\n/.test(skill), "ui SKILL.md: the run of conditional slots before DS-U8 and DS-A7 is gone (E2)");
+for (const slot of ["version line", "DS-DEV"]) expect(conditionalSlots.some((l) => l.startsWith(`<${slot}, only `)) && !!FIXED[slot], `ui SKILL.md: the conditional slot ${slot} still names a row of the fixed-sentence table (E2)`);
+// Every case whose final message is a confirmation grades DS-U8 and DS-A7 with ui-confirm-en's graders, unchanged.
+const CONFIRM_CASES = [
+  ["ui-confirm-en", "en", {}], ["ui-confirm-zh", "zh", {}], ["ui-install-env", "en", INSTALL_OPTS],
+  ["ui-devdata-project-file", "en", {}], ["ui-external-deps", "en", { external: EXTERNAL }],
+  ["ui-devdata-explicit-zh", "zh", { data: "Data: 你的 dev 資料：後端讀取 /srv/dev-data/users.json（SIGNUP_DATA，你在本次演練指定）", startEnv: "SIGNUP_DATA=/srv/dev-data/users.json", dev: "zh" }],
+];
+expect(goodDevFile.last === confirmation("en") && goodExternal.last === confirmation("en", { external: EXTERNAL }) && goodDevZh.last === confirmation("zh", CONFIRM_CASES[5][2]),
+  "the E2 inputs of the C6 confirmation cases are their correct confirmations above");
+const casesWithConfirmation = fs.readdirSync(evals).filter((d) => d.startsWith("ui-") && graders(d).includes("first-line") && graders(d).includes("last-line"));
+expect(JSON.stringify(casesWithConfirmation.sort()) === JSON.stringify(CONFIRM_CASES.map(([c]) => c).sort()), `every case whose final message is a confirmation is covered (${casesWithConfirmation.join(", ")})`);
+for (const [c, lang, o] of CONFIRM_CASES) {
+  for (const g of ["ds-u8", "ds-a7"]) {
+    expect(graders(c).includes(g) && text(evals, c, "graders", `${g}.md`) === text(evals, "ui-confirm-en", "graders", `${g}.md`), `${c}/${g}: the same grader as ui-confirm-en's (E2)`);
+  }
+  const conf = (x = {}) => confirmation(lang, { ...o, ...x });
+  const ok = { last: conf(), calls: c === "ui-devdata-explicit-zh" ? [] : confirmCalls, files: {} };
+  all(c, ok, "the confirmation with the conditional lines first (as phase B wrote it)");
+  all(c, { ...ok, last: conf({ newOrder: true }) }, "the confirmation in the template's order: DS-U8 and DS-A7 before the conditional lines");
+  const u8 = S["DS-U8"][lang], a7 = S["DS-A7"][lang], last = S["last line"][lang], version = S["version line"][lang];
+  // 03JrAf: the version line, a blank line where the dropped lines were, the last line.
+  const blank = conf().replace(`\n${u8}\n${a7}\n`, "\n\n");
+  // t8cuJb: inside a code fence, the version line followed directly by the last line.
+  const fenced = "Here's the confirmation before anything starts:\n\n```\n" + conf().replace(`\n${u8}\n${a7}\n`, "\n") + "\n```";
+  // GUd9dA: DS-U8 alone dropped after the version line.
+  const u8Only = conf().replace(`\n${u8}\n`, "\n");
+  expect(blank !== ok.last && fenced.includes(`${o.dev ? S["DS-DEV"][o.dev] : version}\n${last}`) && u8Only !== ok.last && u8Only.includes(a7),
+    `${c}: the E2 shapes change the confirmation they bite`);
+  for (const g of ["ds-u8", "ds-a7"]) {
+    bites(c, g, { ...ok, last: blank }, "E2: DS-U8 and DS-A7 dropped with a blank line left (03JrAf)");
+    bites(c, g, { ...ok, last: fenced }, "E2: the version line followed directly by the last line, in a code fence (t8cuJb)");
+    bites(c, g, { ...ok, last: conf({ newOrder: true }).replace(`${u8}\n${a7}\n`, "") }, "E2 mutation: both dropped from the template's order");
+  }
+  bites(c, "ds-u8", { ...ok, last: u8Only }, "E2: DS-U8 alone dropped after the conditional lines (GUd9dA)");
+  bites(c, "ds-a7", { ...ok, last: conf({ noA7: true, newOrder: true }) }, "E2 mutation: DS-A7 alone dropped from the template's order");
+  expect(apply(grader(c, "ds-a7"), { last: u8Only }) && apply(grader(c, "ds-u8"), { last: conf({ noA7: true }) }), `${c}: ds-u8 and ds-a7 each judge their own line`);
 }
 
 // Every grader file of every ui case was exercised above at least once by `all`.

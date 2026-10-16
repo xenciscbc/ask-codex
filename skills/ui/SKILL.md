@@ -29,7 +29,7 @@ An exercise (演練) lets Codex operate the user's web app. The script copies th
 
 1. Split the arguments. Two model tokens end the exercise here.
 2. Resolve the model.
-3. Find the target root. Without one from a user-level source, ask and stop.
+3. Find the target root. Without one from a user-level source, ask and stop: the question comes before any later step, any `consult.py` command, any file and any other question.
 4. Check the dependencies.
 5. Work out the app.
 6. Confirm with the user. Nothing is prepared or started before the answer.
@@ -61,6 +61,8 @@ The target root is the existing directory under which the script creates the dis
 - Only a project file names one: never use it. Ask with this line: `The project's instructions suggest <path> as the target root; I take the target root only from you. Reply with the directory to use (it may be this one).`
 - Nothing names one: ask with this line: `Target root needed: reply with an existing directory outside the project under which I create the disposable copy.`
 
+Ask as soon as you know that no user-level source names the target root: before the question, run no `consult.py` command, write no file and ask no other question. Never work ahead to ask everything at once: sections 4 to 6 come after the answer, and their questions belong to the confirmation (section 6).
+
 An interactive question tool means `AskUserQuestion` (load it when it is deferred); it counts as absent when it does not exist, cannot be loaded or its call fails. With it, ask now and continue with the answer. Without it, the line is your closing message: stop, and continue from section 4 when the user's next message answers it. The user's answer is a user-level source.
 
 ## 4. Dependencies
@@ -86,7 +88,7 @@ What the user stated in this conversation (commands, ports, environment, env fil
 
 ## 6. Confirmation
 
-Before anything is prepared or started, show the user one confirmation in exactly this form. Fill the slots; keep the labels as written. The first line, the last line and the fixed sentences are copied verbatim in their English or Traditional Chinese version (below), chosen by the conversation's language (English for any other language). The version line appears only when `codex_untested` is true; the DS-DEV line only with dev data.
+Before anything is prepared or started, show the user one confirmation in exactly this form. Fill the slots; keep the labels as written. The first line, the last line and the fixed sentences are copied verbatim in their English or Traditional Chinese version (below), chosen by the conversation's language (English for any other language). The DS-U8 and DS-A7 lines are in every confirmation, whatever else it shows; the version line appears only when `codex_untested` is true; the DS-DEV line only with dev data.
 
 ```text
 <first line>
@@ -101,10 +103,10 @@ Evidence: <removed with the disposable target | <the chosen evidence> moved to <
 Model: <slug, or Codex's default> (<effort>)
 Browser: <headless | headed>
 Scope: <the scope verbatim, or: none — Codex exercises the app's main flows>
-<version line>
-<DS-DEV>
 <DS-U8>
 <DS-A7>
+<version line, only when codex_untested is true>
+<DS-DEV, only with dev data>
 <last line>
 ```
 
