@@ -1,0 +1,38 @@
+{
+ "date": "2026-10-17",
+ "commit": "6e771e7b48260cbdebc5fe684d6c45b5b9cc5e6f",
+ "driver": "headless claude -p --plugin-dir <repo> --settings {enabledPlugins: ask-codex@ask-codex false} --allowedTools Bash Write Read TaskOutput TaskStop; --resume for the target root and the yes reply (D-2026-10-17a)",
+ "codex_calls": 2,
+ "codex": "codex-cli 0.159.3, model gpt-6.1-sol (high), the user's default",
+ "fixture": "D:\\tmp\\ui-exercise-fixture (fixture.py): backend 127.0.0.1:18080 / frontend 127.0.0.1:15173 in copy mode; the user's servers 127.0.0.1:18090 / 18091 started from the fixture in attach mode; sentinel 127.0.0.1:18081 (2 hits, both main's own probes before the runs)",
+ "eval_stub_absent_before": true,
+ "copy": {
+  "session": "3ae0b4a3-1799-4c24-8ed9-38122f8b984a",
+  "run": "run.b8f2baf2",
+  "guard": "ran, 154 items passed (includes the decoy-beside-the-record write item)",
+  "mcp_tool_calls": 165,
+  "requires_approval": 0,
+  "filePath_inside_evidence": "saved (signup-desktop.png and 10 others under <target>/evidence)",
+  "filePath_outside": "D:/tmp/c7-live/outside.png refused: Access denied ... not within any of the configured workspace roots; file absent",
+  "command_executions": "2, both read-only (Get-Content of D:/codex/skills/browser-use/SKILL.md; Get-ChildItem of the evidence directory)",
+  "supervisor": "started 07:22:28 (app-start), state app_started through run (07:22:34-07:27:46), collect, repro and finish across separate tool calls; finish confirmed it ended",
+  "claims": "C1 bug confirmed - reproduced (empty / malformed email accepted); C2 layout adopt",
+  "evidence_keep": "17 files moved to D:\\tmp\\c7-live\\kept",
+  "after": "config.toml sha256 unchanged (622450e2...); no new TEMP browser profile; no Chrome/node/codex process left (new processes only main's own shells and scripts); target and run directory removed; guard cache entry added (normal)"
+ },
+ "attach": {
+  "session": "3d7dae46-0e02-4375-a761-18f46c0ed1fa",
+  "run": "run.54c1ed88",
+  "confirmation": "owners shown with PID and redacted command line; DS-U8, DS-A7, DS-U7, DS-AT3, DS-AT6, DS-AT10 present",
+  "guard": "ran on substituted ports; real-definition check passed",
+  "mcp_tool_calls": 150,
+  "requires_approval": 0,
+  "filePath_writes": "13, all under <target>/evidence",
+  "command_executions": "1, read-only (Get-Content of D:/codex/skills/browser-use/SKILL.md); tripwire none",
+  "claims": "C1, C2 bugs confirmed - reproduced; C3 layout adopt",
+  "servers": "PID 24236 / 84900 alive with the same creation time and still owning 18090 / 18091 after finish; never signalled",
+  "dev_data": "the fixture's data.sqlite gained test rows (disclosed in the report)",
+  "after": "config.toml sha256 unchanged; no new TEMP browser profile; no exercise process left (two chrome renderers belong to the user's own Chrome, parent 2128); target removed"
+ },
+ "rerun": "not needed"
+}

@@ -1,0 +1,107 @@
+{
+ "nonce_servers": [
+  "cdt_c96e31c7ee17eff7"
+ ],
+ "guard_source": "ran",
+ "guard_items_type": "int",
+ "mcp_tool_calls": 150,
+ "requires_approval": [],
+ "command_executions": [
+  "\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content -LiteralPath 'D:/codex/skills/browser-use/SKILL.md'\""
+ ],
+ "possibly_writing_commands": [],
+ "screenshot_filepath_calls": [
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/home-desktop.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\home-desktop.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/users-desktop.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\users-desktop.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-desktop.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-desktop.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-invalid-email-accepted.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-invalid-email-accepted.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-phone-short-password.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-phone-short-password.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-phone-success.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-phone-success.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/users-phone.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\users-phone.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLandscape\\\":fals"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/users-phone-loaded.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\users-phone-loaded.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLandscape"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-mobile-390.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-mobile-390.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLandscape\\"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-blank-email-accepted.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-blank-email-accepted.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"is"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/signup-mobile-success.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\signup-mobile-success.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLandsc"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/users-mobile-duplicates.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\users-mobile-duplicates.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLand"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1ddca522a1f7/evidence/users-desktop-after-signups.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1ddca522a1f7\\\\evidence\\\\users-desktop-after-signups.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":false,\\\"hasTouch\\\":false,\\\""
+  }
+ ],
+ "supervisor_log_tail": []
+}

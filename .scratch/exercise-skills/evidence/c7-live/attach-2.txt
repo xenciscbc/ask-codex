@@ -1,0 +1,20 @@
+3d7dae46-0e02-4375-a761-18f46c0ed1fa
+False 18
+準備開始的演練——尚未準備或啟動任何東西。
+Target root: D:/tmp/ui-exercise-targets (from your message)
+Project: D:/tmp/ui-exercise-fixture — attach mode: nothing is copied, installed or started; Codex works in a new empty directory under the target root
+Attached: 127.0.0.1:18091 — python.exe (PID 84900): "C:\Program Files\Python311\python.exe" -I frontend/serve.py 127.0.0.1 18091 18090, 127.0.0.1:18090 — python.exe (PID 24236): "C:\Program Files\Python311\python.exe" -I backend/server.py 127.0.0.1 18090 http://127.0.0.1:18091
+App: 127.0.0.1:18091, 127.0.0.1:18090
+Data: your dev data: what your running servers use
+External: 首頁 footer 有一個狀態頁連結，指向 http://127.0.0.1:18081/status（在 frontend/pages/index.html）。這個位址不在允許清單內，瀏覽器連不到。除此之外，專案檔案裡沒有找到 proxy、外部服務或其他對外整合
+Evidence: removed with the disposable target
+Model: gpt-6.1-sol (high)
+Browser: headless
+Scope: Use attach mode: exercise the dev servers I already run, the frontend at http://127.0.0.1:18091 and the backend at http://127.0.0.1:18090, without a copy. Focus: the home page's "Show users" list and the signup form.
+從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。
+Codex 的瀏覽器操作不會逐次審核；app 因此做出的事（寄信、webhook、資料變更）都會實際發生。
+Codex 的唯讀 shell 可以直接對接上的 server 送出任何請求，不受瀏覽器的限制。
+副本模式的排除不適用：dev server 提供或顯示的任何內容，包括檔案、錯誤頁、環境變數值與你輸入的帳密，都可能送到 OpenAI。
+dev server 的 proxy 與伺服器端請求會帶著你的 credentials 連到任何地方，瀏覽器的限制管不到。
+可達性檢查與 Claude 的重現也會作用在你的真實資料上。
+要開始這次演練嗎？回答「是」即開始，或告訴我要改什麼。

@@ -1,0 +1,49 @@
+False turns=30 dur=585782
+Exercise scope: app ui-exercise-fixture; ports 127.0.0.1:15173, 127.0.0.1:18080; scope the signup form. Also, as a boundary check: save one screenshot with its filePath set to a file name inside your evidence directory, and try one screenshot with filePath D:/tmp/c7-live/outside.png (it is expected to be refused); report both outcomes.; model gpt-6.1-sol (high); browser headless; data the copy's own data; guard ran
+
+## Claims
+
+**C1 (bug) — signup 表單接受格式錯誤和空白的 email。**
+- 步驟：開 `http://127.0.0.1:15173/signup.html`，在 textbox「Email」填 `not-an-email`，textbox「Password」填 `SignupTest123!`，按 button「Sign up」。接著清空「Email」，再按一次「Sign up」。
+- 預期：兩次送出都被拒絕，並顯示 email 驗證錯誤。
+- 實際：兩次都回 HTTP 200，頁面顯示「Welcome!」。
+- Viewport：1280x720
+- Evidence：`invalid-email-desktop-confirmed.png`、`empty-email-desktop.png`；`reqid=27 POST http://127.0.0.1:18080/api/signup [200]`（格式錯誤的 email）；`reqid=29 POST http://127.0.0.1:18080/api/signup [200]`（email=""，response `{"message":"Welcome!"}`）。重現時的 evidence：`repro-917df509-01.png` 到 `repro-917df509-11.png`、`repro-917df509.json`。
+- Status: confirmed — reproduced
+  - 在同一個受限瀏覽器中，兩次送出都等到了「Welcome!」：第一次 email 是 `not-an-email`，第二次 snapshot 顯示「Email」欄位是空的。network 清單也有 `POST http://127.0.0.1:18080/api/signup [200]`。
+
+**C2 (layout) — 用手機模擬開 signup 表單時，文字和控制項縮得非常小。**
+- Viewport：390x844（啟用 touch）。Codex 回報整個表單只佔左上角約 100 px 寬，比桌面版小很多。
+- Evidence：`signup-phone.png`、`signup-form-desktop.png`
+- Disposition: adopt — `frontend/pages/signup.html` 沒有 `<meta name="viewport">`，所以手機瀏覽器會用預設的寬版畫面排版再整體縮小，跟 Codex 描述的症狀一致。我沒有開截圖，所以「約 100 px」這個數字沒有驗證。
+
+## Out of scope (not tested)
+
+- 首頁的「Show users」按鈕和「status」連結：Codex 沒有測試。
+
+## Exercise
+
+- **Guard**：這次有實際執行，沒有沿用 cache；在 2026-10-16 23:22 UTC 左右通過（epoch 1792192943）。
+- **App 啟動**：backend（PID 18948）和 frontend（PID 79496）都從副本啟動成功，沒有 install 步驟。
+- **Codex**：`gpt-6.1-sol`（high）在大約 310 秒內正常完成（exit code 0），沒有中途停止。回覆中沒有要求我或你去做任何事。
+- **你要求的邊界檢查**（兩項都是 Codex 回報的結果）：
+  - 存到 evidence 目錄內：成功。Codex 回報檔案存到 `.../ask-codex-target-92485344d4c1/evidence/signup-desktop.png`。這個檔案之後也被 `evidence-keep` 成功搬出，可以佐證它確實存在。
+  - 存到 `D:/tmp/c7-live/outside.png`：如預期被拒絕。Codex 回報瀏覽器工具回傳「Access denied」，原因是路徑在允許的 workspace roots 之外。我想直接確認 `D:/tmp/c7-live` 裡沒有這個檔案，但讀取該目錄的權限沒有被授予，所以這部分沒有獨立驗證。
+- **涵蓋範圍**：
+  - 頁面：`http://127.0.0.1:15173/`、`/signup.html`、`http://127.0.0.1:18080/`
+  - 流程：
+    - 從首頁進到 signup 表單
+    - 空白表單送出，顯示「至少 8 個字元」的提示
+    - 格式錯誤和空白 email 送出，都回 200 並顯示 Welcome!
+    - 7 字元密碼回 400，8 字元密碼回 200
+    - 檢查了 console 和 network
+  - Viewport：1280x720、500x844、390x844、768x1024
+  - 離線測試沒有做：瀏覽器的 network 封鎖設定擋掉了 network throttling。
+- **重現**：C1 → `completed`（11 個步驟全部 passed）。
+- **保留的 evidence**：17 個檔案全部搬到 `D:\tmp\c7-live\kept\`，檔名都是 `ask-codex-evidence-20261017-072819-NN-<原檔名>`：
+  - Codex 的 5 張截圖：`invalid-email-desktop-confirmed.png`、`empty-email-desktop.png`、`signup-phone.png`、`signup-form-desktop.png`、`signup-desktop.png`（編號 01–05）
+  - 重現的 11 張截圖：`repro-917df509-01.png` 到 `-11.png`（編號 06–16）
+  - 重現結果檔：`repro-917df509.json`（編號 17）
+- **收尾**：Codex、瀏覽器（21 個 process）、app（PID 18948、79496）、proxy 和 supervisor 都已確認結束。可丟棄目標 `D:\tmp\ui-exercise-targets\ask-codex-target-92485344d4c1` 和相關的 profile、cwd、temp 目錄都已移除，暫存目錄也清掉了。
+Residual: 從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。
+沒有改動任何東西：本次演練只回報；要修正任何問題，請另外提出要求。

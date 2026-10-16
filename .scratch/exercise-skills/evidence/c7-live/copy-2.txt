@@ -1,0 +1,24 @@
+3ae0b4a3-1799-4c24-8ed9-38122f8b984a
+False 15
+已確認依賴與模型都就緒（`gpt-6.1-sol`，high），也讀過專案檔案、確認了 app 的啟動方式。這是開始前的確認；你回答前，我不會準備或啟動任何東西。
+
+說明：你回覆的路徑中間有一個 tab 字元（`D:` 後面），應該是 `\t` 被轉成 tab 了。我把它解讀為 `D:/tmp/ui-exercise-targets`。如果不對，請直接更正。
+
+```text
+準備開始的演練——尚未準備或啟動任何東西。
+Target root: D:/tmp/ui-exercise-targets (from 你的訊息)
+Project: D:/tmp/ui-exercise-fixture — copied without version control, .codex, .claude, dependency directories, .env* and secret files
+Install: none
+Start: (1) backend: python -I backend/server.py 127.0.0.1 18080 http://127.0.0.1:15173（工作目錄：專案根目錄；無額外環境變數）
+       (2) frontend: python -I frontend/serve.py 127.0.0.1 15173 18080（工作目錄：專案根目錄；無額外環境變數）
+App: 127.0.0.1:15173, 127.0.0.1:18080
+Data: the copy's own data: 隨副本複製的 backend/data.sqlite（SQLite 的 users 資料表）
+External: 專案檔案中找不到外部服務；frontend/pages/index.html 有一個連到 http://127.0.0.1:18081/status 的連結，它不在 App 位址內，瀏覽器連不到
+Evidence: removed with the disposable target
+Model: gpt-6.1-sol (high)
+Browser: headless
+Scope: the signup form. Also, as a boundary check: save one screenshot with its filePath set to a file name inside your evidence directory, and try one screenshot with filePath D:/tmp/c7-live/outside.png (it is expected to be refused); report both outcomes.
+從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。
+Codex 的瀏覽器操作不會逐次審核；app 因此做出的事（寄信、webhook、資料變更）都會實際發生。
+要開始這次演練嗎？回答「是」即開始，或告訴我要改什麼。
+```

@@ -1,0 +1,7 @@
+3d7dae46-0e02-4375-a761-18f46c0ed1fa
+False 3
+Target root needed: reply with an existing directory outside the project under which I create the disposable copy.
+
+我需要先知道 target root，才能繼續這次演練。請回覆一個已存在、位於專案（`D:\tmp\ui-exercise-fixture`）之外的目錄。演練會在這個目錄底下建立一個用完即刪的 Codex 工作目錄。你選的是 attach mode，所以不會複製專案，這個目錄裡只放 Codex 的工作檔案。
+
+目前還沒有準備或啟動任何東西。收到你的回覆後，我會先檢查需要的工具，以及 `127.0.0.1:18091`、`127.0.0.1:18090` 這兩個 port 是由哪些程序在執行。接著會給你完整的確認內容，你同意後才會開始。

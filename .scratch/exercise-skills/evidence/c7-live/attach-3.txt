@@ -1,0 +1,68 @@
+False turns=28 dur=395091
+Exercise scope: app ui-exercise-fixture; ports 127.0.0.1:18091, 127.0.0.1:18090; scope Use attach mode: exercise the dev servers I already run, the frontend at http://127.0.0.1:18091 and the backend at http://127.0.0.1:18090, without a copy. Focus: the home page's "Show users" list and the signup form.; model gpt-6.1-sol (high); browser headless; data 接上模式 — 你正在執行的 dev server python.exe:24236, python.exe:84900；Codex 的操作可能已經改動你的 dev 資料，並經由 app 改動專案檔案。; guard ran
+
+## Claims
+
+**C1 (bug)** — 註冊表單接受格式錯誤的 email，並把它加進使用者清單。
+- Steps：開啟 `http://127.0.0.1:18091/signup.html` → 在 textbox「Email」填入 `not-an-email` → 在 textbox「Password」填入 `UiExercise!2026` → 按 button「Sign up」 → 開啟 `http://127.0.0.1:18091/` → 按 button「Show users」
+- Expected：顯示驗證訊息並拒絕這個 email，不建立使用者。
+- Actual：畫面顯示「Welcome!」，清單裡出現 `not-an-email`。
+- Viewport：不影響
+- Evidence：`signup-invalid-email-accepted.png`、`users-desktop-after-signups.png`；`POST http://127.0.0.1:18090/api/signup` 回傳 200，response 為 `{"message":"Welcome!"}`
+- Status: confirmed — reproduced
+  - 重現時，送出後出現「Welcome!」。按「Show users」後，清單裡的 `not-an-email` 從 1 筆變成 2 筆。原始碼也吻合這個結果：`backend/server.py` 的 `do_POST` 只檢查密碼長度，完全沒檢查 email。
+
+**C2 (bug)** — 同一個 email 註冊兩次，清單裡會出現重複的項目。
+- Steps：開啟 `http://127.0.0.1:18091/signup.html` → 在 textbox「Email」填入 `ui-exercise-duplicate@example.invalid` → 在 textbox「Password」填入 `UiExercise!2026` → 按 Enter 送出 → 再按一次 button「Sign up」 → 開啟 `http://127.0.0.1:18091/` → 按 button「Show users」
+- Expected：重複註冊不應再新增一筆同 email 的項目。
+- Actual：兩次送出都顯示「Welcome!」，清單裡這個 email 出現兩次。
+- Viewport：不影響
+- Evidence：`users-desktop-after-signups.png`、`users-mobile-duplicates.png`；network request 25 與 27：`POST http://127.0.0.1:18090/api/signup` 都回傳 200
+- Status: confirmed — reproduced
+  - 重現時兩次 `POST /api/signup` 都回傳 200，清單裡這個 email 從 2 筆變成 4 筆。`users` 資料表沒有 unique constraint，insert 前也沒有檢查重複。
+
+**C3 (layout)** — 在手機上，首頁和註冊頁都以縮小的比例顯示，文字和控制項小到難以使用。
+- Viewport：390x844
+- Evidence：`users-phone-loaded.png`、`signup-mobile-390.png`、`signup-mobile-success.png`
+- Disposition: adopt — 我讀了 `frontend/pages/index.html` 和 `signup.html`，兩頁都沒有 `<meta name="viewport">`，所以手機瀏覽器會用預設的寬版面再整頁縮小，跟 Codex 描述的現象一致。另外 `signup.html` 的表單固定 `width:420px`，比 390 寬的螢幕還寬。這部分是我讀原始碼的推論，手機畫面本身沒有另外重現。
+
+## Out of scope (not tested)
+
+- 首頁的「status」連結指向 `http://127.0.0.1:18081/status`，沒有點進去。
+- 第一次載入時請求 `/favicon.ico` 得到 404，console 出現一則資源載入錯誤，沒有再深入查。
+
+## Exercise
+
+- **Guard**：這次重新執行（不是用快取），通過時間 1792193650（Unix 時間）；對實際接上的兩個 port 的檢查（real_check）也通過。
+- **App start**：attach mode 不啟動任何東西。Supervisor 接上兩個既有程序：python.exe PID 24236（backend，18090）和 PID 84900（frontend，18091），並一路監看到結束，期間沒有發生變動。
+- **Codex**：gpt-6.1-sol (high)，約 132 秒後正常完成（exit code 0），沒有中途停止。回覆裡沒有要求我或你去做任何事的內容。
+- **Coverage**：
+  - Pages：`/`、`/signup.html`
+  - Viewports：1280x720、500x844、390x844
+  - Flows：
+    - 載入並重複重新整理 Show users
+    - 空白欄位送出
+    - 格式錯誤和空白的 email 搭配合格長度的密碼送出
+    - 7 字元密碼被拒、8 字元密碼通過
+    - 用鍵盤和按鈕兩種方式送出
+    - 同一個 email 送出兩次
+    - 檢查截圖、console 和 network
+- **Reproductions**：
+  - C1：`completed`，結果檔 `repro-3b25e2bd.json`，截圖 `repro-3b25e2bd-01`～`08.png`
+  - C2：`completed`，結果檔 `repro-540d6e80.json`，截圖 `repro-540d6e80-01`～`11.png`
+- **我的觀察（不算 Codex 的論點）**：重現時清單裡有一筆「(empty)」，表示 dev 資料庫裡已經存在 email 為空字串的使用者。Codex 的 coverage 說它測過空白 email，但沒有把它列為論點。另外 `backend/server.py` 的註解寫著空 email 會被接受。
+- **你的 dev 資料受到的影響**：Codex 和我的重現都寫進了 `backend/data.sqlite`。目前 `users` 表裡有這些測試產生的資料列：
+  - `not-an-email` 2 筆
+  - `ui-exercise-duplicate@example.invalid` 4 筆
+  - `ui-exercise-20261017@example.invalid` 1 筆
+  - 很可能還有那筆空 email
+  
+  這些都沒有清掉。
+- **Evidence kept**：無。所有證據已隨可丟棄目標一起刪除。
+- **Finish**：Codex、瀏覽器和 supervisor 都已確認結束，proxy 已釋放。可丟棄目標 `D:\tmp\ui-exercise-targets\ask-codex-target-1ddca522a1f7` 和它的附屬目錄都已刪除，scratch 目錄也已刪除。你的兩個 dev server 沒有被啟動、停止或送任何訊號，仍在執行。
+
+Codex 的 shell 指令中提到接上的主機、連接埠或 HTTP 用戶端的（只是警示線，不是防護）：無
+
+Residual: 從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。Codex 的唯讀 shell 可以直接對接上的 server 送出任何請求，不受瀏覽器的限制。
+
+沒有改動任何東西：本次演練只回報；要修正任何問題，請另外提出要求。
