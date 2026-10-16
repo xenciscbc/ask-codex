@@ -2,7 +2,7 @@
 
 The exercise's platform layer is everything that needs Windows: the platform gate, the disposable target and its
 sibling directories, the guard, the supervisor and the process checks, the reproduction's browser session and the
-evidence move (C6). Production uses the real layer and refuses
+evidence move (C6), and attach mode's listener-table inspection (C8). Production uses the real layer and refuses
 on every other platform. Claude evals run in WSL, where none of it can run; there the whole layer, gate included,
 is replaced by an eval fake. The fake is selected by no environment variable. It is loaded only when all of this
 holds, checked on every selection:
@@ -44,6 +44,7 @@ REPLACED = {
     "supervisor": ("launch", "wait_started", "require_started", "Watcher", "own_processes", "codex_processes_ended",
                    "end_app", "run_alive"),
     "repro": ("open_session", "move_files"),
+    "attach": ("examine",),  # attach mode (C8): the listener table and its owners
 }
 
 _installed = None  # the fake module once installed in this process

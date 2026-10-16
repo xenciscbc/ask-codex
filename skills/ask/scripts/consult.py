@@ -596,13 +596,13 @@ def cleanup(directory):
 
 # Exercise-only actions: the platform layer is selected (I13) before any of its functions is looked up.
 EXERCISE_ACTIONS = ("target-create", "target-remove", "guard", "browser-install", "exercise-deps", "app-start",
-                    "finish", "repro", "evidence-keep")
+                    "finish", "repro", "evidence-keep", "attach-owners", "attach-start")
 # Actions that take a second file argument: repro <run directory> <steps file>, evidence-keep <run directory> <keep file>.
 SECOND_ARGUMENT = ("repro", "evidence-keep")
 # --result <file>: an operation that can outlast one Bash tool call (the guard's browser checks, app-start's install
 # and start commands, ending and removing a target) runs in the background and leaves its result in a file that
 # `wait-result` waits on in the foreground (C4 review item 30). Seconds after which a pending result is reported lost.
-RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800, "repro": 900}
+RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800, "repro": 900, "attach-start": 900}
 MAX_RESULT_WAIT = 60
 
 
@@ -677,7 +677,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
                                            "finish", "target-create", "target-remove", "guard", "browser-install",
-                                           "exercise-deps", "app-start", "wait-result", "repro", "evidence-keep"))
+                                           "exercise-deps", "app-start", "wait-result", "repro", "evidence-keep",
+                                           "attach-owners", "attach-start"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("file", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
@@ -744,6 +745,13 @@ def main():
         elif args.action == "evidence-keep":
             # Chosen evidence moved out of the target before finish (repro.py, C6, I9).
             result = reproduction.keep(cli(), args.path, args.file)
+        elif args.action == "attach-owners":
+            # Attach mode: who owns each attached port, for the user's confirmation (attach.py, C8, I14).
+            import attach
+            result = attach.owners_command(cli(), args.path)
+        elif args.action == "attach-start":
+            # Attach mode: the supervisor watches the attached servers' owners (attach.py, C8, I8, I14).
+            result = exercise.attach_start(cli(), args.path)
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:

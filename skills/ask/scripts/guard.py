@@ -26,8 +26,11 @@ and the exercise's target - with node created suspended, assigned, resumed, over
 a stdio MCP server (CODEX_DEFAULT_ENV taken from the run environment, then the definition's `env`). Its MCP client
 declares Codex 0.159.3's capabilities (mcp_stdio). Every item of I7 is checked and every failing item reported.
 
-Port mapping (implementation note for C8): the checks take the app origins they serve from the definition the
-caller builds; `substitute_ports` maps attached ports to guard-owned ports before the template is built.
+Port mapping (C8, attach mode): the checks take the app origins they serve from the definition the caller builds;
+`guard_attached` maps each attached port to a guard-owned free port (`substitute_ports`) before the guard's template
+is built, proves by a literal diff that only those port numbers differ from the real template (`check_substitution`),
+and then runs the real-definition check (attach.real_check) on the attached ports, every exercise and never cached.
+The attach-mode fingerprint keeps the attached ports and adds the mode; a pass records the substitution.
 
 Nothing here reads an environment variable to select, skip or substitute anything (I13): the run environment is
 read only to build the MCP's environment (as Codex does) and to locate the inherited TEMP the checks watch. Tests
@@ -227,9 +230,13 @@ def dependencies(cli, cwd, codex_cwd, state_dir=None):
             "chrome_policy_sha256": policy}
 
 
-def fingerprint(template, facts):
-    data = json.dumps({"template": template, "facts": facts}, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":"))
+def fingerprint(template, facts, mode=None):
+    """SHA-256 over the template and the facts; an attach-mode exercise adds its mode (C8), so a copy-mode pass is
+    never reused for attach mode or the reverse. The copy-mode value is unchanged (no mode key)."""
+    value = {"template": template, "facts": facts}
+    if mode is not None:
+        value["mode"] = mode
+    data = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
@@ -279,6 +286,61 @@ def substitute_ports(app, mapping):
         host, port = origin.rsplit(":", 1)
         result.append(f"{host}:{mapping.get(int(port), int(port))}")
     return result
+
+
+PORT_AFTER_COLON = re.compile(r"(?<=:)(\d+)")
+
+
+def _port_only(real, guarded, mapping):
+    """The two strings are equal except for numbers after a ':' that the mapping turns one into the other."""
+    a, b = PORT_AFTER_COLON.split(real), PORT_AFTER_COLON.split(guarded)
+    if len(a) != len(b):
+        return False
+    for index, (x, y) in enumerate(zip(a, b)):
+        if index % 2 == 0:
+            if x != y:
+                return False
+        elif x != y and mapping.get(int(x)) != int(y):
+            return False
+    return True
+
+
+def check_substitution(real, guarded, mapping):
+    """C8 (I14, AT-5): a literal diff of the real definition template and the guard's: they may differ only in the
+    attached port numbers, each replaced by its guard port, and no attached port may remain in the guard's (it never
+    binds or serves one). Raises ValueError naming every other difference (e.g. a changed host)."""
+    differences = []
+
+    def walk(x, y, where):
+        if type(x) is not type(y):
+            differences.append(where)
+        elif isinstance(x, dict):
+            if set(x) != set(y):
+                differences.append(where)
+            else:
+                for key in x:
+                    walk(x[key], y[key], f"{where}.{key}")
+        elif isinstance(x, list):
+            if len(x) != len(y):
+                differences.append(where)
+            else:
+                for index, (a, b) in enumerate(zip(x, y)):
+                    walk(a, b, f"{where}[{index}]")
+        elif isinstance(x, str):
+            if x != y and not _port_only(x, y, mapping):
+                differences.append(where)
+        elif x != y:
+            differences.append(where)
+
+    walk(real, guarded, "definition")
+    text = json.dumps(guarded)
+    left = sorted(port for port in mapping if re.search(rf":{port}(?![0-9])", text))
+    if set(mapping.values()) & set(mapping):
+        differences.append("a guard port equals an attached port")
+    if differences or left:
+        raise ValueError("The guard's definition differs from the real one in more than the attached port numbers ("
+                         + ", ".join(differences + [f"attached port {p} left in the guard's definition" for p in left])
+                         + "); refused")
 
 
 def _addresses(host):
@@ -1327,11 +1389,16 @@ def current_fingerprint(cli, plan, state_dir=None):
     if instantiated != b["definition"] or browser.never_listed(instantiated, b["profile"]):
         raise ValueError("The exercise's browser server definition is not the template's instantiation; "
                          "prepare a new exercise")
+    if exercise.is_attach(plan):
+        # Attach mode (C8): the template keeps the attached ports; the mode is part of the fingerprint.
+        return template, facts, fingerprint(template, facts, "attach")
     return template, facts, fingerprint(template, facts)
 
 
 def require_current_pass(cli, directory, plan, state_dir=None):
-    """`run`: a pass for this exercise's exact fingerprint, less than 12 hours old, or ValueError."""
+    """`run`: a pass for this exercise's exact fingerprint, less than 12 hours old, or ValueError. Attach mode also
+    needs this exercise's own real-definition check (never cached), made after attach-start."""
+    import exercise
     record = _guard_record(directory)
     if not record:
         raise ValueError("No browser guard pass for this exercise; run the guard before the app starts")
@@ -1343,6 +1410,11 @@ def require_current_pass(cli, directory, plan, state_dir=None):
     age = now() - passed if type(passed) in (int, float) else None
     if age is None or not 0 <= age <= CACHE_SECONDS:
         raise ValueError("The browser guard pass is older than 12 hours; prepare a new exercise")
+    if exercise.is_attach(plan):
+        check = record.get("real_check")
+        if record.get("mode") != "attach" or not isinstance(check, dict) or check.get("passed") is not True:
+            raise ValueError("The real-definition check of the attached ports has not passed for this exercise; "
+                             "run the guard after attach-start")
     return record
 
 
@@ -1385,6 +1457,8 @@ def guard_exercise(cli, directory, state_dir=None):
     exercise.require_platform()
     if (directory / "started").exists():
         raise ValueError("The exercise run has started; the guard runs before it")
+    if exercise.is_attach(plan):
+        return guard_attached(cli, directory, plan, state_dir)
     if (directory / "supervisor-config.json").exists():
         raise ValueError("The app start was attempted for this exercise; the guard runs before any app process")
     try:
@@ -1413,6 +1487,84 @@ def guard_exercise(cli, directory, state_dir=None):
         return {**exercise.fail_at_once(cli, directory, plan, reason), "guard": {"passed": False}}
     return {"state": "guard_passed", "directory": str(directory),
             "guard": {"source": record["source"], "passed_at": record["passed_at"], "fingerprint": fp}}
+
+
+def guard_port_mapping(app, avoid):
+    """C8: for each attached port number a guard-owned loopback port, free on 127.0.0.1 and ::1 now, distinct from
+    every attached port, from `avoid` (the owned proxy port) and from each other."""
+    import attach
+    attached = attach.ports_of(app)
+    mapping = {}
+    for port in sorted(attached):
+        for _ in range(50):
+            candidate = Checks._free_port_on_all(((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")))
+            if candidate not in avoid and candidate not in attached and candidate not in mapping.values():
+                mapping[port] = candidate
+                break
+        else:
+            raise ValueError("No free guard port for the attached port substitution")
+    return mapping
+
+
+def _node_and_entry(cli, state_dir=None):
+    node = browser.node_executable(cli.which)
+    entry = browser.install_directory().joinpath(*browser.ENTRY) if state_dir is None else \
+        Path(state_dir, f"{browser.PACKAGE}-{browser.VERSION}", *browser.ENTRY)
+    return node, entry
+
+
+def guard_attached(cli, directory, plan, state_dir=None):
+    """consult.py guard of an attach-mode exercise (C8, I14), after attach-start so that the supervisor polls the
+    listener table while it runs (N-c): the browser guard on the same template with only the attached port numbers
+    replaced by guard-owned ports (a literal diff proves nothing else differs; the guard never binds an attached
+    port), or a cached pass for the attach-mode fingerprint; then, every exercise and never cached, the
+    real-definition check on the attached ports (attach.real_check). A failure ends what the exercise holds and
+    removes the target (exercise.fail_ended); the attached processes are never signalled."""
+    import attach
+    import exercise
+    import supervisor
+    try:
+        supervisor.require_started(directory, plan)
+    except ValueError as error:
+        raise ValueError(f"{error}. In attach mode attach-start comes before the guard") from None
+    try:
+        template, facts, fp = current_fingerprint(cli, plan, state_dir)
+        hit = cached_pass(state_dir, fp)
+        app = plan["summary"]["app"]
+        if hit:
+            record = {"fingerprint": fp, "source": "cache", "passed_at": hit["passed_at"], "checked_at": now(),
+                      "facts": facts, "mode": "attach"}
+        else:
+            mapping = guard_port_mapping(app, {plan["browser"]["proxy_port"]})
+            node, entry = _node_and_entry(cli, state_dir)
+            guarded = exercise._template({"app": substitute_ports(app, mapping), "headed": plan["request"]["headed"]},
+                                         node, entry)
+            check_substitution(template, guarded, mapping)
+            items = browser_guard(cli, directory, plan, guarded, state_dir)
+            if not all(item["ok"] for item in items):
+                raise GuardFailed(items)
+            passed = now()
+            substitution = {str(port): guard_port for port, guard_port in sorted(mapping.items())}
+            record = {"fingerprint": fp, "source": "ran", "passed_at": passed, "checked_at": passed, "facts": facts,
+                      "items": len(items), "mode": "attach", "substitution": substitution}
+            store_pass(state_dir, fp, {"fingerprint": fp, "passed_at": passed, "facts": facts, "items": len(items),
+                                       "mode": "attach", "substitution": substitution})
+        check = attach.real_check(cli, directory, plan)
+        if not check["passed"]:
+            raise GuardFailed(check["items"], "The real-definition check of the attached ports failed")
+        record["real_check"] = {"passed": True, "checked_at": now(), "items": len(check["items"]),
+                                "checked": [item["item"] for item in check["items"]]}
+        cli.write_json(directory / "guard.json", record)
+    except GuardFailed as failure:
+        result = exercise.fail_ended(cli, directory, plan, str(failure))
+        return {**result, "guard": {"passed": False, "failing": [i for i in failure.items if not i["ok"]],
+                                    "items": len(failure.items)}}
+    except Exception as error:
+        reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: the guard failed"
+        return {**exercise.fail_ended(cli, directory, plan, reason), "guard": {"passed": False}}
+    return {"state": "guard_passed", "directory": str(directory),
+            "guard": {"source": record["source"], "passed_at": record["passed_at"], "fingerprint": fp,
+                      "real_check": "passed"}}
 
 
 def codex_notice(version):

@@ -53,7 +53,7 @@ its directory is created:
      "project": "<final path>", "root": {"path": "<final path>", "volume_serial": "..", "file_id": ".."},
      "entries": [{"kind": "target" | "temp", "path": "<root>\\<name>", "state": "pending" | "created",
                   "volume_serial": "..", "file_id": ".."}],
-     "copy": "pending" | "done"}
+     "copy": "pending" | "done" | "none" (attach mode: an empty target, nothing copied)}
 
 Copy: the project is walked handle-relative (NtCreateFile with a parent directory handle and
 FILE_OPEN_REPARSE_POINT), so no path is re-resolved and no reparse point of any tag is followed or
@@ -806,14 +806,16 @@ def _reparse_points(handle, parts=()):
 
 # --- create ---
 
-def create(request, make_run_directory):
-    """Check everything, then call make_run_directory(project) -> (run directory, owns it), record, create, copy."""
+def create(request, make_run_directory, copy=True):
+    """Check everything, then call make_run_directory(project) -> (run directory, owns it), record, create, copy.
+    With copy=False (attach mode, plan C8, I14) the target is created by the same checks and record and stays
+    empty: nothing of the project is read or copied (record "copy": "none")."""
     require_windows()
     with _placeholders_exposed():
-        return _create(request, make_run_directory)
+        return _create(request, make_run_directory, copy)
 
 
-def _create(request, make_run_directory):
+def _create(request, make_run_directory, copy_project=True):
     spec = _validate(request)
     root_handle, root, root_identity = _open_root(spec["root"])
     project_handle = None
@@ -871,7 +873,10 @@ def _create(request, make_run_directory):
         copy = _Copy(spec, target)
         try:
             try:
-                copy.run(project_handle, target_handle)
+                if copy_project:
+                    copy.run(project_handle, target_handle)
+                elif spec["named"]:
+                    raise CopyFailure("an empty target (attach mode) takes no named files")
                 missing = [shown for folded, shown in spec["named"].items() if folded not in copy.named_copied]
                 if missing:
                     raise CopyFailure(f"named file not found as a regular file in the project: {', '.join(missing)}")
@@ -881,7 +886,7 @@ def _create(request, make_run_directory):
                                       f"{', '.join(links)}")
             finally:
                 _close(target_handle)
-            record["copy"] = "done"
+            record["copy"] = "done" if copy_project else "none"
             _write_record(directory, record)
         except Exception as error:
             reason = str(error) if isinstance(error, CopyFailure) else f"{type(error).__name__}: {error}"

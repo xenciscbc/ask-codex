@@ -58,6 +58,13 @@ The script's own processes (the CLI call, the supervisor, the run wrapper) are e
 U10: `run` holds a SYNCHRONIZE handle to the supervisor (Watcher) and, when it dies while Codex runs, stops the Codex
 tree through the ADR 0004 path at once.
 
+Attach mode (C8, I14; attach.py): `consult.py attach-start` starts the same supervisor process, which then runs
+attach.AttachSupervisor: no app job and no app command; it holds the owned proxy port and a SYNCHRONIZE |
+PROCESS_QUERY_LIMITED_INFORMATION handle to each attached owner (never terminate rights), reaches the state `attached`
+after re-verifying each owner, polls the listener table every 2 s until finish (a change stops Codex and the exercise:
+state `owner_changed`), and ends only registered repro and check jobs; `require_started` then requires `attached` and
+the confirmed owners instead of the app ports answering.
+
 The only environment read here builds the app's environment from SYSTEM_ENV (I13: nothing is selected, skipped or
 substituted by a variable).
 """
@@ -97,7 +104,8 @@ SYSTEM_ENV = ("SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "PATH
               "COMMONPROGRAMW6432", "ALLUSERSPROFILE", "PUBLIC", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
               "PROCESSOR_IDENTIFIER", "OS", "COMPUTERNAME")
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,99}$")
-TERMINAL = ("app_started", "start_failed", "ended", "end_unconfirmed", "stop_unconfirmed", "bound_ended")
+TERMINAL = ("app_started", "start_failed", "ended", "end_unconfirmed", "stop_unconfirmed", "bound_ended",
+            "attached")  # attached: attach mode's supervisor after its owner re-verification (attach.py, C8)
 DETACHED, NEW_GROUP, BREAKAWAY = 0x8, 0x200, 0x01000000
 
 # Set when this process ends the supervisor on purpose (finish, stop, cleanup, a failure path): a Watcher in the
@@ -837,6 +845,11 @@ def serve(directory):
     import consult
     directory, plan = consult.plan_at(directory)
     config = _read(directory / CONFIG) or {}
+    if plan.get("attach"):
+        # Attach mode (C8, I14): no app job; the attached servers' owners are watched, never signalled.
+        import attach
+        attach.AttachSupervisor(consult, directory, plan, config).main()
+        return
     Supervisor(consult, directory, plan, config).main()
 
 
@@ -891,9 +904,15 @@ def require_started(directory, plan):
     """`run`: the supervisor runs, its app started, it holds the owned proxy port, every app port answers."""
     directory = Path(directory)
     current, identity = status(directory), _read(directory / PROCESS)
+    attached = bool(plan.get("attach"))  # attach mode (C8): the supervisor watches the attached servers' owners
     if not (directory / CONFIG).exists() or not isinstance(current, dict) or not isinstance(identity, dict):
+        if attached:
+            raise ValueError("The exercise has not been attached (attach-start); Codex does not start")
         raise ValueError("The app has not been started for this exercise (app-start); Codex does not start")
-    if current.get("state") != "app_started":
+    if attached and current.get("state") != "attached":
+        raise ValueError(f"The exercise is not attached (supervisor state {current.get('state')}); Codex does not "
+                         "start")
+    if not attached and current.get("state") != "app_started":
         raise ValueError(f"The app is not running (supervisor state {current.get('state')}); Codex does not start")
     if current.get("pid") != identity.get("pid") or not winjob.alive(identity.get("pid"), identity.get("created")):
         raise ValueError("The app supervisor is not running; Codex does not start")
@@ -901,6 +920,13 @@ def require_started(directory, plan):
     owners = {pid for _, p, pid in winjob.tcp_listeners() if p == port}
     if owners != {identity["pid"]}:
         raise ValueError("The owned proxy port is not held by the exercise's supervisor; Codex does not start")
+    if attached:
+        import attach
+        problems, _ = attach.confirm(plan["summary"]["app"], attach.confirmed_owners(plan))
+        if problems:
+            raise ValueError("The attached servers are not the confirmed ones (" + "; ".join(problems) + "); Codex "
+                             "does not start")
+        return identity
     for origin in plan["summary"]["app"]:
         if not answers(origin):
             raise ValueError(f"The app port {origin} no longer answers; Codex does not start")

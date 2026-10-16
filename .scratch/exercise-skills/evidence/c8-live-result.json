@@ -1,0 +1,790 @@
+{
+ "started_at": 1792156341.9619873,
+ "steps": [
+  {
+   "call": "attach-owners",
+   "seconds": 0.2,
+   "state": "ready"
+  },
+  {
+   "call": "prepare",
+   "seconds": 0.9,
+   "state": "prepared"
+  },
+  {
+   "call": "attach-start",
+   "seconds": 0.4,
+   "state": "attached"
+  },
+  {
+   "call": "guard",
+   "seconds": 167.3,
+   "state": "guard_passed"
+  },
+  {
+   "call": "run",
+   "seconds": 10.6,
+   "state": "finished"
+  },
+  {
+   "call": "wait",
+   "seconds": 0.2,
+   "state": "finished"
+  },
+  {
+   "call": "collect",
+   "seconds": 0.2,
+   "state": "collected"
+  },
+  {
+   "call": "repro",
+   "seconds": 6.5,
+   "state": "completed"
+  },
+  {
+   "call": "repro",
+   "seconds": 6.3,
+   "state": "completed"
+  },
+  {
+   "call": "finish",
+   "seconds": 0.5,
+   "state": "finished"
+  },
+  {
+   "call": "attach-owners",
+   "seconds": 0.2,
+   "state": "refused"
+  },
+  {
+   "call": "attach-owners",
+   "seconds": 0.2,
+   "state": "ready"
+  },
+  {
+   "call": "prepare",
+   "seconds": 1.1,
+   "state": "prepared"
+  },
+  {
+   "call": "attach-start",
+   "seconds": 0.4,
+   "state": "attached"
+  },
+  {
+   "call": "guard",
+   "seconds": 1.8,
+   "state": "failed"
+  },
+  {
+   "call": "attach-owners",
+   "seconds": 0.2,
+   "state": "ready"
+  },
+  {
+   "call": "prepare",
+   "seconds": 1.1,
+   "state": "prepared"
+  },
+  {
+   "call": "attach-start",
+   "seconds": 0.7,
+   "state": "attached"
+  },
+  {
+   "call": "guard",
+   "seconds": 159.9,
+   "state": "guard_passed"
+  },
+  {
+   "call": "finish",
+   "seconds": 0.5,
+   "state": "finished"
+  },
+  {
+   "call": "attach-owners",
+   "seconds": 0.2,
+   "state": "ready"
+  },
+  {
+   "call": "prepare",
+   "seconds": 1.1,
+   "state": "prepared"
+  },
+  {
+   "call": "attach-start",
+   "seconds": 0.4,
+   "state": "attached"
+  },
+  {
+   "call": "guard",
+   "seconds": 8.6,
+   "state": "guard_passed"
+  },
+  {
+   "call": "collect",
+   "seconds": 0.3,
+   "state": "collected"
+  }
+ ],
+ "precheck": {
+  "existing_paths": [],
+  "busy_ports": []
+ },
+ "config_toml_sha256_before": "622450e24e8c2283967a5474a6a5097b2c33d25e5c4b5e4bb9f77e7d6eda41b4",
+ "baseline_processes": 429,
+ "servers_listening": [
+  true,
+  true,
+  true
+ ],
+ "fixture_servers": {
+  "backend": {
+   "pid": 91432,
+   "created": 134366299422014396
+  },
+  "frontend": {
+   "pid": 86304,
+   "created": 134366299422063829
+  },
+  "sentinel": {
+   "pid": 83144,
+   "created": 134366299421953129
+  }
+ },
+ "A_owners": {
+  "state": "ready",
+  "app": [
+   "127.0.0.1:18090",
+   "127.0.0.1:18091"
+  ],
+  "ports": [
+   {
+    "port": 18090,
+    "origins": [
+     "127.0.0.1:18090"
+    ],
+    "listeners": [
+     {
+      "address": "127.0.0.1",
+      "pid": 91432
+     }
+    ],
+    "owner": {
+     "pid": 91432,
+     "created": 134366299422014396,
+     "image": "C:\\Program Files\\Python311\\python.exe",
+     "name": "python.exe",
+     "command_line": "\"C:\\Program Files\\Python311\\python.exe\" -I backend/server.py 127.0.0.1 18090"
+    },
+    "problems": []
+   },
+   {
+    "port": 18091,
+    "origins": [
+     "127.0.0.1:18091"
+    ],
+    "listeners": [
+     {
+      "address": "127.0.0.1",
+      "pid": 86304
+     }
+    ],
+    "owner": {
+     "pid": 86304,
+     "created": 134366299422063829,
+     "image": "C:\\Program Files\\Python311\\python.exe",
+     "name": "python.exe",
+     "command_line": "\"C:\\Program Files\\Python311\\python.exe\" -I frontend/server.py 127.0.0.1 18091"
+    },
+    "problems": []
+   }
+  ],
+  "owners": [
+   {
+    "port": 18090,
+    "pid": 91432,
+    "created": 134366299422014396
+   },
+   {
+    "port": 18091,
+    "pid": 86304,
+    "created": 134366299422063829
+   }
+  ],
+  "attached": [
+   "python.exe:91432",
+   "python.exe:86304"
+  ]
+ },
+ "A_prepared": {
+  "state": "prepared",
+  "summary_mode": "attach",
+  "attached": [
+   "python.exe:91432",
+   "python.exe:86304"
+  ],
+  "target_listing": [
+   "evidence"
+  ],
+  "record_copy": "none"
+ },
+ "A_attach_start": {
+  "state": "attached",
+  "directory": "D:\\tmp\\c8-base\\ask-codex\\run.35ad8878",
+  "supervisor": {
+   "pid": 88344,
+   "breakaway": true
+  },
+  "app": [
+   "127.0.0.1:18090",
+   "127.0.0.1:18091"
+  ],
+  "attached": [
+   "python.exe:91432",
+   "python.exe:86304"
+  ],
+  "proxy_port": 16370,
+  "owner_access": 1052672
+ },
+ "A_supervisor_handles_to_servers": {
+  "91432": [
+   "0x101000"
+  ],
+  "86304": [
+   "0x101000"
+  ]
+ },
+ "A_supervisor_state": {
+  "state": "attached",
+  "owner_access": 1052672,
+  "apps": [],
+  "polls": 1
+ },
+ "A_guard": {
+  "state": "guard_passed",
+  "directory": "D:\\tmp\\c8-base\\ask-codex\\run.35ad8878",
+  "guard": {
+   "source": "ran",
+   "passed_at": 1792156501.7601213,
+   "fingerprint": "8994766d414a4fd3f8b93c9d2950d23bb137aa6b25abe8a6cd76c3a6130f3ef1",
+   "real_check": "passed"
+  }
+ },
+ "A_guard_record": {
+  "source": "ran",
+  "mode": "attach",
+  "substitution": {
+   "18090": 16393,
+   "18091": 16394
+  },
+  "real_check": {
+   "passed": true,
+   "checked_at": 1792156511.18614,
+   "items": 14,
+   "checked": [
+    "attached-127.0.0.1:18090-reachable",
+    "attached-127.0.0.1:18091-reachable",
+    "free-loopback-port-refused-by-the-allowlist",
+    "external-host-refused-by-the-allowlist",
+    "spelling-localhost-18090-refused-by-the-allowlist",
+    "spelling-[::1]-18090-refused-by-the-allowlist",
+    "spelling-127.0.0.2-18090-refused-by-the-allowlist",
+    "spelling-localhost-18091-refused-by-the-allowlist",
+    "spelling-[::1]-18091-refused-by-the-allowlist",
+    "spelling-127.0.0.2-18091-refused-by-the-allowlist",
+    "isolated-context-reaches-the-attached-port",
+    "isolated-context-free-loopback-port-refused-by-the-allowlist",
+    "isolated-context-external-host-refused-by-the-allowlist",
+    "real-definition-session-ended"
+   ]
+  },
+  "items": 154
+ },
+ "A_servers_alive_after_guard": [
+  true,
+  true
+ ],
+ "A_negative_control": {
+  "passed": false,
+  "failing": [
+   {
+    "item": "free-loopback-port-refused-by-the-allowlist",
+    "ok": false,
+    "detail": "http://127.0.0.1:39558/: net::ERR_SOCKET_NOT_CONNECTED: Unable to navigate in the selected page: net::ERR_SOCKET_NOT_CONNECTED at http://127.0.0.1:39558/.\n## Pages\n1: 127.0.0.1 (chrome-error://chromewebdata/) [selected]"
+   },
+   {
+    "item": "isolated-context-free-loopback-port-refused-by-the-allowlist",
+    "ok": false,
+    "detail": "http://127.0.0.1:39558/: net::ERR_SOCKET_NOT_CONNECTED: Unable to navigate in the selected page: net::ERR_SOCKET_NOT_CONNECTED at http://127.0.0.1:39558/.\n## Pages\n1: 127.0.0.1 (chrome-error://chromewebdata/)\n2: 127.0.0.1 (chrome-error://chromewebdata/) [s"
+   }
+  ],
+  "items": [
+   "attached-127.0.0.1:18090-reachable",
+   "attached-127.0.0.1:18091-reachable",
+   "free-loopback-port-refused-by-the-allowlist",
+   "external-host-refused-by-the-allowlist",
+   "spelling-localhost-18090-refused-by-the-allowlist",
+   "spelling-[::1]-18090-refused-by-the-allowlist",
+   "spelling-127.0.0.2-18090-refused-by-the-allowlist",
+   "spelling-localhost-18091-refused-by-the-allowlist",
+   "spelling-[::1]-18091-refused-by-the-allowlist",
+   "spelling-127.0.0.2-18091-refused-by-the-allowlist",
+   "isolated-context-reaches-the-attached-port",
+   "isolated-context-free-loopback-port-refused-by-the-allowlist",
+   "isolated-context-external-host-refused-by-the-allowlist",
+   "real-definition-session-ended"
+  ]
+ },
+ "A_run": {
+  "state": "finished",
+  "directory": "D:\\tmp\\c8-base\\ask-codex\\run.35ad8878"
+ },
+ "A_wait": {
+  "state": "finished",
+  "directory": "D:\\tmp\\c8-base\\ask-codex\\run.35ad8878",
+  "timer": {
+   "interval_minutes": 30,
+   "source": "default"
+  },
+  "runs": [
+   {
+    "model": null,
+    "state": "finished",
+    "last_event": "turn.completed",
+    "event_age_seconds": 6.137796878814697
+   }
+  ],
+  "elapsed_seconds": 7.071062088012695
+ },
+ "A_collect": {
+  "state": "collected",
+  "run": "completed",
+  "attach": {
+   "attached": [
+    "python.exe:91432",
+    "python.exe:86304"
+   ],
+   "tripwire": [
+    {
+     "command": "curl -s http://127.0.0.1:18090/api/users",
+     "names": [
+      "port 18090",
+      "curl"
+     ]
+    }
+   ]
+  },
+  "guard": {
+   "source": "ran",
+   "passed_at": 1792156501.7601213
+  }
+ },
+ "A_codex_cwd_is_the_empty_target": {
+  "-C": "D:/tmp/ui-exercise-targets/attach-a",
+  "target": "D:/tmp/ui-exercise-targets/attach-a",
+  "target_listing_after_run": [
+   "evidence"
+  ],
+  "project_in_argv": false
+ },
+ "A_repro_users": {
+  "state": "completed",
+  "steps": [
+   "passed",
+   "passed",
+   "passed"
+  ]
+ },
+ "A_repro_api_proxy": {
+  "state": "completed",
+  "steps": [
+   "passed",
+   "passed"
+  ],
+  "sentinel_hits_before": 0,
+  "sentinel_hits_after": 1,
+  "new_hits": [
+   "1792156544.233 127.0.0.1 /api/ping"
+  ]
+ },
+ "A_finish": {
+  "state": "finished",
+  "ended": {
+   "codex": {
+    "state": "finished",
+    "confirmed": true
+   },
+   "confirmed": true,
+   "browser": {
+    "confirmed": true,
+    "recorded": 0,
+    "terminated": [],
+    "alive": []
+   },
+   "app": {
+    "confirmed": true,
+    "how": "supervisor",
+    "trees": [],
+    "alive": [],
+    "listeners": [],
+    "repro": {
+     "confirmed": true,
+     "jobs": []
+    },
+    "order": [],
+    "proxy_released": true,
+    "supervisor_state": "ended"
+   }
+  }
+ },
+ "A_servers_after_finish": {
+  "backend_alive_same_identity": true,
+  "frontend_alive_same_identity": true,
+  "port_owners": {
+   "18090": 91432,
+   "18091": 86304
+  },
+  "expected": {
+   "18090": 91432,
+   "18091": 86304
+  },
+  "supervisor_alive": false,
+  "run_directory_left": false,
+  "targets_left": [
+   ".stub"
+  ],
+  "proxy_port_bindable": true
+ },
+ "B_second_listener_refused": {
+  "state": "refused",
+  "app": [
+   "127.0.0.1:18090"
+  ],
+  "ports": [
+   {
+    "port": 18090,
+    "origins": [
+     "127.0.0.1:18090"
+    ],
+    "listeners": [
+     {
+      "address": "127.0.0.1",
+      "pid": 91432
+     },
+     {
+      "address": "::1",
+      "pid": 51560
+     }
+    ],
+    "owner": null,
+    "problems": [
+     "more than one process listens on port 18090 (PIDs 51560, 91432); refused"
+    ]
+   }
+  ],
+  "reason": "Attach refused: more than one process listens on port 18090 (PIDs 51560, 91432); refused"
+ },
+ "B_helper_ended": "terminated",
+ "C_variant_listening": true,
+ "C_owners": {
+  "state": "ready",
+  "attached": [
+   "python.exe:37500"
+  ],
+  "reason": null
+ },
+ "C_attach_start": "attached",
+ "C_guard": {
+  "state": "failed",
+  "reason": "The browser guard failed on 13 item(s): browser-page-available, image-to-free-loopback-port-blocked, iframe-to-free-loopback-port-blocked, fetch-to-free-loopback-port-blocked, websocket-to-free-loopback-port-blocked, sendbeacon-to-free-loopback-port-blocked, 307-redirect-image-to-free-loopback-port-blocked, 307-redirect-fetch-to-free-loopback-port-blocked, worker-to-free-loopback-port-blocked, service-worker-to-free-loopback-port-blocked, page-requests-to-non-loopback-and-external-fail, service-worker-requests-to-non-loopback-and-external-fail ...; no app start, no Codex",
+  "failing": [
+   "browser-page-available",
+   "image-to-free-loopback-port-blocked",
+   "iframe-to-free-loopback-port-blocked",
+   "fetch-to-free-loopback-port-blocked",
+   "websocket-to-free-loopback-port-blocked",
+   "sendbeacon-to-free-loopback-port-blocked",
+   "307-redirect-image-to-free-loopback-port-blocked",
+   "307-redirect-fetch-to-free-loopback-port-blocked",
+   "worker-to-free-loopback-port-blocked",
+   "service-worker-to-free-loopback-port-blocked",
+   "page-requests-to-non-loopback-and-external-fail",
+   "service-worker-requests-to-non-loopback-and-external-fail",
+   "webrtc-yields-no-server-reflexive-candidate"
+  ],
+  "target_removed": true,
+  "ended": {
+   "confirmed": true,
+   "browser": {
+    "confirmed": true,
+    "recorded": 0,
+    "terminated": [],
+    "alive": []
+   },
+   "app": {
+    "confirmed": true,
+    "how": "supervisor",
+    "trees": [],
+    "alive": [],
+    "listeners": [],
+    "repro": {
+     "confirmed": true,
+     "jobs": []
+    },
+    "order": [],
+    "proxy_released": true,
+    "supervisor_state": "ended"
+   }
+  },
+  "run_directory_left": false,
+  "codex_calls_during": 0
+ },
+ "C_urlpattern_probe": [
+  "throws http://[::1]:18092/*: Failed to construct URLPattern",
+  "ok http://[\\:\\:1]:18092/*",
+  "ok http://127.0.0.1:18092/*"
+ ],
+ "C_variant_alive_same_identity": true,
+ "C_variant_ended": "terminated",
+ "D1_attach_start": "attached",
+ "D1_guard": {
+  "state": "guard_passed",
+  "source": "ran",
+  "reason": null
+ },
+ "D1_finish": "finished",
+ "D_attach_start": "attached",
+ "D_guard": {
+  "state": "guard_passed",
+  "source": "cache",
+  "real_check": {
+   "passed": true,
+   "checked_at": 1792156724.2468953,
+   "items": 10,
+   "checked": [
+    "attached-127.0.0.1:18093-reachable",
+    "free-loopback-port-refused-by-the-allowlist",
+    "external-host-refused-by-the-allowlist",
+    "spelling-localhost-18093-refused-by-the-allowlist",
+    "spelling-[::1]-18093-refused-by-the-allowlist",
+    "spelling-127.0.0.2-18093-refused-by-the-allowlist",
+    "isolated-context-reaches-the-attached-port",
+    "isolated-context-free-loopback-port-refused-by-the-allowlist",
+    "isolated-context-external-host-refused-by-the-allowlist",
+    "real-definition-session-ended"
+   ]
+  },
+  "reason": null
+ },
+ "D_variant_ended": "terminated",
+ "D_swap": {
+  "state": "owner_changed",
+  "detected_after_s": 1.31,
+  "reason": "the attached servers changed: PID 80164 exited; port 18093: the owner is not the confirmed process (confirmed PID 80164, now PID 92076)",
+  "codex": "stopped",
+  "removal": "removed",
+  "stub_ran_to_its_end": false,
+  "replacement_alive": true
+ },
+ "D_run": {
+  "state": "finished",
+  "directory": "D:\\tmp\\c8-base\\ask-codex\\run.ccb78945"
+ },
+ "D_collect": {
+  "state": "collected",
+  "run": "stopped",
+  "attach": {
+   "attached": [
+    "python.exe:80164"
+   ],
+   "tripwire": [],
+   "supervisor": {
+    "state": "owner_changed",
+    "reason": "the attached servers changed: PID 80164 exited; port 18093: the owner is not the confirmed process (confirmed PID 80164, now PID 92076)"
+   }
+  },
+  "target_removed": true
+ },
+ "D_run_directory_left": false,
+ "exec_sentinel_lines": 2,
+ "violations": "",
+ "fixture_survived": {
+  "backend": true,
+  "frontend": true,
+  "data_changed_allowed": false
+ },
+ "servers_ended": [
+  {
+   "pid": 83144,
+   "result": "terminated"
+  },
+  {
+   "pid": 91432,
+   "result": "terminated"
+  },
+  {
+   "pid": 86304,
+   "result": "terminated"
+  },
+  {
+   "pid": 51560,
+   "result": "gone"
+  },
+  {
+   "pid": 37500,
+   "result": "gone"
+  },
+  {
+   "pid": 80164,
+   "result": "gone"
+  },
+  {
+   "pid": 92076,
+   "result": "terminated"
+  }
+ ],
+ "processes_created_after_baseline_still_alive": [
+  {
+   "pid": 69844,
+   "image": "C:\\Program Files\\Git\\bin\\bash.exe",
+   "parent": 41840,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 74764,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+   "parent": 69844,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 30696,
+   "image": "C:\\Windows\\System32\\conhost.exe",
+   "parent": 74764,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 14880,
+   "image": "C:\\Program Files\\Git\\bin\\bash.exe",
+   "parent": 70616,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 72460,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+   "parent": 14880,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 53988,
+   "image": "C:\\Windows\\System32\\conhost.exe",
+   "parent": 72460,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 92000,
+   "image": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+   "parent": 2128,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 33424,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\tail.exe",
+   "parent": 84900,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 11384,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\sh.exe",
+   "parent": 52076,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 20468,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\sleep.exe",
+   "parent": 42652,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 55320,
+   "image": "C:\\Windows\\System32\\dllhost.exe",
+   "parent": 1488,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 58360,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\sh.exe",
+   "parent": 11384,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 81184,
+   "image": "sh.exe",
+   "parent": 58360,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 75788,
+   "image": "git.exe",
+   "parent": 77748,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 81968,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\sh.exe",
+   "parent": 58360,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  },
+  {
+   "pid": 68696,
+   "image": "C:\\Program Files\\Git\\usr\\bin\\tr.exe",
+   "parent": 81184,
+   "headless_chrome": false,
+   "mcp_node": false,
+   "names_the_run": false
+  }
+ ],
+ "headless_chrome_or_mcp_node_left": [],
+ "config_toml_sha256_after": "622450e24e8c2283967a5474a6a5097b2c33d25e5c4b5e4bb9f77e7d6eda41b4",
+ "config_toml_unchanged": true,
+ "guard_cache_entries_added_and_removed": [
+  "8994766d414a4fd3f8b93c9d2950d23bb137aa6b25abe8a6cd76c3a6130f3ef1.json",
+  "ae3ccaf89c1c8ecbf5f1ab3d48a7cc6b6a5b9d16871789bb96842bd5ff90bdbb.json"
+ ],
+ "targets_left_before_cleanup": [
+  ".stub"
+ ],
+ "created_paths_left": [
+  "D:\\tmp\\ui-exercise-fixture"
+ ]
+}

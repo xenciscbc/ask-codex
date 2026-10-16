@@ -57,6 +57,16 @@ finish and cleanup: they record its failure and proceed (C2 follow-up 7).
 Every exercise operation refuses on non-Windows hosts (target.require_windows), unless the eval fake is the
 platform layer (platform_layer.py, I13: selected by its stub check only). Nothing here reads an environment
 variable (I13).
+
+Attach mode (plan C8, I14; attach.py). `"mode": "attach"` (absent or `"copy"`: copy mode) with
+`"attach": {"chosen_by_user": true, "owners": [{"port", "pid", "created"}, ...]}` uses the frontend and backend the
+user already runs: no copy (the target is a new empty directory, I1/I3), no install, no app process, no app job, no
+`commands`, `env_files`, `exclude_names` or `limits`; hosts 127.0.0.1 or [::1] only, no ports 80/443. The lifecycle:
+prepare (the listener table must still show exactly the confirmed owners) -> attach-start (the supervisor re-verifies
+each owner and polls the table every 2 s until finish) -> guard (port-substituted guard or a cached pass, then the
+real-definition check, never cached) -> run -> wait -> collect (with the tripwire list of Codex shell commands naming
+an attached port or an HTTP client, AT-1) -> repro / evidence-keep -> finish. A failure after attach-start ends what
+the exercise holds before the target goes (fail_ended); the attached processes are never signalled.
 """
 import json
 import ntpath
@@ -78,7 +88,8 @@ INTERACTION, KIND, REPLY_SCHEMA = "exercise", "ui", "ui-exercise"
 EVIDENCE = "evidence"
 TARGET_FIELDS = ("project", "target_root", "target_name", "env_files", "exclude_names", "limits")
 REQUEST_FIELDS = frozenset({"interaction", "kind", "prompt", "models", "app", "headed", "scope", "commands",
-                            *TARGET_FIELDS})
+                            "mode", "attach", *TARGET_FIELDS})
+MODES = ("copy", "attach")
 HOSTS = ("127.0.0.1", "localhost", "[::1]")
 ORIGIN = re.compile(r"^(?P<host>\[[^\]]*\]|[^:\[\]]*):(?P<port>[^:]*)$")
 MAX_APP_PORTS = 8
@@ -92,6 +103,11 @@ def is_request(request):
 
 def is_plan(plan):
     return plan.get("interaction") == INTERACTION
+
+
+def is_attach(plan):
+    """An attach-mode exercise plan (C8): prepare records the confirmed owners in plan["attach"]."""
+    return bool(plan.get("attach"))
 
 
 def require_platform():
@@ -111,6 +127,14 @@ def validate(request):
     unknown = set(request) - REQUEST_FIELDS
     if unknown:
         raise ValueError(f"Unknown exercise request fields: {', '.join(sorted(unknown))}")
+    mode = request.get("mode", "copy")
+    if mode not in MODES:
+        raise ValueError('The exercise mode must be "copy" or "attach"')
+    if mode != "attach" and "attach" in request:
+        raise ValueError('The attach fields belong to attach mode ("mode": "attach") only')
+    if mode == "attach":
+        import attach
+        attach.precheck_app(request.get("app"))
     if not isinstance(request.get("prompt"), str) or not request["prompt"].strip():
         raise ValueError("A prepared exercise prompt is required")
     models = request.get("models")
@@ -159,10 +183,17 @@ def validate(request):
         if isinstance(item, str) and re.split(r"[\\/]", item)[0].casefold() == EVIDENCE:
             raise ValueError(f"Env file {item!r} lies under the project's top-level {EVIDENCE} directory, which the "
                              "exercise replaces with its own evidence directory")
+    confirmed = None
+    if mode == "attach":
+        import attach
+        confirmed = attach.validate(request, origins)  # explicit choice, hosts, ports, owners; no copy fields (C8)
     if "commands" in request:
         supervisor.validate_commands(request["commands"])  # working directories inside the target only (C4)
     target_request = {key: request[key] for key in TARGET_FIELDS if key in request}
-    return {"app": origins, "headed": request["headed"], "scope": scope, "target_request": target_request}
+    spec = {"app": origins, "headed": request["headed"], "scope": scope, "target_request": target_request}
+    if mode == "attach":
+        spec.update(mode="attach", confirmed=confirmed)
+    return spec
 
 
 # --- MCP: every other server disabled, the browser server alone (I4, I6) ---
@@ -404,6 +435,15 @@ def owned_proxy_port(app):
 def prepare(cli, request, base):
     require_platform()
     spec = validate(request)
+    attached = spec.get("mode") == "attach"
+    owners = None
+    if attached:
+        # I14: before anything is created, the listener table must show exactly the owners the user confirmed.
+        import attach
+        problems, owners = attach.confirm(spec["app"], spec["confirmed"], request.get("project"))
+        if problems:
+            raise ValueError("The attached servers are not the ones you confirmed (" + "; ".join(problems) +
+                             "); exercise not started")
     node, entry = browser.node_executable(cli.which), browser.entry_script()
     template = _template(spec, node, entry)
     if browser.never_listed(template):
@@ -415,7 +455,10 @@ def prepare(cli, request, base):
         return made[-1], False
 
     try:
-        created = disposable_target.create(spec["target_request"], make_run_directory)
+        if attached:  # a new empty disposable directory: no copy (C8, I1, I3)
+            created = disposable_target.create(spec["target_request"], make_run_directory, copy=False)
+        else:
+            created = disposable_target.create(spec["target_request"], make_run_directory)
     except BaseException as error:
         # Interrupted (an exception or e.g. KeyboardInterrupt) possibly after the target was created: remove it
         # through its record; the record is deleted only once it holds no entry.
@@ -456,11 +499,16 @@ def prepare(cli, request, base):
         copy = {key: created[key] for key in ("skipped_links", "excluded", "git_layouts_excluded",
                                               "streams_not_copied", "env_files", "copied")}
         copy["top_level_evidence_replaced"] = replaced
-        cli.write_json(directory / "plan.json", {
-            "version": 1, "interaction": INTERACTION, "request": request, "summary": summary, "timer": cli.timer(),
-            "overrides": overrides, "directory": str(directory), "copy": copy,
-            "browser": {"definition": definition, "proxy_port": port, "temp": temp, "cwd": cwd, "profile": profile,
-                        "evidence": str(evidence), "node": str(node), "entry": str(entry)}})
+        plan = {"version": 1, "interaction": INTERACTION, "request": request, "summary": summary, "timer": cli.timer(),
+                "overrides": overrides, "directory": str(directory), "copy": copy,
+                "browser": {"definition": definition, "proxy_port": port, "temp": temp, "cwd": cwd,
+                            "profile": profile, "evidence": str(evidence), "node": str(node), "entry": str(entry)}}
+        if attached:
+            import attach
+            summary.update(mode="attach", attached=attach.image_pid_list(owners))
+            copy["attach"] = "nothing copied: the target is a new empty directory"
+            plan["attach"] = {"owners": owners, "confirmed_at": time.time()}
+        cli.write_json(directory / "plan.json", plan)
     except Exception as error:
         reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise preparation failed"
         return fail_at_once(cli, directory, None, reason)
@@ -493,6 +541,8 @@ def app_start(cli, directory):
     if not is_plan(plan):
         raise ValueError("app-start applies to exercises only")
     require_platform()
+    if is_attach(plan):
+        raise ValueError("An attach-mode exercise starts no app (it uses your running servers); use attach-start")
     if (directory / "started").exists():
         raise ValueError("The exercise run has started; the app starts before it")
     commands = plan["request"].get("commands")
@@ -538,6 +588,71 @@ def app_start(cli, directory):
     if not outcome["target_removed"]:
         return {**result, "retained_location": outcome.get("retained_location", str(directory)),
                 "removal": outcome.get("removal")}
+    try:
+        cli.remove_run(directory, plan)
+    except OSError:
+        result["retained_location"] = str(directory)
+    return result
+
+
+# --- attach mode: the supervisor of an attached exercise (C8, I8 attach parts, I14) ---
+
+def attach_start(cli, directory):
+    """Attach mode: start the supervisor (attach.AttachSupervisor), which holds the owned proxy port, opens a
+    SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION handle to each confirmed owner, re-verifies each by PID and
+    creation time and then polls the listener table until finish. Before the guard (which then runs while the table
+    is polled, N-c) and before `run`. Attempted once; starts and stops none of the user's processes."""
+    directory, plan = cli.plan_at(directory)
+    if not is_plan(plan) or not is_attach(plan):
+        raise ValueError("attach-start applies to attach-mode exercises only")
+    require_platform()
+    if (directory / "started").exists():
+        raise ValueError("The exercise run has started; attach-start comes before it")
+    import attach
+    timing = {**supervisor.TIMING, **attach.TIMING}
+    try:
+        with open(directory / supervisor.CONFIG, "x", encoding="utf-8") as config:
+            config.write(json.dumps({"timing": timing}))
+    except FileExistsError:
+        raise ValueError("attach-start was already attempted for this exercise; it is never retried") from None
+    try:
+        verify_entries(directory, plan)
+        if plan["browser"]["proxy_port"] in supervisor.app_ports(plan["summary"]["app"]):
+            raise ValueError("The owned proxy port is one of the attached ports; refused")
+        problems, _ = attach.confirm(plan["summary"]["app"], attach.confirmed_owners(plan), plan["summary"]["project"])
+        if problems:
+            raise ValueError("The attached servers are not the ones you confirmed (" + "; ".join(problems) + ")")
+        identity, process = supervisor.launch(directory)
+    except Exception as error:
+        reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: attach-start failed"
+        return fail_at_once(cli, directory, plan, reason + "; nothing was attached, no Codex")
+    current = supervisor.wait_started(directory, identity, process, timing, 0)
+    state = current.get("state")
+    base = {"directory": str(directory), "supervisor": {"pid": identity["pid"], "breakaway": identity["breakaway"]}}
+    if state == "attached":
+        return {"state": "attached", **base, "app": plan["summary"]["app"], "attached": plan["summary"]["attached"],
+                "proxy_port": plan["browser"]["proxy_port"], "owner_access": current.get("owner_access")}
+    if state == "ended":
+        return {"state": "stopped", **base, "reason": "The exercise was stopped during attach-start; no Codex"}
+    if state in ("end_unconfirmed", "stop_unconfirmed"):
+        return {"state": "stop_unconfirmed", **base, "retained_location": str(directory),
+                "reason": "attach-start could not be ended with confirmation; nothing is removed"}
+    failure = current.get("failure") or {}
+    return {**base, **fail_ended(cli, directory, plan, (failure.get("reason") or "attach-start failed") +
+                                 "; no Codex call was made")}
+
+
+def fail_ended(cli, directory, plan, reason):
+    """A failure once the supervisor may hold the exercise (attach mode after attach-start): end what the exercise
+    holds first (I15's processes, repro and check jobs, the supervisor and its proxy port), then remove the target and
+    the run directory; anything unconfirmed keeps everything (end_and_remove)."""
+    outcome = end_and_remove(cli, directory, plan)
+    result = {"state": "failed", "reason": reason, "ended": outcome["ended"], "target_removed": outcome["target_removed"]}
+    if not outcome["target_removed"]:
+        result["retained_location"] = outcome.get("retained_location", str(directory))
+        if "removal" in outcome:
+            result["removal"] = outcome["removal"]
+        return result
     try:
         cli.remove_run(directory, plan)
     except OSError:
@@ -737,6 +852,16 @@ def collect(cli, directory, plan, after_delivery):
         # Report data: whether the browser guard ran for this exercise or was reused from cache, and when it passed.
         guarded = cli.read_json(directory / "guard.json")
         output["guard"] = {"source": guarded.get("source"), "passed_at": guarded.get("passed_at")}
+    if is_attach(plan):
+        # C8: the attached processes (image:PID) for the scope line, the tripwire list (AT-1) and why the supervisor
+        # stopped the exercise, if it did.
+        import attach
+        output["attach"] = {"attached": plan["summary"].get("attached", []),
+                            "tripwire": attach.tripwire(directory / "0" / "events.jsonl", plan["summary"]["app"])}
+        current = supervisor.status(directory) or {}
+        stopped = current.get("changed") or current.get("bound")
+        if current.get("state") in ("owner_changed", "bound_ended", "stop_unconfirmed") and isinstance(stopped, dict):
+            output["attach"]["supervisor"] = {"state": current["state"], "reason": stopped.get("reason")}
     if run["state"] == "stop_unconfirmed":
         (directory / "retained").touch()
         return {**output, "retained_location": str(directory), "target_kept": target_kept(directory)}

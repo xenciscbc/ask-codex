@@ -392,20 +392,24 @@ def _register(directory, name):
 
 
 @contextlib.contextmanager
-def open_session(cli, directory, plan, session):
+def open_session(cli, directory, plan, session, purpose="repro"):
     """I10's browser session: own siblings, nonce, proxy port and kill-on-close job (registered before node starts),
     the exercise's definition template. Yields `session` (a Session) ready for its tool calls; ends the job and
-    confirms it on the way out (session.ended)."""
+    confirms it on the way out (session.ended). `purpose` names the siblings (`<purpose>-temp`, `-cwd`, `-profile`):
+    `repro` for a reproduction, `check` for attach mode's real-definition check (attach.py, C8, I14), which runs the
+    same session on the real definition."""
     import exercise
     import guard
     import mcp_stdio
     import supervisor
     import target as disposable_target
     import winjob
+    if purpose not in ("repro", "check"):
+        raise ValueError("Invalid browser session purpose")
     b, summary = plan["browser"], plan["summary"]
-    temp = disposable_target.create_sibling(directory, "repro-temp")
-    cwd = disposable_target.create_sibling(directory, "repro-cwd")
-    profile = disposable_target.create_sibling(directory, "repro-profile")
+    temp = disposable_target.create_sibling(directory, f"{purpose}-temp")
+    cwd = disposable_target.create_sibling(directory, f"{purpose}-cwd")
+    profile = disposable_target.create_sibling(directory, f"{purpose}-profile")
     problems = exercise.placement_problems(Path(directory), Path(summary["target"]), Path(b["evidence"]), temp, cwd,
                                            profile)
     if problems:

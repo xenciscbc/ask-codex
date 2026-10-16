@@ -863,7 +863,9 @@ const CONFIRM_CASES = [
 ];
 expect(goodDevFile.last === confirmation("en") && goodExternal.last === confirmation("en", { external: EXTERNAL }) && goodDevZh.last === confirmation("zh", CONFIRM_CASES[5][2]),
   "the E2 inputs of the C6 confirmation cases are their correct confirmations above");
-const casesWithConfirmation = fs.readdirSync(evals).filter((d) => d.startsWith("ui-") && graders(d).includes("first-line") && graders(d).includes("last-line"));
+// Attach mode's cases (evals/ui-attach-*, plan C8) are checked by ui-attach-graders.test.mjs; this file covers copy mode's.
+const copyMode = (d) => d.startsWith("ui-") && !d.startsWith("ui-attach-");
+const casesWithConfirmation = fs.readdirSync(evals).filter((d) => copyMode(d) && graders(d).includes("first-line") && graders(d).includes("last-line"));
 expect(JSON.stringify(casesWithConfirmation.sort()) === JSON.stringify(CONFIRM_CASES.map(([c]) => c).sort()), `every case whose final message is a confirmation is covered (${casesWithConfirmation.join(", ")})`);
 for (const [c, lang, o] of CONFIRM_CASES) {
   for (const g of ["ds-u8", "ds-a7"]) {
@@ -893,7 +895,7 @@ for (const [c, lang, o] of CONFIRM_CASES) {
 }
 
 // Every grader file of every ui case was exercised above at least once by `all`.
-const cases = fs.readdirSync(evals).filter((d) => d.startsWith("ui-"));
+const cases = fs.readdirSync(evals).filter(copyMode);
 expect(cases.length === 22, `22 ui cases (found ${cases.length})`);
 for (const c of cases) {
   const y = text(evals, c, "case.yaml");

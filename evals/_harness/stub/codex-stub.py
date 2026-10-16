@@ -52,6 +52,10 @@ a violation. Scenario keys for guard tests: `exercise_extra_enabled` (a server n
 browser server is defined, beside it), `mcp_get_patch` (deep-merged into `mcp get` output for the browser server),
 `mcp_get_prints_default_approval` (also print `default_tools_approval_mode` as passed, or this value if a string).
 
+Attach mode (plan C8): a call whose directory holds no scenario reads `<parent>/.stub/scenario.json` when that
+scenario carries `"for_attach_targets": true` (the attach-mode target is a new empty directory). `exec.events` is a
+list of events emitted after `turn.started` (e.g. `item.completed` command_execution items for the tripwire).
+
 Supervised exercises (plan C4, I15): `exec.leave_process` = {"seconds": N, "outside_tree": bool} makes exec start an
 MCP stand-in (`python -c "import time; time.sleep(N)" <browser server name>`, the run's nonce on its command line)
 that outlives the stub. With `outside_tree` it is created through WMI (Win32_Process.Create), so it is never a
@@ -215,6 +219,16 @@ def browser_server(name, definition):
 def load_scenario(directory):
     path = os.path.join(directory, ".stub", "scenario.json")
     if not os.path.exists(path):
+        # Attach mode (plan C8): the disposable target is a new empty directory, so a call from it finds the
+        # scenario beside it, in <parent>/.stub/scenario.json, and only when that scenario says
+        # "for_attach_targets": true (written there by a test or by the eval fake).
+        parent = os.path.dirname(os.path.abspath(directory))
+        beside = os.path.join(parent, ".stub", "scenario.json")
+        if os.path.exists(beside):
+            with open(beside, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and data.get("for_attach_targets") is True:
+                return {"dir": parent, "data": data}
         return None
     with open(path, encoding="utf-8") as f:
         return {"dir": directory, "data": json.load(f)}
@@ -521,6 +535,8 @@ def exec_(args):
     mode = (data.get("exec") or {}).get("mode", "valid")
     emit({"type": "thread.started", "thread_id": "stub-thread"})
     emit({"type": "turn.started"})
+    for event in (data.get("exec") or {}).get("events") or []:
+        emit(event)  # scripted events before the reply (e.g. a command_execution for attach mode's tripwire, C8)
 
     if mode == "slow-active":
         cfg = data.get("exec") or {}
