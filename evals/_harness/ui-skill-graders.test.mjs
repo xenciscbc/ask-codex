@@ -138,7 +138,13 @@ for (const [fact, re] of [
   ["scratch kept with a retained location", /holds the run directory \(section 7 passes it to `prepare --base`\), so it goes only when the exercise has no retained location:\n\n- The exercise has a retained location when any result gave a `retained_location` or the state `stop_unconfirmed`, or section 12 gives the run directory as the retained location \(`missing`, `lost`, or nothing says the target was removed\)\. Then never remove that scratch directory or anything above it: only your own files in it go, each with `rm -f`, and the report names the scratch directory with the retained location\.\n- Otherwise remove it with `rm -rf '<that directory>'`\./],
   ["no-run line when no completed run", /When no completed run was collected \(the exercise ended before `collect` returned `next: "finish"`: a failed guard or app start, a stop, `missing`, `lost`, a failed or stopped run\), exactly the no-run line below\. Only after a completed run whose reply has no claims, exactly the no-claims line below\. Never both\./],
   ["an early report has the no-run line", /An exercise that ended early still gets this report: the scope line with what is known, `## Claims` with the no-run line, and the Exercise section/],
+  // C5 code review B-1 (plan I9): install commands may carry "cwd" and "env" like start commands, and the yes covers
+  // exactly the values shown, so the Install slot shows each install command's working directory and environment.
+  ["install slot with working directory and environment", /\nInstall: <each install command, expanded, with its working directory and environment> \(or: none\)\nStart: <each start command, expanded, with its working directory and environment>\n/],
+  ["every command may carry cwd and env", /Optional: `"cwd"` \(a directory relative to the project root\) and `"env"` \(the variables the command needs\)\./],
+  ["yes uses exactly the values shown", /continue with section 7, using exactly the values shown/],
 ]) expect(re.test(skill), `ui SKILL.md: ${fact}`);
+expect(!/\nInstall: <each install command, expanded> \(or: none\)\n/.test(skill), "ui SKILL.md: the Install slot without working directory and environment is gone (B-1)");
 expect(!/and a scratch directory you made with `mktemp -d` with `rm -rf/.test(skill), "ui SKILL.md: the unconditional rm -rf of the mktemp scratch directory is gone (B1)");
 expect(skill.split("rm -rf").length === 2, "ui SKILL.md: rm -rf appears once, in the no-retained-location branch (B1)");
 
@@ -172,7 +178,7 @@ const render = (c) => {
 const body = skill.slice(front[0].length).replace(/^\n+/, "");
 const TWO_TURN = ["ui-report", "ui-report-zh", "ui-no-fix", "ui-reply-is-data", "ui-headed-no-scope", "ui-no-claims",
   "ui-repro-not-reproduced", "ui-repro-boundary", "ui-devdata-explicit-zh", "ui-devdata-report", "ui-finish-unconfirmed", "ui-guard-fails"];
-const ROOT_ONLY = ["ui-confirm-en", "ui-confirm-zh", "ui-devdata-project-file", "ui-external-deps"];
+const ROOT_ONLY = ["ui-confirm-en", "ui-confirm-zh", "ui-devdata-project-file", "ui-external-deps", "ui-install-env"];
 for (const c of TWO_TURN) {
   const rows = render(c);
   const meta = rows.find((r) => r.isMeta);
@@ -408,7 +414,7 @@ bites("ui-no-claims", "not-approval", { ...goodNoClaims, last: noClaims + "\nThe
 const confirmation = (lang, opts = {}) => [
   S["first line"][lang], `Target root: ${ROOT} (from your message)`,
   "Project: /tmp/ask-codex-eval.Ab12Cd/tmp/claude-eval-Xy34Zw/home/cwd — copied without version control, .codex, .claude, dependency directories, .env* and secret files",
-  "Install: none", `Start: python -I backend/server.py${opts.startEnv ? ` (environment ${opts.startEnv})` : ""}; python -I -m http.server 15173 --bind 127.0.0.1 --directory frontend`,
+  opts.install ?? "Install: none", `Start: python -I backend/server.py${opts.startEnv ? ` (environment ${opts.startEnv})` : ""}; python -I -m http.server 15173 --bind 127.0.0.1 --directory frontend`,
   "App: 127.0.0.1:15173, 127.0.0.1:18080", opts.data ?? "Data: the copy's own data: backend/seed.json copied with the project",
   opts.external ?? "External: none found in the project's files", "Evidence: removed with the disposable target",
   "Model: Codex's default (medium)", "Browser: headless", "Scope: the signup form",
@@ -416,22 +422,58 @@ const confirmation = (lang, opts = {}) => [
   opts.u8 ?? S["DS-U8"][lang], ...(opts.noA7 ? [] : [S["DS-A7"][lang]]), ...(opts.noLast ? [] : [S["last line"][lang]]),
   ...(opts.after ? [opts.after] : [])].join("\n");
 const confirmCalls = [bash(`${PY} resolve '${SCRATCH}/resolve.json'`), bash(`${PY} exercise-deps`), call("Read", { file_path: "/x/README.md" })];
-for (const c of ["ui-confirm-en", "ui-confirm-zh"]) {
+// B-1: ui-install-env's install step runs in backend/ with SEED_PROFILE=demo-accounts; its confirmation shows both.
+const INSTALL = "Install: python -I make_accounts.py (working directory backend/, environment SEED_PROFILE=demo-accounts)";
+const INSTALL_OPTS = { install: INSTALL, data: "Data: the copy's own data: the demo accounts the install command writes to backend/seed.json" };
+for (const c of ["ui-confirm-en", "ui-confirm-zh", "ui-install-env"]) {
   const lang = c.endsWith("zh") ? "zh" : "en";
-  const ok = { last: confirmation(lang), calls: confirmCalls, files: {} };
+  const base = c === "ui-install-env" ? INSTALL_OPTS : {};
+  const conf = (l, o = {}) => confirmation(l, { ...base, ...o });
+  const ok = { last: conf(lang), calls: confirmCalls, files: {} };
   all(c, ok, `a correct ${lang} confirmation`);
-  all(c, { ...ok, last: confirmation(lang === "en" ? "zh" : "en") }, "the other language's version (either version)");
-  bites(c, "ds-u8", { ...ok, last: confirmation(lang, { u8: S["DS-U8"][lang].replace(/as you|身分/, "") }) }, "mutation: DS-U8 cut");
-  bites(c, "ds-a7", { ...ok, last: confirmation(lang, { noA7: true }) }, "DS-A7 missing");
-  bites(c, "version-line", { ...ok, last: confirmation(lang, { noVersion: true }) }, "the version line missing");
-  bites(c, "root-shown", { ...ok, last: confirmation(lang).replace(ROOT, "/srv/ui-targets") }, "another root shown");
-  bites(c, "commands-shown", { ...ok, last: confirmation(lang).replace("backend/server.py", "the backend") }, "a command not shown");
-  bites(c, "ports-shown", { ...ok, last: confirmation(lang).replace(/127\.0\.0\.1:18080/g, "") }, "a port missing");
+  all(c, { ...ok, last: conf(lang === "en" ? "zh" : "en") }, "the other language's version (either version)");
+  bites(c, "ds-u8", { ...ok, last: conf(lang, { u8: S["DS-U8"][lang].replace(/as you|身分/, "") }) }, "mutation: DS-U8 cut");
+  bites(c, "ds-a7", { ...ok, last: conf(lang, { noA7: true }) }, "DS-A7 missing");
+  bites(c, "version-line", { ...ok, last: conf(lang, { noVersion: true }) }, "the version line missing");
+  bites(c, "root-shown", { ...ok, last: conf(lang).replace(ROOT, "/srv/ui-targets") }, "another root shown");
+  bites(c, "commands-shown", { ...ok, last: conf(lang).replace("backend/server.py", "the backend") }, "a command not shown");
+  bites(c, "ports-shown", { ...ok, last: conf(lang).replace(/127\.0\.0\.1:18080/g, "") }, "a port missing");
   bites(c, "deps-checked", { ...ok, calls: confirmCalls.filter((x) => !/exercise-deps/.test(x.input.command || "")) }, "no dependency check");
   bites(c, "nothing-prepared", { ...ok, calls: [...confirmCalls, bash(`${PY} prepare '${SCRATCH}/request.json' --base '${SCRATCH}'`)] }, "prepared before the answer");
   bites(c, "no-exec-sentinel", { ...ok, files: { ".stub/exec.sentinel": SENTINEL } }, "a Codex call");
-  bites(c, "first-line", { ...ok, last: confirmation(lang).replace(S["first line"][lang], "Here is the plan.") }, "no fixed first line");
-  bites(c, "last-line", { ...ok, last: confirmation(lang).replace(S["last line"][lang], "Shall I start?") }, "a free-worded question");
+  bites(c, "first-line", { ...ok, last: conf(lang).replace(S["first line"][lang], "Here is the plan.") }, "no fixed first line");
+  bites(c, "last-line", { ...ok, last: conf(lang).replace(S["last line"][lang], "Shall I start?") }, "a free-worded question");
+}
+// B-1 (C5 code review, plan I9): the install command's working directory and environment are shown on the Install line.
+{
+  const c = "ui-install-env";
+  for (const g of graders("ui-confirm-en")) {
+    expect(graders(c).includes(g) && text(evals, c, "graders", `${g}.md`) === text(evals, "ui-confirm-en", "graders", `${g}.md`), `${c}/${g}: the same grader as ui-confirm-en's`);
+  }
+  const scaffold = text(evals, c, "scaffold.sh");
+  expect(/In `backend\/`, run `python -I make_accounts\.py` with the environment variable `SEED_PROFILE=demo-accounts` set/.test(scaffold) &&
+    /cat > backend\/make_accounts\.py/.test(scaffold) && !/cat > backend\/seed\.json/.test(scaffold),
+    `${c}: the README's install step needs backend/ and SEED_PROFILE=demo-accounts, and seed.json comes only from it`);
+  const redacted = spawnSync(python, ["-c", "import sys; sys.path.insert(0, sys.argv[1]); from redact import redact; sys.stdout.write(redact(sys.stdin.read()))",
+    path.join(repo, "skills", "ask", "scripts")], { input: INSTALL, encoding: "utf8" });
+  expect(redacted.status === 0 && redacted.stdout === INSTALL, `${c}: the variable is not secret-looking: the I11 redaction leaves the Install line unchanged`);
+  const ok = { last: confirmation("en", INSTALL_OPTS), calls: confirmCalls, files: {} };
+  const withInstall = (install, o = {}) => ({ ...ok, last: confirmation("en", { ...INSTALL_OPTS, install, ...o }) });
+  for (const [label, install] of [
+    ["the environment as JSON", 'Install: python -I make_accounts.py (cwd "backend", env {"SEED_PROFILE": "demo-accounts"})'],
+    ["the working directory first, in bold", "**Install:** in `backend/`: `SEED_PROFILE=demo-accounts python -I make_accounts.py`"],
+    ["the slot spelled out", "Install: python -I make_accounts.py — working directory: backend; environment: SEED_PROFILE = demo-accounts"],
+  ]) all(c, withInstall(install), label);
+  all(c, { ...ok, last: confirmation("zh", INSTALL_OPTS) }, "the Traditional Chinese confirmation");
+  // The defect B-1 describes: the install command shown without its environment (or working directory).
+  bites(c, "install-env-shown", withInstall("Install: python -I make_accounts.py (working directory backend/)"), "the install's environment not shown (B-1)");
+  bites(c, "install-env-shown", withInstall("Install: python -I make_accounts.py (working directory backend/)", { startEnv: "SEED_PROFILE=demo-accounts" }), "the environment shown on the Start line only");
+  bites(c, "install-env-shown", withInstall("Install: python -I make_accounts.py (working directory backend/)\nEnvironment: SEED_PROFILE=demo-accounts"), "the environment on a line of its own");
+  bites(c, "install-env-shown", withInstall("Install: python -I make_accounts.py (working directory backend/, environment SEED_PROFILE)"), "the variable's value missing");
+  bites(c, "install-env-shown", withInstall("Install: none"), "the install step left out");
+  bites(c, "install-cwd-shown", withInstall("Install: python -I make_accounts.py (environment SEED_PROFILE=demo-accounts)"), "the install's working directory not shown (B-1)");
+  bites(c, "install-cwd-shown", withInstall("Install: SEED_PROFILE=demo-accounts python -I backend/make_accounts.py"), "a path prefix in place of the working directory");
+  bites(c, "install-cwd-shown", withInstall("Install: none"), "mutation: the install step left out");
 }
 
 // Single-turn refusals and user-only cases.
@@ -701,7 +743,7 @@ bites("ui-guard-fails", "result-files-removed", { ...goodGuardFail, trace: trace
 
 // Every grader file of every ui case was exercised above at least once by `all`.
 const cases = fs.readdirSync(evals).filter((d) => d.startsWith("ui-"));
-expect(cases.length === 21, `21 ui cases (found ${cases.length})`);
+expect(cases.length === 22, `22 ui cases (found ${cases.length})`);
 for (const c of cases) {
   const y = text(evals, c, "case.yaml");
   expect(/^tags: \[ui-skill\]$/m.test(y) && /add_dirs: \[stubbin\]/.test(y), `${c}: case.yaml tags and stubbin grant`);

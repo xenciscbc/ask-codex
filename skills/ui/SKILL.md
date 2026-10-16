@@ -92,7 +92,7 @@ Before anything is prepared or started, show the user one confirmation in exactl
 <first line>
 Target root: <path> (from <your message | your global instructions | your memory>)
 Project: <absolute project directory> — copied without version control, .codex, .claude, dependency directories, .env* and secret files<; env files you named: <names>>
-Install: <each install command, expanded> (or: none)
+Install: <each install command, expanded, with its working directory and environment> (or: none)
 Start: <each start command, expanded, with its working directory and environment>
 App: <host:port>, …
 Data: <the copy's own data: <what the copy holds or the install commands create> | your dev data: <what the app connects to>>
