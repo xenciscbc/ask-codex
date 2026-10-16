@@ -40,7 +40,7 @@ REPLACED = {
     "target": ("create", "create_sibling", "remove"),
     "exercise": ("_new_run_directory", "make_evidence", "verify_entries", "claim_run"),
     "browser": ("node_executable", "entry_script", "local_app_data", "free_loopback_port"),
-    "guard": ("guard_exercise", "require_current_pass", "dependency_report"),
+    "guard": ("guard_exercise", "require_current_pass", "dependency_report", "start_check"),
     "supervisor": ("launch", "wait_started", "require_started", "Watcher", "own_processes", "codex_processes_ended",
                    "end_app", "run_alive"),
     "repro": ("open_session", "move_files"),

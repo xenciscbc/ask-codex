@@ -397,6 +397,13 @@ def dependency_report(cli, state_dir=None):
             "codex_version": version, "chrome_policy_sha256": "eval-fake", **guard.codex_notice(version)}
 
 
+def start_check(cli, state_dir=None):
+    """setup's browser-start-check: no browser server in the eval sandbox; the check reports ready as an eval fake."""
+    return {"state": "ready", "server": {"name": "eval fake", "version": "eval-fake"}, "tools": list(guard.browser.TOOLS),
+            "enabled_tools_present": 24, "chrome_started": False, "processes_ended": True, "directory_removed": True,
+            "inherited_temp_profiles": [], "seconds": 0.0}
+
+
 # --- supervisor ---
 
 def launch(directory):
@@ -641,7 +648,7 @@ REPLACEMENTS = {
     "browser": {"node_executable": node_executable, "entry_script": entry_script, "local_app_data": local_app_data,
                 "free_loopback_port": free_loopback_port},
     "guard": {"guard_exercise": guard_exercise, "require_current_pass": require_current_pass,
-              "dependency_report": dependency_report},
+              "dependency_report": dependency_report, "start_check": start_check},
     "supervisor": {"launch": launch, "wait_started": wait_started, "require_started": require_started,
                    "Watcher": Watcher, "own_processes": own_processes, "codex_processes_ended": codex_processes_ended,
                    "end_app": end_app, "run_alive": run_alive},

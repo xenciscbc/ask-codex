@@ -34,6 +34,16 @@ for (const action of named) {
 expect(/`<ask>` is the `ask` skill directory, the sibling of this skill's base directory \(`<this skill's base directory>\/\.\.\/ask`\)/.test(setup),
   "setup SKILL.md: <ask> is the sibling ask directory");
 expect(/browser-install[\s\S]*exercise-deps/.test(setup.split("## Exercise preparation")[1] || ""), "setup SKILL.md: install before the dependency check");
+// Ticket 07 "the pinned MCP starts": the start check exists, runs without a path, and follows the dependency check.
+expect(actions.has("browser-start-check") && pathless.has("browser-start-check"), "consult.py: browser-start-check is a pathless action");
+expect(/exercise-deps[\s\S]*browser-start-check/.test(setup.split("## Exercise preparation")[1] || ""), "setup SKILL.md: the start check follows the dependency check");
+expect(/It calls no browser tool, so Chrome normally does not start; `chrome_started` says whether it did\./.test(setup), "setup SKILL.md: says the start check starts no Chrome on purpose and reports it");
+expect(/`failed`: report the reason and stop: the machine is not ready for `\/ask-codex:ui`\./.test(setup), "setup SKILL.md: a failed start check stops the preparation");
+expect(/browser-start-check[\s\S]*exercise_guard\.start_check\(cli\(\)\)/.test(consult), "consult.py: browser-start-check runs guard.start_check");
+expect(/Then it starts the browser server once to check that it answers/.test(text("README.md")) && !/It does not start the browser: each exercise's browser guard is the first start\./.test(text("README.md")),
+  "README (en): setup starts the browser server once");
+expect(/接著它會啟動瀏覽器 server 一次/.test(text("README.zh-TW.md")) && !/它不會啟動瀏覽器：每次演練的瀏覽器 guard 才是第一次啟動。/.test(text("README.zh-TW.md")),
+  "README (zh): setup starts the browser server once");
 expect(/never remove, edit or repair it yourself/.test(setup), "setup SKILL.md: a differing install is never repaired by Claude");
 expect(/It does not start the browser server or Chrome/.test(setup), "setup SKILL.md: says the check does not start the browser server");
 for (const line of ["`MCP: all servers disabled for this consultation.`", "`MCP: allowed — <names>; all other servers disabled.`",

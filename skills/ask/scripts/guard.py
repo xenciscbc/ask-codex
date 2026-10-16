@@ -1572,6 +1572,114 @@ def codex_notice(version):
     return {"codex_tested_version": TESTED_CODEX_CLI, "codex_untested": str(version).strip() != TESTED_CODEX_CLI}
 
 
+START_CHECK_SECONDS = 120  # the whole start check, MCP start to confirmed end
+START_CHECK_PREFIX = "ask-codex-start-check"
+PROFILE_LEFTOVERS = ("puppeteer_dev_chrome_profile-", "chrome-devtools-mcp-")
+
+
+def start_check(cli, state_dir=None):
+    """consult.py browser-start-check (setup only, plan C7 / ticket 07: "the pinned MCP starts"). Starts the verified
+    pinned chrome-devtools-mcp over stdio with I5's definition (own nonce, a closed owned proxy port held for the
+    check, script-owned TEMP/TMP, cwd, profile seeded to block downloads, and a scratch evidence root, all in one
+    new directory under the user-level state directory, never in the user's %TEMP%), in the environment Codex gives a
+    stdio MCP server (CODEX_DEFAULT_ENV, then the definition's env), inside its own kill-on-close job (node created
+    suspended, assigned, resumed). It initializes, lists the tools and requires every enabled tool of the definition;
+    it calls no tool, so nothing asks the server to launch Chrome (whether Chrome started anyway is reported). Then
+    it ends the job and confirms no process is left in it, checks that no browser profile appeared in the inherited
+    %TEMP%, and removes its directory. Bounded by START_CHECK_SECONDS. Returns {"state": "ready", ...} or
+    {"state": "failed", "reason", ...}; never raises for a check that fails."""
+    disposable_target.require_windows()
+    started = time.monotonic()
+    result = {"processes_ended": True, "chrome_started": False}
+    root = (Path(state_dir) if state_dir else browser.state_directory()) / f"{START_CHECK_PREFIX}-{secrets.token_hex(6)}"
+    base = cli.shell_environment()
+    inherited = _env_get(base, "TEMP") or _env_get(base, "TMP")
+    inherited_before = _names(inherited) if inherited else set()
+    holder = job = process = None
+    try:
+        install.verify(state_dir) if state_dir else install.verify_installed()
+        node = browser.node_executable(cli.which)
+        entry = browser.entry_script() if state_dir is None else \
+            Path(state_dir, f"{browser.PACKAGE}-{browser.VERSION}", *browser.ENTRY)
+        if not os.path.isfile(entry) or os.path.islink(entry):
+            raise ValueError(f"The browser server entry script is missing ({entry})")
+        root.parent.mkdir(parents=True, exist_ok=True)
+        root.mkdir()  # exclusive: a new directory owned by this check
+        temp, cwd, profile, target = (root / name for name in ("temp", "cwd", "profile", "target"))
+        for directory in (temp, cwd, profile, target, target / "evidence"):
+            directory.mkdir()
+        browser.seed_profile(profile)
+        holder = browser.ProxyHolder(browser.free_loopback_port())
+        app_port = browser.free_loopback_port()
+        definition = browser.instantiate(browser.template([f"127.0.0.1:{app_port}"], False, node, entry),
+                                         browser.NAME_PREFIX + secrets.token_hex(8), target, cwd, temp, holder.port,
+                                         profile)
+        if browser.never_listed(definition, profile):
+            raise ValueError("The browser server definition carries a forbidden argument")
+        env = mcp_environment(base, definition["env"])
+        job = winjob.Job(START_CHECK_PREFIX)
+        process = winjob.start_suspended(job, [definition["command"], *definition["args"]], definition["cwd"], env)
+        client = mcp_stdio.Client(process.stdin, process.stdout)
+        left = lambda: max(1.0, START_CHECK_SECONDS - (time.monotonic() - started))  # noqa: E731
+        try:
+            info = client.initialize(timeout=min(float(definition["startup_timeout_sec"]), left()))
+            listed = client.request("tools/list", timeout=min(30.0, left())) or {}
+        except mcp_stdio.McpTimeout as error:
+            raise ValueError(f"The browser server did not answer in time ({error})") from None
+        except mcp_stdio.McpError as error:
+            raise ValueError(f"The browser server did not start ({error})") from None
+        server = (info or {}).get("serverInfo", {}) if isinstance(info, dict) else {}
+        if server.get("version") != browser.VERSION:
+            raise ValueError(f"The browser server reports version {str(server.get('version'))[:40]!r}, not "
+                             f"{browser.VERSION}")
+        names = sorted(t.get("name") for t in listed.get("tools", []) if isinstance(t, dict))
+        missing = [name for name in definition["enabled_tools"] if name not in names]
+        if missing:
+            raise ValueError(f"The browser server lacks enabled tools: {', '.join(missing)}")
+        images = [winjob.image_path(pid) or "" for pid in job.pids()]
+        result.update(server={"name": server.get("name"), "version": server.get("version")},
+                      tools=names, enabled_tools_present=len(definition["enabled_tools"]),
+                      chrome_started=any(ntpath.basename(i).lower() == "chrome.exe" for i in images))
+    except Exception as error:
+        result["state"] = "failed"
+        result["reason"] = str(error) if isinstance(error, ValueError) else \
+            f"{type(error).__name__}: the browser server start check failed"
+    finally:
+        if process is not None:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+            process.wait(5)
+        if job is not None:
+            ended = job.terminate(15)
+            result["processes_ended"] = ended and job.active_processes() == 0
+            job.close()
+        if process is not None:
+            process.close()
+        if holder is not None:
+            holder.close()
+        if os.path.lexists(root):
+            try:
+                _scrub(root)
+            except OSError:
+                pass
+        result["directory_removed"] = not os.path.lexists(root)
+        new = sorted(n for n in (_names(inherited) if inherited else set()) - inherited_before
+                     if n.startswith(PROFILE_LEFTOVERS))
+        result["inherited_temp_profiles"] = new
+    if result.get("state") != "failed":
+        problems = [p for p, bad in (("a process of the check is still running", not result["processes_ended"]),
+                                     ("its directory could not be removed", not result["directory_removed"]),
+                                     ("a browser profile appeared in your %TEMP%", bool(result["inherited_temp_profiles"])))
+                    if bad]
+        result["state"] = "failed" if problems else "ready"
+        if problems:
+            result["reason"] = "The browser server started, but " + "; ".join(problems)
+    result["seconds"] = round(time.monotonic() - started, 1)
+    return result
+
+
 def dependency_report(cli, state_dir=None):
     """consult.py exercise-deps: node, Chrome (>= 149) and the verified package; no browser is started. Also names
     the codex-cli version the plugin was tested with (N10: the skill tells the user and asks when it differs)."""

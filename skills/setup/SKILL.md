@@ -79,8 +79,18 @@ This skill does two independent things:
    python '<ask>/scripts/consult.py' exercise-deps
    ```
 
-   It checks the installed browser server against the manifest again, finds node, and finds the Chrome the browser server would launch (stable channel) and its version. It does not start the browser server or Chrome: the first start is each exercise's browser guard, which stops the exercise before the app or Codex starts when the browser cannot start or its restrictions do not hold.
+   It checks the installed browser server against the manifest again, finds node, and finds the Chrome the browser server would launch (stable channel) and its version. It does not start the browser server or Chrome: step 3 starts the browser server once, and Chrome first starts in each exercise's browser guard, which stops the exercise before the app or Codex starts when the browser cannot start or its restrictions do not hold.
    - `ready`: report `node` (`node_version`), `chrome` (`chrome_version`) and `codex_version`. When `codex_untested` is `true`, also tell the user that their codex-cli (`codex_version`) is not the version this plugin was tested with (`codex_tested_version`), so how it approves the browser tools is untested, and that each exercise's confirmation will say so before anything starts.
    - `failed`: report the reason (for example Chrome missing or older than 149, node or npm missing) and stop.
 
-3. **Report**: what was installed or checked, each dependency with its version, and that the machine is ready for `/ask-codex:ui` (or what is missing). Name the state directory (`%LOCALAPPDATA%\ask-codex`): it holds the browser server and the guard cache, never project data, and the user can delete it to remove both. Report in the conversation language.
+3. **Check that the browser server starts:**
+
+   ```bash
+   python '<ask>/scripts/consult.py' browser-start-check
+   ```
+
+   It starts the installed browser server once, the way an exercise starts it (its own temporary directories under the ask-codex state directory, a closed proxy port, and a job that ends every process it started), asks it for its tools, then ends it and removes its directories. It calls no browser tool, so Chrome normally does not start; `chrome_started` says whether it did. It leaves no process, no directory and no browser profile in your `%TEMP%`.
+   - `ready`: report that the browser server (`server.version`) started, that all `enabled_tools_present` tools an exercise uses are there, and that it was stopped again; when `chrome_started` is `true`, also say that Chrome started during the check and was ended with it.
+   - `failed`: report the reason and stop: the machine is not ready for `/ask-codex:ui`. When `processes_ended` is `false`, add that a process of the check may still be running, and when `directory_removed` is `false`, that a directory of the check under `%LOCALAPPDATA%sk-codex` was kept; never end or remove either yourself.
+
+4. **Report**: what was installed or checked, each dependency with its version, whether the browser server started and stopped, and that the machine is ready for `/ask-codex:ui` (or what is missing). Name the state directory (`%LOCALAPPDATA%\ask-codex`): it holds the browser server and the guard cache, never project data, and the user can delete it to remove both. Report in the conversation language.

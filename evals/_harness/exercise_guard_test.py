@@ -18,6 +18,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -349,7 +350,10 @@ class GuardLifecycleTest(unittest.TestCase):
         # Static: the guard, install, job and client modules read the environment only to build the MCP's
         # environment and to pass SYSTEMROOT to `node --version` (never to select, skip or substitute).
         allowed = {("guard.py", "node_version"), ("guard.py", "dependency_report"), ("guard.py", "browser_guard"),
-                   ("guard.py", "dependencies"), ("install.py", "install")}
+                   ("guard.py", "dependencies"), ("install.py", "install"),
+                   # setup's browser-start-check (C7): the MCP's environment and the inherited TEMP it watches, as
+                   # browser_guard does
+                   ("guard.py", "start_check")}
         found = set()
         for name in ("guard.py", "install.py", "winjob.py", "mcp_stdio.py", "browser.py"):
             tree = ast.parse((SCRIPTS / name).read_text(encoding="utf-8"))
@@ -654,6 +658,118 @@ send({"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text"
         self.assertEqual(elicitation, {"jsonrpc": "2.0", "id": "e1", "result": {"action": "decline"}})
         self.assertEqual(roots["id"], "r1")
         self.assertEqual(roots["error"]["code"], -32601)
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows only")
+class BrowserStartCheckTest(unittest.TestCase):
+    """setup's browser-start-check (plan C7, ticket 07: "the pinned MCP starts"): the real node and the installed
+    pinned chrome-devtools-mcp, started once over stdio in its own job, initialized and asked for its tools, then
+    ended; no process, directory or %TEMP% browser profile is left. Failures are reported as `failed`."""
+
+    TOOLS = ["navigate_page", "new_page", "list_pages", "select_page", "close_page", "take_screenshot", "take_snapshot",
+             "click", "hover", "fill", "fill_form", "type_text", "press_key", "drag", "handle_dialog", "wait_for",
+             "resize_page", "emulate", "list_console_messages", "get_console_message", "list_network_requests",
+             "get_network_request", "get_css_styles", "lighthouse_audit"]  # the spec's allowlist, written literally
+    PROFILES = ("puppeteer_dev_chrome_profile-", "chrome-devtools-mcp-")
+
+    def setUp(self):
+        try:
+            install.verify_installed()
+        except ValueError as error:
+            self.skipTest(f"the pinned browser server is not installed on this machine ({error})")
+        TEST_ROOT.mkdir(parents=True, exist_ok=True)
+        self.root = Path(tempfile.mkdtemp(prefix="s-", dir=TEST_ROOT))
+        self.addCleanup(scrub, self.root)
+        self.temp = os.environ.get("TEMP") or os.environ.get("TMP")
+        self.temp_before = self.profiles()
+        self.state_before = self.check_dirs(browser.state_directory())
+        self.before = {(pid, winjob.creation_time(pid)) for pid, _, _ in winjob.processes()}
+
+    def profiles(self):
+        return {n for n in os.listdir(self.temp) if n.startswith(self.PROFILES)} if self.temp else set()
+
+    @staticmethod
+    def check_dirs(directory):
+        return sorted(n for n in os.listdir(directory) if n.startswith(guard.START_CHECK_PREFIX)) \
+            if os.path.isdir(directory) else []
+
+    def left_behind(self):
+        """node or Chrome processes created during the test that still run."""
+        left = []
+        for pid, _, image in winjob.processes():
+            created = winjob.creation_time(pid)
+            if created is None or (pid, created) in self.before or image.lower() not in ("node.exe", "chrome.exe"):
+                continue
+            line = winjob.command_line(pid) or ""
+            if "chrome-devtools-mcp" in line or guard.START_CHECK_PREFIX in line or "--headless" in line:
+                left.append((pid, image))
+        return left
+
+    def assert_nothing_left(self, state_dir=None):
+        self.assertEqual(self.left_behind(), [], "no node or Chrome of the check is left")
+        self.assertEqual(self.profiles() - self.temp_before, set(), "no browser profile appeared in %TEMP%")
+        if state_dir is None:
+            self.assertEqual(self.check_dirs(browser.state_directory()), self.state_before)
+        else:
+            self.assertEqual(self.check_dirs(state_dir), [])
+
+    def test_the_pinned_server_starts_lists_the_exercise_tools_and_leaves_nothing(self):
+        result = subprocess.run([sys.executable, "-B", str(CLI), "browser-start-check"], capture_output=True, text=True,
+                                encoding="utf-8", timeout=300)
+        ready = json.loads(result.stdout)
+        self.assertEqual(ready["state"], "ready", ready)
+        self.assertEqual(ready["server"]["version"], "1.10.1")
+        self.assertEqual([t for t in self.TOOLS if t not in ready["tools"]], [], "every enabled tool is listed")
+        self.assertEqual(ready["enabled_tools_present"], len(self.TOOLS))
+        self.assertIs(ready["chrome_started"], False, "no tool is called, so Chrome is not started (1.10.1)")
+        self.assertTrue(ready["processes_ended"] and ready["directory_removed"])
+        self.assertEqual(ready["inherited_temp_profiles"], [])
+        self.assertLess(ready["seconds"], guard.START_CHECK_SECONDS)
+        self.assert_nothing_left()
+
+    def test_a_missing_install_or_entry_script_fails_and_leaves_nothing(self):
+        import consult
+        empty = self.root / "empty-state"
+        empty.mkdir()
+        failed = guard.start_check(consult, state_dir=empty)
+        self.assertEqual(failed["state"], "failed", failed)
+        self.assertIn("not installed", failed["reason"])
+        self.assert_nothing_left(empty)
+        # A copy of the install without its entry script: refused before anything starts.
+        state = self.root / "state"
+        shutil.copytree(browser.install_directory(), state / browser.install_directory().name, symlinks=True)
+        Path(state / browser.install_directory().name, *browser.ENTRY).unlink()
+        failed = guard.start_check(consult, state_dir=state)
+        self.assertEqual(failed["state"], "failed", failed)
+        self.assertIn("chrome-devtools-mcp.js", failed["reason"])
+        self.assertTrue(failed["processes_ended"])
+        self.assert_nothing_left(state)
+
+    def test_a_server_that_never_answers_fails_within_the_bound_and_is_ended(self):
+        # In-process seams (plan I13): the install check passes, and the "entry script" is a Python sleeper run by
+        # python.exe in node's place, so initialize never gets an answer; the bound is shortened.
+        import consult
+        state = self.root / "state"
+        sleeper = write(state.joinpath(f"{browser.PACKAGE}-{browser.VERSION}", *browser.ENTRY),
+                        "import time\nprint('started', flush=True)\ntime.sleep(300)\n")
+        original = (install.verify, guard.START_CHECK_SECONDS, browser.node_executable)
+        install.verify = lambda state_dir=None: "test-manifest"
+        guard.START_CHECK_SECONDS = 4
+        browser.node_executable = lambda which: Path(sys.executable)
+        try:
+            began = time.monotonic()
+            failed = guard.start_check(consult, state_dir=state)
+        finally:
+            install.verify, guard.START_CHECK_SECONDS, browser.node_executable = original
+        self.assertEqual(failed["state"], "failed", failed)
+        self.assertIn("did not answer in time", failed["reason"])
+        self.assertTrue(failed["processes_ended"], "the job ended the server that never answered")
+        self.assertLess(time.monotonic() - began, 60)
+        self.assertTrue(sleeper.exists())
+        running = [pid for pid, _, image in winjob.processes() if image.lower().startswith("python")
+                   and str(sleeper) in (winjob.command_line(pid) or "")]
+        self.assertEqual(running, [], "the sleeper is not left running")
+        self.assert_nothing_left(state)
 
 
 if __name__ == "__main__":

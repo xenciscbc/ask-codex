@@ -163,7 +163,7 @@ Setup skill 只寫入 ask-codex 政策檔，不會修改 Codex 的 `config.toml`
 
 `/ask-codex:ui [model token] [--headed] [scope or focus]` 讓 Codex 實際使用你的 web app，而不是閱讀它的程式碼。Codex 在隔離的 Chrome 中操作 app——瀏覽頁面、點擊、填表、調整成包含手機尺寸在內的多種 viewport、截圖並實際看圖、讀取瀏覽器 console 與網路紀錄——並回傳論點：bug、版面問題與 UX 建議。範圍內的每個 bug 論點，Claude 都會先透過同一個受限瀏覽器自行重現，才標為已確認（否則回報為未確認，並列出嘗試過的步驟）；每個版面與 UX 論點都給出處置與理由，然後回報。不會修正任何東西。**演練僅限使用者啟動：**只有輸入指令才會開始，而且要等你回覆確認訊息後才會啟動；確認訊息會列出每個指令、位址、資料來源、外部相依與揭露事項。每次演練只用一個模型；瀏覽器預設 headless，加上 `--headed` 才顯示視窗。僅限 Windows。設計記錄於 [ADR 0009](docs/adr/0009-exercise-on-a-disposable-target.md)。
 
-**第一次演練之前**，執行 `/ask-codex:setup` 並要求它為演練做準備。它會以 `npm install --ignore-scripts` 把固定版本的瀏覽器 server（chrome-devtools-mcp 1.10.1）安裝到 `%LOCALAPPDATA%\ask-codex`，逐一比對 ask-codex 提交的 hash manifest，並檢查 node、Chrome（stable，149 以上）與你的 codex-cli 版本。它不會啟動瀏覽器：每次演練的瀏覽器 guard 才是第一次啟動。`%LOCALAPPDATA%\ask-codex` 只存放瀏覽器 server 與 guard 快取；刪除它即可移除兩者。
+**第一次演練之前**，執行 `/ask-codex:setup` 並要求它為演練做準備。它會以 `npm install --ignore-scripts` 把固定版本的瀏覽器 server（chrome-devtools-mcp 1.10.1）安裝到 `%LOCALAPPDATA%\ask-codex`，逐一比對 ask-codex 提交的 hash manifest，並檢查 node、Chrome（stable，149 以上）與你的 codex-cli 版本。接著它會啟動瀏覽器 server 一次，確認它能回應並列出工具，然後再結束它：它不呼叫任何瀏覽器工具，所以 Chrome 本身通常不會啟動，也不會留下任何 process、目錄或瀏覽器 profile。Chrome 第一次啟動是在每次演練的瀏覽器 guard。`%LOCALAPPDATA%\ask-codex` 只存放瀏覽器 server 與 guard 快取；刪除它即可移除兩者。
 
 ### 兩種模式
 

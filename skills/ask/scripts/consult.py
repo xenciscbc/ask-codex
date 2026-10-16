@@ -596,7 +596,7 @@ def cleanup(directory):
 
 # Exercise-only actions: the platform layer is selected (I13) before any of its functions is looked up.
 EXERCISE_ACTIONS = ("target-create", "target-remove", "guard", "browser-install", "exercise-deps", "app-start",
-                    "finish", "repro", "evidence-keep", "attach-owners", "attach-start")
+                    "finish", "repro", "evidence-keep", "attach-owners", "attach-start", "browser-start-check")
 # Actions that take a second file argument: repro <run directory> <steps file>, evidence-keep <run directory> <keep file>.
 SECOND_ARGUMENT = ("repro", "evidence-keep")
 # --result <file>: an operation that can outlast one Bash tool call (the guard's browser checks, app-start's install
@@ -678,7 +678,7 @@ def main():
     parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
                                            "finish", "target-create", "target-remove", "guard", "browser-install",
                                            "exercise-deps", "app-start", "wait-result", "repro", "evidence-keep",
-                                           "attach-owners", "attach-start"))
+                                           "attach-owners", "attach-start", "browser-start-check"))
     parser.add_argument("path", nargs="?")
     parser.add_argument("file", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
@@ -687,7 +687,7 @@ def main():
     parser.add_argument("--offered", choices=("wait,stop", "none"), default="none")
     parser.add_argument("--result")
     args = parser.parse_args()
-    if args.path is None and args.action not in ("browser-install", "exercise-deps"):
+    if args.path is None and args.action not in ("browser-install", "exercise-deps", "browser-start-check"):
         parser.error(f"{args.action} needs a path")
     if (args.file is None) == (args.action in SECOND_ARGUMENT):
         parser.error(f"{args.action} takes a run directory and a file" if args.action in SECOND_ARGUMENT else
@@ -739,6 +739,9 @@ def main():
             result = browser_install.install(cli())
         elif args.action == "exercise-deps":
             result = exercise_guard.dependency_report(cli())
+        elif args.action == "browser-start-check":
+            # Setup only (C7, ticket 07): the pinned browser server starts, answers and ends (guard.start_check).
+            result = exercise_guard.start_check(cli())
         elif args.action == "repro":
             # One reproduction of a bug claim in the exercise's restricted browser (repro.py, C6, I10).
             result = reproduction.repro(cli(), args.path, args.file)
