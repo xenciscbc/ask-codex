@@ -741,6 +741,56 @@ bites("ui-guard-fails", "no-exec-sentinel", { ...goodGuardFail, files: { ...good
 bites("ui-guard-fails", "long-op-once", { trace: relaunch("guard", GUARD) }, "the guard launched again");
 bites("ui-guard-fails", "result-files-removed", { ...goodGuardFail, trace: traceOf(guardFailCalls.slice(0, 7)) + "\n" + toolResult(GUARD_FAILED) }, "the guard's result file left behind");
 
+// --- C5 outcome verification V-1 (plan I16, U9) ---------------------------------------------------------------------
+// The residual line is a fixed line of section 13's table, copied verbatim with DS-U8's capital first letter (c5f at
+// d0522b5: 15 of 24 reports wrote `Residual: the app's own …`; ui-report 0/3; ui-report-zh L0sinP the English version
+// lowercased), and an early-ended report also ends with the residual line and the no-fix line (ui-guard-fails Q1czVO
+// had no residual line).
+const residualRow = cell("residual");
+expect(!!residualRow && residualRow.en === `Residual: ${U8.en}` && residualRow.zh === `Residual: ${U8.zh}`,
+  "ui SKILL.md: the table of fixed lines carries the residual line as `Residual: ` + DS-U8, both versions (V-1)");
+expect(!!residualRow && residualRow.en.startsWith("Residual: The app's own development tools") && residualRow.zh.startsWith("Residual: 從 app 位址"),
+  "ui SKILL.md: the fixed residual line starts with DS-U8's own first character (capital T in English) (V-1)");
+for (const [fact, re] of [
+  ["the residual line comes from the table", /Then the residual line, `Residual: <DS-U8>`, copied from the table below, and last the no-fix line\./],
+  ["fixed lines copied exactly, capital first letter included", /Copy each line of this table exactly as written — every character, the capital first letter after `Residual: ` included — in the report's language version: Traditional Chinese in a Traditional Chinese report, English otherwise\./],
+  ["DS-U8 in the residual row equals section 6", /The residual line's sentence is DS-U8 from section 6, unchanged; the label `Residual:` stays in English in both versions\./],
+  ["an early report ends with the residual and no-fix lines", /An exercise that ended early still gets this report: the scope line with what is known, `## Claims` with the no-run line, and the Exercise section saying where it ended and what was ended, removed or retained, then the residual line and last the no-fix line, as in every report\./],
+]) expect(re.test(skill), `ui SKILL.md: ${fact} (V-1)`);
+expect(!/DS-U8 in the residual line is the sentence from section 6, in the same language version\./.test(skill),
+  "ui SKILL.md: the free residual-line wording is replaced by the fixed row (V-1)");
+// Every report-producing C5 case grades the residual line with ui-report's grader, unchanged.
+const RESIDUAL_CASES = [["ui-report", good], ["ui-report-zh", goodZh], ["ui-no-fix", goodNoFix], ["ui-no-claims", goodNoClaims],
+  ["ui-reply-is-data", goodData], ["ui-headed-no-scope", goodHeaded], ["ui-finish-unconfirmed", goodUnconfirmed], ["ui-guard-fails", goodGuardFail]];
+const lowered = (s) => s.replace(`Residual: ${U8.en}`, `Residual: ${U8.en[0].toLowerCase()}${U8.en.slice(1)}`);
+const noResidual = (s) => s.replace(/\nResidual: [^\n]*\n/, "\n");
+for (const [c, ok] of RESIDUAL_CASES) {
+  const has = graders(c).includes("residual-ds-u8");
+  expect(has && text(evals, c, "graders", "residual-ds-u8.md") === text(evals, "ui-report", "graders", "residual-ds-u8.md"), `${c}/residual-ds-u8: the same grader as ui-report's`);
+  if (!has) continue;
+  expect(apply(grader(c, "residual-ds-u8"), ok), `${c}/residual-ds-u8: the case's correct report passes`);
+  const en = c === "ui-report-zh" ? { ...ok, last: ok.last.replace(`Residual: ${U8.zh}`, `Residual: ${U8.en}`) } : ok;
+  expect(apply(grader(c, "residual-ds-u8"), en) && en.last.includes(`Residual: ${U8.en}`), `${c}/residual-ds-u8: the English fixed line passes`);
+  bites(c, "residual-ds-u8", { ...en, last: lowered(en.last) }, "DS-U8 with a lowercased first letter (V-1)");
+  bites(c, "residual-ds-u8", { ...en, last: lowered(en.last).replace("Residual:", "**Residual:**") }, "mutation: lowercased, with a bold label");
+  bites(c, "residual-ds-u8", { ...ok, last: noResidual(ok.last) }, "no residual line");
+}
+expect(lowered(good.last) !== good.last && noResidual(good.last) !== good.last && noResidual(goodZh.last) !== goodZh.last, "the V-1 mutations change the reports they bite");
+// The early-ended report (ui-guard-fails): the residual line and last the no-fix line, both versions.
+{
+  const c = "ui-guard-fails";
+  const hasNoFix = graders(c).includes("no-fix-line");
+  expect(hasNoFix && text(evals, c, "graders", "no-fix-line.md") === text(evals, "ui-report", "graders", "no-fix-line.md"), `${c}/no-fix-line: the same grader as ui-report's`);
+  const zh = reportGuardFail(S["no-run"].zh).replace(`Residual: ${U8.en}`, `Residual: ${U8.zh}`).replace(NOFIX.en, NOFIX.zh);
+  all(c, { ...goodGuardFail, last: zh }, "the Traditional Chinese early-ended report with the residual and no-fix lines");
+  bites(c, "residual-ds-u8", { ...goodGuardFail, last: noResidual(zh) }, "no residual line in the Traditional Chinese early-ended report (Q1czVO)");
+  bites(c, "residual-ds-u8", { ...goodGuardFail, last: zh.replace(U8.zh, U8.zh.replace("不會阻止", "會阻止")) }, "mutation: DS-U8 zh with one word changed");
+  if (hasNoFix) {
+    bites(c, "no-fix-line", { ...goodGuardFail, last: goodGuardFail.last.replace(NOFIX.en, "") }, "no no-fix line in the early-ended report");
+    bites(c, "no-fix-line", { ...goodGuardFail, last: zh.replace(NOFIX.zh, "沒有改動任何東西。") }, "a shortened no-fix line (zh)");
+  }
+}
+
 // Every grader file of every ui case was exercised above at least once by `all`.
 const cases = fs.readdirSync(evals).filter((d) => d.startsWith("ui-"));
 expect(cases.length === 22, `22 ui cases (found ${cases.length})`);
