@@ -971,9 +971,36 @@ class AttachCliTest(ServersBase):
         self.assertEqual(self.status(directory)["state"], "bound_ended")
         self.assertEqual(self.call("cleanup", directory, code=seam)["state"], "cleaned")
         seen = self.assert_owner_opens_within_the_handle(
-            log, ["attach-owners", "prepare", "attach-start", "guard", "run", "finish", "stop", "supervisor"])
+            log, ["attach-owners", "prepare", "attach-start", "guard", "run", "finish", "stop", "cleanup", "supervisor"])
         self.assertIn(("supervisor", hex(OWNER_ACCESS)), seen, "the supervisor's own owner handle is logged too")
         self.assert_servers_untouched()
+
+    def test_a_nonce_process_listening_beside_an_owner_keeps_the_exercise_unconfirmed(self):
+        # Review B3: only the confirmed owners are left out of I15's recognition. A process that is not Codex's
+        # descendant (so never recorded) but carries the run's nonce and listens on 127.0.0.2 at an attached port
+        # number is recognised: the supervisor's stop path (the listener change) and finish both stay unconfirmed and
+        # keep the target; it is reported by PID, never terminated.
+        directory, plan, _ = self.attached()
+        nonce = plan["summary"]["browser_server"]
+        stand_in = self.start_server(f"127.0.0.2:{self.ports[0]}", extra=(f"--stand-in={nonce}",))
+        wait_until(lambda: self.status(directory)["state"] in ("stop_unconfirmed", "owner_changed", "end_unconfirmed"),
+                   30, "the supervisor did not act on the second listener")
+        status = self.status(directory)
+        self.assertEqual(status["state"], "stop_unconfirmed", status)
+        self.assertIn(stand_in[0], [p["pid"] for p in status["changed"]["browser"]["alive"]])
+        self.assertTrue(Path(plan["summary"]["target"]).exists(), "the supervisor kept the target")
+        finished = self.call("finish", directory)
+        self.assertEqual(finished["state"], "stop_unconfirmed", finished)
+        self.assertIn(stand_in[0], [p["pid"] for p in finished["ended"]["browser"]["alive"]])
+        self.assertIn(str(stand_in[0]), finished["reason"])
+        self.assertTrue(finished["target_kept"] and Path(plan["summary"]["target"]).exists(), "finish kept the target")
+        self.assertTrue(alive(*stand_in), "a recognised process is reported, never terminated")
+        # Once it has ended, finish ends the rest and removes everything.
+        kill(*stand_in)
+        finished = self.call("finish", directory)
+        self.assertEqual(finished["state"], "finished", finished)
+        self.assert_servers_untouched()
+        self.assert_gone(directory)
 
     def test_control_the_log_sees_the_peb_read_when_the_owners_are_not_left_out(self):
         # Negative control: with the exclusion switched off in-process, finish opens the attached servers with

@@ -278,17 +278,16 @@ def confirm(app, confirmed, project=None, listeners=None):
 def protected_pids(plan):
     """PIDs that I15's recognition (supervisor.recognise) must never open in attach mode (I14: an attached process is
     opened with nothing beyond OWNER_ACCESS; review B1): each confirmed owner while its PID still carries the confirmed
-    creation time (or cannot be read), and every process listening on an attached port number now (e.g. a process
-    that replaced an owner). Reads the creation time with PROCESS_QUERY_LIMITED_INFORMATION only, a subset of
-    OWNER_ACCESS, and the listener table (no process handle). An attached owner is never one of the exercise's
-    processes (I3), so leaving it out of the recognition loses nothing."""
+    creation time (or cannot be read). Nothing else is left out (review B3, option a): I15 excludes only the script's
+    own processes and I3's confirmed attached owners, so any other process - one that replaced an owner, or one
+    listening on another address at an attached port number - is recognised as usual (a process holding the run's
+    nonce keeps the exercise unconfirmed). Reads the creation time with PROCESS_QUERY_LIMITED_INFORMATION only, a
+    subset of OWNER_ACCESS; winjob.creation_time returns None instead of raising."""
     pids = set()
     for owner in plan["attach"]["owners"]:
         created = winjob.creation_time(owner["pid"])
         if created is None or created == owner["created"]:
             pids.add(owner["pid"])
-    ports = set(ports_of(plan["summary"]["app"]))
-    pids |= {pid for _, port, pid in winjob.tcp_listeners() if port in ports}
     return pids
 
 
