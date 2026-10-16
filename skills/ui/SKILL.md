@@ -262,7 +262,7 @@ Its first line is the scope line, written as plain text exactly in this form —
 
 `Exercise scope: app <the project directory's name>; ports <host:port>, …; scope <the scope verbatim, or: main flows (none given)>; model <slug, or Codex's default> (<effort>); browser <headless | headed>; data <the copy's own data, or: the copy's own data and env files <names>, or: dev data, or: dev data and env files <names>>; guard <ran | reused from cache>`
 
-With dev data, the second line is the dev-data line (below), right after the scope line.
+With dev data, the second line is the dev-data line (below), right after the scope line. Copy it from the table's `dev-data` row as a line of its own with nothing before it: no `Residual:` or any other label. Only the residual line in `## Exercise` starts with `Residual: `.
 
 Then these three headings, exactly these strings, in this order:
 

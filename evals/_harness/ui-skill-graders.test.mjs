@@ -593,6 +593,16 @@ bites("ui-devdata-report", "scope-line-dev", { ...goodDevReport, last: reportEn(
 bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: reportEn().replace("; data the copy's own data;", "; data dev data;") }, "no dev-data line");
 bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: reportEn().replace("; data the copy's own data;", "; data dev data;") + `\n${S["dev-data"].en}` }, "the dev-data line at the end");
 bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: devReport.replace(S["dev-data"].en, "This exercise used your dev data.") }, "a shortened dev-data line");
+// c6c at 2b2b7b0 (traces 34oqTA, xspAuB): the dev-data line written as `Residual: <dev-data line>` right after the scope
+// line. The dev-data line is a line of its own with no label; only the residual line carries `Residual: `.
+const labelledDev = (s, v) => s.replace(S["dev-data"][v], `Residual: ${S["dev-data"][v]}`);
+expect(labelledDev(devReport, "en") !== devReport && labelledDev(devReport, "en").includes(`\nResidual: ${S["dev-data"].en}\n`), "the Residual-label mutation changes the dev report");
+bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: labelledDev(devReport, "en") }, "the dev-data line labelled `Residual: ` (c6c)");
+const devReportZh = devReport.replace(S["dev-data"].en, S["dev-data"].zh);
+bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: labelledDev(devReportZh, "zh") }, "the Traditional Chinese dev-data line labelled `Residual: `");
+bites("ui-devdata-report", "dev-data-line", { ...goodDevReport, last: labelledDev(devReport, "en").replace("Residual: ", "**Residual:** ") }, "the dev-data line labelled `**Residual:** `");
+expect(/With dev data, the second line is the dev-data line \(below\), right after the scope line\. Copy it from the table's `dev-data` row as a line of its own with nothing before it: no `Residual:` or any other label\. Only the residual line in `## Exercise` starts with `Residual: `\./.test(skill),
+  "ui SKILL.md: the dev-data line has no label; only the residual line starts with `Residual: ` (c6c)");
 bites("ui-devdata-report", "request-dev-env", { ...goodDevReport, trace: traceOf(exerciseCalls()) }, "the request without the dev data");
 
 // --- C5 review fixes (P1, B1, B2) ---------------------------------------------------------------------------------
