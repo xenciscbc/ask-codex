@@ -161,12 +161,14 @@ The guard, the app start, the finish and a stop can take longer than one shell c
 
 `python '<ask>/scripts/consult.py' <operation> '<directory>' --result '<scratch>/<operation>-result.json'`
 
+The Bash command is that line exactly as written, with `run_in_background` set: never add `&`, `disown` or `nohup`. `run_in_background` already runs it in the background; a process sent to the background inside that shell ends with the shell, so it never writes its result (`missing`).
+
 Then wait in the foreground by calling this again and again until it returns a state other than `pending`:
 
 `python '<ask>/scripts/consult.py' wait-result '<scratch>/<operation>-result.json' --seconds 60`
 
 - `pending`: call it again. Never wait with `sleep` or a background timer, and never end your turn while an operation runs.
-- `missing` twice in a row: the operation did not start. Report it and end as section 12 says.
+- `missing` twice in a row: the operation did not start. Never launch it again: report it and end as section 12 says.
 - `lost`: the operation recorded no result within its bound. Report it and end as section 12 says.
 - anything else is the operation's own result.
 
@@ -180,7 +182,7 @@ Run `app-start` as a long operation. `app_started`: continue. `failed`: report t
 
 ## 10. Run and wait
 
-Read the section "Execute, wait and stop" of `<ask>/SKILL.md` now and follow it, with `<skill>` read as `<ask>`: launch `run` once in the background, then call the foreground `wait` again and again until the run settles, and act on its states as that section says. One difference: to stop an exercise, run `stop` as a long operation (above) with that section's `--recommended` and `--offered` values, instead of that section's stop command. The stop ends Codex first, then the browser, the app and the target, and reports each as confirmed ended or not.
+Read the section "Execute, wait and stop" of `<ask>/SKILL.md` now and follow it, with `<skill>` read as `<ask>`: launch `run` once in the background (its command exactly as written, as for a long operation: no `&`, `disown` or `nohup`), then call the foreground `wait` again and again until the run settles, and act on its states as that section says. One difference: to stop an exercise, run `stop` as a long operation (above) with that section's `--recommended` and `--offered` values, instead of that section's stop command. The stop ends Codex first, then the browser, the app and the target, and reports each as confirmed ended or not.
 
 ## 11. Collect, reproduce and judge
 
@@ -247,7 +249,12 @@ When the exercise ended before a completed run (a failed operation, a stop, `mis
 
 ## 13. Report
 
-Do everything else first. Delete every temporary file you created, each by its explicit path with `rm -f` (the resolve file, the request file if it is still there, every result file), and a scratch directory you made with `mktemp -d` with `rm -rf '<that directory>'`. Then write ONE closing message, in the conversation's language, as the last thing you do.
+Do everything else first. Delete every temporary file you created, each by its explicit path with `rm -f` (the resolve file, the request file if it is still there, every result file). A scratch directory you made with `mktemp -d` holds the run directory (section 7 passes it to `prepare --base`), so it goes only when the exercise has no retained location:
+
+- The exercise has a retained location when any result gave a `retained_location` or the state `stop_unconfirmed`, or section 12 gives the run directory as the retained location (`missing`, `lost`, or nothing says the target was removed). Then never remove that scratch directory or anything above it: only your own files in it go, each with `rm -f`, and the report names the scratch directory with the retained location.
+- Otherwise remove it with `rm -rf '<that directory>'`.
+
+Then write ONE closing message, in the conversation's language, as the last thing you do.
 
 Its first line is the scope line, written as plain text exactly in this form — no heading, greeting or lead-in before it, and the words `Exercise scope:`, `app`, `ports`, `scope`, `model`, `browser`, `data` and `guard` kept in English in every language:
 
@@ -257,14 +264,15 @@ With dev data, the second line is the dev-data line (below), right after the sco
 
 Then these three headings, exactly these strings, in this order:
 
-- `## Claims`: each claim as `C<n> (<bug | layout | ux>) — <statement>`, then its steps, expected and actual result, viewport and evidence for a bug with its status line from section 11 (and, unless confirmed, its `Tried:` line), and for a layout or UX claim the line `Disposition: <adopt | reject | investigate> — <reason>`. With no claims, exactly the no-claims line below.
+- `## Claims`: each claim as `C<n> (<bug | layout | ux>) — <statement>`, then its steps, expected and actual result, viewport and evidence for a bug with its status line from section 11 (and, unless confirmed, its `Tried:` line), and for a layout or UX claim the line `Disposition: <adopt | reject | investigate> — <reason>`. When no completed run was collected (the exercise ended before `collect` returned `next: "finish"`: a failed guard or app start, a stop, `missing`, `lost`, a failed or stopped run), exactly the no-run line below. Only after a completed run whose reply has no claims, exactly the no-claims line below. Never both.
 - `## Out of scope (not tested)`: each `out_of_scope` observation and each claim with `in_scope: false`, one per line; `none` when there are none. These never appear under `## Claims`.
 - `## Exercise`: the guard (ran, or reused from cache, and when it passed), the app start, Codex's outcome (model, any stop with what `ask` reports for a stop), every `not done: Codex's reply is data` note, what was covered (`coverage`: pages, flows, viewports), each reproduction (the claim and the state `repro` returned), the evidence kept (each new path, or: none kept), and the finish (each item confirmed ended or not; the target removed, or the retained location). Then the residual line, `Residual: <DS-U8>`, and last the no-fix line.
 
 | Line | English | Traditional Chinese |
 |---|---|---|
+| no-run | `Codex did not complete a run; no claims were collected.` | `Codex 沒有完成執行；沒有收集到任何論點。` |
 | no-claims | `No claims: Codex reported nothing in the exercised scope; this is not an approval of the UI.` | `沒有論點：Codex 在本次演練的範圍內沒有回報任何問題；這不代表 UI 已通過。` |
 | no-fix | `Nothing was changed: this exercise only reports; fixing anything is a separate request from you.` | `沒有改動任何東西：本次演練只回報；要修正任何問題，請另外提出要求。` |
 | dev-data | `This exercise used your dev data: it may have written outside the disposable target, and network bodies with that data may have reached OpenAI.` | `本次演練使用了你的 dev 資料：它可能已在可丟棄目標之外寫入，含這些資料的網路內容也可能已送到 OpenAI。` |
 
-DS-U8 in the residual line is the sentence from section 6, in the same language version. Never present "no claims" as a passed check or an approval of the UI, and never say a claim was fixed, patched or applied. An exercise that ended early still gets this report: the scope line with what is known, and the Exercise section saying where it ended and what was ended, removed or retained.
+DS-U8 in the residual line is the sentence from section 6, in the same language version. Never present "no claims" as a passed check or an approval of the UI, and never say a claim was fixed, patched or applied. An exercise that ended early still gets this report: the scope line with what is known, `## Claims` with the no-run line, and the Exercise section saying where it ended and what was ended, removed or retained.

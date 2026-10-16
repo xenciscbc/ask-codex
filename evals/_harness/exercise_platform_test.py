@@ -310,6 +310,43 @@ class PlatformLayerTest(unittest.TestCase):
         self.assertEqual(self.runs(), [])
         self.assertEqual(self.exec_count(), 0)
 
+    def test_the_fake_keeps_everything_when_a_codex_process_stays_alive(self):
+        # C5 review B1: Claude evals need finish's `stop_unconfirmed` path (I12: "with stop_unconfirmed it keeps
+        # everything"). With `exercise_fake.codex_processes: alive` the fake reports one process Codex launched as
+        # still running; production's finish then removes nothing and reports the run directory as retained.
+        stub = self.stage()
+        self.path_with(stub)
+        scenario = json.loads((self.project / ".stub/scenario.json").read_text(encoding="utf-8"))
+        write(self.project / ".stub/scenario.json",
+              json.dumps({**scenario, "exercise_fake": {"codex_processes": "alive"}}))
+        directory = Path(self.prepare(platform="linux")["directory"])
+        target = Path(json.loads((directory / "plan.json").read_text(encoding="utf-8"))["summary"]["target"])
+        self.assertEqual(self.call("guard", directory, platform="linux")["state"], "guard_passed")
+        self.assertEqual(self.call("app-start", directory, platform="linux")["state"], "app_started")
+        self.assertEqual(self.call("run", directory, platform="linux")["state"], "finished")
+        collected = self.call("collect", directory, platform="linux")
+        self.assertEqual((collected["state"], collected.get("next")), ("collected", "finish"), collected)
+        result_file = self.requests / "finish-result.json"
+        finished = self.call("finish", directory, "--result", result_file, platform="linux")
+        self.assertEqual(finished["state"], "stop_unconfirmed", finished)
+        self.assertEqual(finished["retained_location"], str(directory))
+        self.assertIn("PID 4242 (chrome.exe)", finished["reason"])
+        self.assertEqual(self.call("wait-result", result_file, "--seconds", "0", platform="linux"), finished)
+        self.assertTrue(target.is_dir() and (target / "index.html").is_file(), "the target is kept")
+        self.assertTrue((directory / "plan.json").is_file(), "the run directory is kept")
+        self.assertEqual(self.call("finish", directory, platform="linux")["state"], "stop_unconfirmed",
+                         "a second finish keeps everything too")
+        self.assertTrue(target.is_dir())
+        # Without the switch the same lifecycle finishes and removes everything (the default is unchanged).
+        write(self.project / ".stub/scenario.json", json.dumps({**scenario, "exercise_fake": {"codex_processes": "ended"}}))
+        other = Path(self.prepare(platform="linux")["directory"])
+        for action in ("guard", "app-start", "run", "collect"):
+            self.call(action, other, platform="linux")
+        self.assertEqual(self.call("finish", other, platform="linux")["state"], "finished")
+        self.assertFalse(other.exists())
+        self.assertEqual(self.exec_count(), 2)
+        self.assertEqual(self.violations(), "")
+
     def test_the_fake_covers_reproduction_and_evidence_keep_through_the_production_steps(self):
         # C6, I13: Claude evals in WSL run `repro` and `evidence-keep` on the fake. The fake replaces only the browser
         # session and the move; validation, the origin check, element resolution, step order and redaction are

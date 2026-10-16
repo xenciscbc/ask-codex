@@ -20,7 +20,10 @@ What the fake does instead:
   or fails, as `exercise_fake.guard` in the copy's `.stub/scenario.json` says (default `ran`).
 - app start: runs no command; records each command as "not run" and reports the app started, or a start failure
   when `exercise_fake.app_start` is `fail`.
-- processes: nothing is started, so nothing needs ending; ending reports every item confirmed ended.
+- processes: nothing is started, so nothing needs ending; ending reports every item confirmed ended — unless
+  `exercise_fake.codex_processes` is `alive`: then one process Codex launched (PID 4242, `chrome.exe`) is reported
+  still running, so every ending (finish, stop, cleanup, a failure) is unconfirmed through the production path:
+  `stop_unconfirmed`, nothing removed, the run directory reported as the retained location.
 - dependency report: node and Chrome are not looked up; the codex version is the stub's, compared with the tested
   version by guard.codex_notice (production).
 - reproduction (repro.open_session): no browser; a scripted page from `exercise_fake.browser` in the copy's
@@ -383,7 +386,12 @@ def own_processes(directory):
     return set()
 
 
+ALIVE = {"pid": 4242, "image": "chrome.exe", "source": "recorded"}
+
+
 def codex_processes_ended(directory, plan, exclude, patience=None):
+    if _scenario(plan["summary"]["target"]).get("codex_processes") == "alive":
+        return {"confirmed": False, "recorded": 1, "terminated": [], "alive": [dict(ALIVE)]}
     return {"confirmed": True, "recorded": 0, "terminated": [], "alive": []}
 
 
