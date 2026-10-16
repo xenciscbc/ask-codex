@@ -43,7 +43,7 @@ Invocation and authority
 
 Disposable target
 
-11. As a user, I want every exercise to run on a newly created, empty directory holding a copy of my project (copy mode; in attach mode, by my choice, on my running dev servers — plan I14), so that Codex can never change my working tree.
+11. As a user, I want every exercise to run on a newly created, empty directory holding a copy of my project (copy mode; in attach mode, by my choice, on my running dev servers — plan I14), so that Codex can never change my working tree (Codex and its browser never write to it in either mode; in attach mode my own app may change my dev data and project files as a result of Codex's actions — plan Outcome, U6).
 12. As a user, I want the location of that directory to come only from my own instructions, my memory or what I say in the conversation, so that a repository cannot steer where the exercise writes.
 13. As a user, I want a location suggested by the project's own instructions to be offered to me for confirmation rather than used, so that repository text can only suggest.
 14. As a user, I want Claude to ask me for a location when no user-level source names one, so that nothing is guessed.
@@ -162,13 +162,13 @@ A good test exercises external behavior through the highest existing seam and ne
 - The security exercise skill (on hold; `security-exercise-notes.md`).
 - Non-web interfaces: desktop apps, mobile, TUI.
 - Platforms other than Windows: exercise operations refuse there (plan I13).
-- Untrusted repositories: the app's commands run as the user outside any sandbox (plan U1, residual risk).
+- Untrusted repositories: the app's commands run as the user outside any sandbox (plan U1, residual risk; copy mode — attach mode runs no command of the app).
 - Codex's own browsers (Chrome extension, in-app browser): desktop-app only, not usable from `codex exec`.
 - Operating my everyday Chrome profile or any signed-in session.
 - Targets other than localhost services started from the disposable target (copy mode; attach mode targets the user's running dev servers, plan I14).
 - Parallel exercises or more than one model.
 - Fixing anything the exercise finds.
-- Blocking Codex's shell from other localhost services (not possible with Codex configuration on this machine, P8c; README note only).
+- Blocking Codex's shell from other localhost services (not possible with Codex configuration on this machine, P8c; README note only; in attach mode this includes the attached servers, plan U7 — disclosed, with a report tripwire).
 - An OS-level browser sandbox (WFP rules, containers, WSL).
 
 ## Further Notes

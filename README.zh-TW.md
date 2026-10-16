@@ -12,11 +12,14 @@ ask-codex 是一組 Claude Code skills，也提供 plugin 安裝方式，透過�
 - 安全傳遞 Unicode 回覆；輸出失敗可重新收集結果，並分開回報交付與清理失敗。
 - 整體變更審查：`/ask-codex:review` 把 working tree、與某個 base 比較的 branch，或一段 commit range 交給 Codex 審查，由 Claude 判斷每個論點。只有你輸入指令才能啟動。
 - 多輪討論：`/ask-codex:discuss` 讓 Claude 與一個 Codex 模型針對一個設計主題進行多輪討論——先各自獨立作答，之後只討論有爭議的部分——最後回報雙方的共識，以及需要你決定的事項與雙方各自的建議。只有你輸入指令才能啟動。
-- 目前實作目標為 Windows 搭配 Git Bash，以及 Linux。兩者皆有離線測試；真實 Claude 的驗證目前僅涵蓋 WSL 上兩個搭配 stub Codex 的 headless 案例。此版完整的真實 Codex 諮詢與互動流程尚未驗證。
+- UI 演練：`/ask-codex:ui` 讓 Codex 在隔離、網路受限的 Chrome 中實際操作你的 web app——在專案的可丟棄副本上，或在你要求時直接用你已在執行的 dev server——並回報 bug、版面問題與 UX 建議；Claude 透過同一個受限瀏覽器重現每個 bug 論點，並判斷每個論點。只有你輸入指令才能啟動。僅限 Windows。見 [UI 演練](#ui-演練ask-codexui)。
+- 諮詢、審查與討論的目前實作目標為 Windows 搭配 Git Bash，以及 Linux；UI 演練僅限 Windows。兩者皆有離線測試；真實 Claude 的驗證目前僅涵蓋 WSL 上兩個搭配 stub Codex 的 headless 案例。此版完整的真實 Codex 諮詢與互動流程尚未驗證。
 
 ## 執行邊界
 
 諮詢以 Codex 的唯讀 shell sandbox 執行，並關閉子代理（自 1.3.2 起帶 `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`，見下方已知風險「子代理」）、拒絕任何跳出 sandbox 的提升權限（自 1.3.3 起帶 `-c approval_policy="never" -c approvals_reviewer="user"`，見「提升權限核准」），且不載入 execpolicy `.rules` 檔（自 1.3.3 起帶 `--ignore-rules`）。shell sandbox 會擋寫入與對外網路；在 Windows 上不擋 loopback，所以 shell 指令連得到這台機器上所有 localhost 服務（見「本機服務」）。MCP server 在該 sandbox 之外執行；腳本預設停用事前檢查時觀察到的所有 server。檢查與執行之間的設定變更可能繞過檢查，詳見下方限制。你允許的 server 可能提供寫入或執行工具；外掛不會讓這些工具變成唯讀。
+
+UI 演練是另一種互動，有自己的邊界（[ADR 0009](docs/adr/0009-exercise-on-a-disposable-target.md)）：同樣的唯讀 shell 與指令列固定值；除了一個固定版本、受限制的瀏覽器 MCP server 之外，所有 MCP server 都停用，該 server 列出的工具逐一預先核准；以及一個結束後會移除的可丟棄目標。Codex 與它的瀏覽器不會寫入你的專案。這個邊界涵蓋與不涵蓋什麼，見 [UI 演練](#ui-演練ask-codexui)。
 
 Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為資料。這是模型指示，並非 hook 或工具層的授權屏障。行程停止也依賴可觀測的行程身份與快照，限制詳見下文。
 
@@ -33,7 +36,7 @@ Skill 要求 Claude 只在你提出要求時諮詢，並將 Codex 輸出視為�
 /plugin install ask-codex@ask-codex
 ```
 
-第一個 `ask-codex` 是外掛名稱，第二個是此儲存庫定義的 marketplace 名稱。安裝後使用 `/ask-codex:ask`、`/ask-codex:review`、`/ask-codex:discuss` 與 `/ask-codex:setup`。
+第一個 `ask-codex` 是外掛名稱，第二個是此儲存庫定義的 marketplace 名稱。安裝後使用 `/ask-codex:ask`、`/ask-codex:review`、`/ask-codex:discuss`、`/ask-codex:ui` 與 `/ask-codex:setup`。
 
 也可以在終端機安裝至使用者範圍：
 
@@ -63,10 +66,11 @@ claude plugin update ask-codex@ask-codex --scope user
 | `skills/review/` | `~/.claude/skills/review/` | `<project>/.claude/skills/review/` |
 | `skills/discuss/` | `~/.claude/skills/discuss/` | `<project>/.claude/skills/discuss/` |
 | `skills/setup/` | `~/.claude/skills/setup/` | `<project>/.claude/skills/setup/` |
+| `skills/ui/` | `~/.claude/skills/ui/` | `<project>/.claude/skills/ui/` |
 
-Windows 的 `~` 是使用者家目錄，通常為 `C:\Users\<username>`。`ask` 必須包含 `SKILL.md`、`prompts/`、`scripts/`、`consultation.schema.json` 與 `discussion.schema.json`，不能只複製 `SKILL.md`。`setup` 提供 MCP 政策設定輔助功能。`review` 與 `discuss` 透過 `ask` skill 的腳本與 prompt 執行，並以相鄰目錄（`../ask`）找到它們，因此只能與 `ask` 一起複製到同一個上層目錄。
+Windows 的 `~` 是使用者家目錄，通常為 `C:\Users\<username>`。`ask` 必須包含 `SKILL.md`、`prompts/`、`scripts/`、`consultation.schema.json`、`discussion.schema.json`、`ui-exercise.schema.json`、`browser-server/` 與 `guard-page/`，不能只複製 `SKILL.md`。`setup` 提供 MCP 政策設定輔助功能，也負責為 UI 演練準備機器。`review`、`discuss` 與 `ui` 透過 `ask` skill 的腳本與 prompt 執行，並以相鄰目錄（`../ask`）找到它們，因此只能與 `ask` 一起複製到同一個上層目錄。
 
-使用上述目錄名稱時，指令是 `/ask`、`/review`、`/discuss` 與 `/setup`，取代本 README 其他段落中的 plugin 前綴指令。也可以直接用自然語言明確要求 Claude 諮詢 Codex。參考 Claude Code 的[skill 位置與命名規則](https://code.claude.com/docs/en/skills)。
+使用上述目錄名稱時，指令是 `/ask`、`/review`、`/discuss`、`/ui` 與 `/setup`，取代本 README 其他段落中的 plugin 前綴指令。也可以直接用自然語言明確要求 Claude 諮詢 Codex。參考 Claude Code 的[skill 位置與命名規則](https://code.claude.com/docs/en/skills)。
 
 更新時，下載或 pull 最新儲存庫，以相應的新目錄替換已安裝的目錄，包含所有支援檔案；若有自行修改，請先備份。手動複製的 skills 不由 `claude plugin update` 管理。
 
@@ -95,6 +99,7 @@ claude -p --plugin-dir /path/to/ask-codex \
 - Python 3.11 以上版本。諮詢腳本使用標準函式庫的 `tomllib` 讀取 Codex 設定。
 - Bash。Linux 直接使用 Bash；Windows 必須使用 Git Bash。
 - 已安裝並登入的 Codex CLI。未登入時 Claude 會告訴你執行 `! codex login`。
+- 僅 `/ask-codex:ui` 需要：Windows、Google Chrome（stable channel）149 以上，以及 `PATH` 上附帶 npm 的 Node.js。先執行一次 `/ask-codex:setup` 並要求它為演練做準備：它會安裝固定版本的瀏覽器 server 並檢查這些相依項目（見 [UI 演練](#ui-演練ask-codexui)）。演練以 `codex-cli 0.159.3` 測試。
 - 舊版實作曾以 `codex-cli 0.154.0` 驗證。當時測試機器上的 `codex` 解析到 pnpm 安裝的 `@openai/codex`，而非 Codex 桌面應用自帶的執行檔——兩者都安裝時，實際使用的是 `PATH` 上的那一個。
 
 ## 使用方式
@@ -108,6 +113,8 @@ claude -p --plugin-dir /path/to/ask-codex \
 /ask-codex:review sol main..HEAD 檢查錯誤處理
 /ask-codex:discuss 登入服務應該如何限制密碼猜測？
 /ask-codex:discuss sol:high rounds 5 設計外掛的設定檔格式。
+/ask-codex:ui
+/ask-codex:ui sol:high --headed 結帳流程
 /ask-codex:setup
 ```
 
@@ -152,6 +159,56 @@ Setup skill 只寫入 ask-codex 政策檔，不會修改 Codex 的 `config.toml`
 
 專案定義的 server 必須取得明確的來源確認，而且確認綁定該次定義內容；command、argument、endpoint、environment 或其他定義欄位一旦改變，先前確認即失效。來源確認只表示認可該定義，允許使用 server 是另一個決定；Claude 可以在同一個問題中清楚分別詢問兩者。確認 ID 由準備完成的定義產生，本身不能構成同意。
 
+## UI 演練（`/ask-codex:ui`）
+
+`/ask-codex:ui [model token] [--headed] [scope or focus]` 讓 Codex 實際使用你的 web app，而不是閱讀它的程式碼。Codex 在隔離的 Chrome 中操作 app——瀏覽頁面、點擊、填表、調整成包含手機尺寸在內的多種 viewport、截圖並實際看圖、讀取瀏覽器 console 與網路紀錄——並回傳論點：bug、版面問題與 UX 建議。範圍內的每個 bug 論點，Claude 都會先透過同一個受限瀏覽器自行重現，才標為已確認（否則回報為未確認，並列出嘗試過的步驟）；每個版面與 UX 論點都給出處置與理由，然後回報。不會修正任何東西。**演練僅限使用者啟動：**只有輸入指令才會開始，而且要等你回覆確認訊息後才會啟動；確認訊息會列出每個指令、位址、資料來源、外部相依與揭露事項。每次演練只用一個模型；瀏覽器預設 headless，加上 `--headed` 才顯示視窗。僅限 Windows。設計記錄於 [ADR 0009](docs/adr/0009-exercise-on-a-disposable-target.md)。
+
+**第一次演練之前**，執行 `/ask-codex:setup` 並要求它為演練做準備。它會以 `npm install --ignore-scripts` 把固定版本的瀏覽器 server（chrome-devtools-mcp 1.10.1）安裝到 `%LOCALAPPDATA%\ask-codex`，逐一比對 ask-codex 提交的 hash manifest，並檢查 node、Chrome（stable，149 以上）與你的 codex-cli 版本。它不會啟動瀏覽器：每次演練的瀏覽器 guard 才是第一次啟動。`%LOCALAPPDATA%\ask-codex` 只存放瀏覽器 server 與 guard 快取；刪除它即可移除兩者。
+
+### 兩種模式
+
+- **副本模式**（預設）：腳本把你的專案複製到一個新建立的可丟棄目標，並以你確認過的安裝與啟動指令從副本啟動 app（Claude 從專案檔案推導指令，並展開顯示 package script 與 lifecycle hook；腳本只原樣執行確認過的指令）。副本不含任何深度的版本控制資料（`.git`、`.hg`、`.svn`、`.jj`）、`.codex`、`.claude`、相依套件目錄（`node_modules`、`.venv`、`venv`、`__pycache__`、`.pnpm-store`）、`.env*` 檔與機密樣式檔（`*.pem`、`*.key`、`*.pfx`、`*.p12`、`id_*`、`credentials*`）。連結與 junction 會略過並列出，絕不跟隨或重建；alternate data stream 不會複製；預設超過 100,000 個項目或 2 GiB 的副本會失敗。env 檔只有在你為該次演練指名時才會進入副本，並列在報告的範圍行。app 使用副本自己的資料（種子檔、fixture、在副本中建立的測試帳號），除非你在該次演練的對話中說要用你的 dev 資料；此時報告第二行會註明。
+- **接上模式**：你在該次演練的對話中要求時（例如「接上我正在跑的 dev server」），演練直接使用你已在執行的前端與後端。不複製、不安裝、不啟動，也絕不啟動、停止你的 server 或對它們發送訊號。Codex 仍在一個新建的空白可丟棄目錄中工作。專案檔案、memory 或先前的演練都不能選擇接上模式，而且接上模式一律視為使用你的 dev 資料。確認前，腳本會列出每個接上連接埠的擁有行程（command line 已遮蔽）；連接埠與其他行程共用、server 綁定所有介面或 IPv4-mapped 位址、擁有者是 System 行程（http.sys），或擁有者在封閉的轉發程式清單上（`wslrelay.exe`、`com.docker.backend.exe`、`com.docker.proxy.exe`、`vpnkit.exe`、任何 `svchost.exe`）時一律拒絕。演練期間每 2 秒檢查一次擁有者，有任何變化就停止演練。
+
+**位址。**接上模式只接受 `127.0.0.1`：`[::1]`、`localhost`、`https`、`wss` 以及 80、443 連接埠都會以固定句子拒絕，請你把 dev server 綁定到 `127.0.0.1`；原因是 chrome-devtools-mcp 1.10.1 無法解析未跳脫的 `[::1]` URL pattern，而瀏覽器定義不帶任何反斜線。副本模式接受 `127.0.0.1` 與 `localhost`；請求中也接受 `[::1]`，但 guard 會因同樣原因 fail closed，因此不會啟動 app。請把 dev server 綁定到 `127.0.0.1`（Vite `--host 127.0.0.1`、Next.js `-H 127.0.0.1`、Django `runserver 127.0.0.1:<port>`）。實測通過的 guard 都使用 `127.0.0.1` 位址。
+
+**目標根目錄。**可丟棄目標建立在目標根目錄之下，而目標根目錄只能來自你：你的訊息、你的全域指示或你的 memory。專案自己的指示只能建議，Claude 會請你確認。腳本要求它是本機固定磁碟上的既有目錄，位於專案之外且不包含專案，不在 OneDrive 等雲端同步資料夾內，上層也沒有含 `.git` 或 `.codex` 的目錄；目標本身必須是新建立的，任何既有路徑都會被拒絕。
+
+### 邊界
+
+- **Codex** 使用與諮詢相同的固定值：唯讀 shell、`--ephemeral`、關閉 apps 與子代理、不能提升權限（`approval_policy="never"`、`approvals_reviewer="user"`）、不載入 execpolicy 規則（`--ignore-rules`），`-C` 指向可丟棄目標。不論你的 ask-codex 政策怎麼設定，其他所有 MCP server 都會停用；MCP 事前檢查要求剛好只有一個啟用的 server：本次演練以新名稱定義的瀏覽器 server。
+- **瀏覽器 server** 是固定版本的 chrome-devtools-mcp 1.10.1，每次使用前都比對 hash manifest，並以 `node` 直接啟動（不經 `npx`、不經 shell），使用自己的工作目錄、自己的暫存目錄，以及一個為本次執行建立、封鎖下載、結束後移除的 Chrome profile。設定檔探索、使用統計、更新檢查、CrUX 查詢與 JavaScript 執行都關閉，網路標頭會遮蔽。Codex 只拿到 24 個列出的工具（頁面與瀏覽、snapshot 與截圖、點擊、hover、填寫、輸入、按鍵、拖曳、對話框、等待、調整大小、emulation、console 與網路清單、CSS 樣式、Lighthouse）；`upload_file`、`evaluate_script`、heap snapshot、performance trace，以及之後版本新增的任何工具都不開放。
+- **逐一核准工具。**在 `approval_policy="never"` 下，Codex 會拒絕需要核准的 MCP 工具，所以演練只對列出的瀏覽器工具逐一預先核准（`tools.<tool>.approval_mode="approve"`，server 預設為 `prompt`）。這些鍵是指令列固定值，絕不會出現在 `ask`、`review` 或 `discuss`。瀏覽器工具能做到的範圍由下列設定限制並由 guard 檢查，而不是靠核准提示：Codex 的瀏覽器操作不會逐次審核。
+- **網路限制。**Chrome 使用演練自己占用、一連上就關閉連線的 proxy 連接埠，只讓 app 的 host:port 繞過，再加上瀏覽器 server 針對這些 host:port 的 URL allowlist；WebRTC 只能走 proxy 的 UDP。這是 Chrome 設定加上 MCP allowlist，**不是 OS sandbox**。app 本身擁有完整網路。
+- **檔案。**瀏覽器的寫檔工具只寫入 `<target>/evidence` 與本次執行自己的暫存目錄。截圖與 log 會隨目標一起刪除，除非你為該次演練要求把指定檔案保留到你指定的位置；由腳本搬移。
+- **瀏覽器 guard。**在 app 啟動之前（接上模式：在 Codex 啟動之前），guard 不經 Codex 啟動同一份瀏覽器定義，並要求：app 的連接埠能載入；從圖片、iframe、fetch、WebSocket、Worker、`sendBeacon`、Service Worker 與重新導向送往其他 loopback 連接埠的請求——包括經由 `localhost`、`[::1]`、`127.0.0.2` 與 `0.0.0.0` 的寫法——都被擋下；送往其他網路介面位址與網際網路的請求失敗；WebRTC 不產生 server-reflexive candidate；`file:`、`chrome:` 等 URL 被拒絕或沒有作用；每個寫檔參數在各種路徑寫法（相對路徑、`..`、UNC、裝置路徑、短檔名、alternate stream、junction 與 symlink）下都留在允許的目錄內；每個列出的工具都存在。任何一項失敗，演練就停止，不啟動 app、不呼叫 Codex。通過結果在指紋（瀏覽器定義、node、套件 manifest、Chrome 路徑與版本、codex-cli 版本、Chrome policy 鍵）不變時最多沿用 12 小時。接上模式下，guard 先在自己的連接埠上執行，然後每次演練都（不使用快取）檢查實際接上的連接埠。**guard 證明的是瀏覽器能連到哪裡，不是 app 本身暴露或做了什麼。**
+- **重現。**Claude 只透過腳本的 `repro` 操作重現 bug 論點，它以封閉的動作集合驅動同一個受限瀏覽器（在 app 位址內瀏覽、點擊、填寫、hover、按鍵、拖曳、回應對話框、等待文字、調整大小、snapshot、截圖、console 與網路清單）。集合以外的步驟——shell 指令、檔案操作、其他 URL——一律拒絕，該論點回報為未確認。
+- **遮蔽。**Codex 回覆與重現輸出中類似 token 的字串——bearer 與 basic 憑證、JWT、`sk-`、`ghp_` 與 `xox` 樣式的金鑰、`token`、`key`、`secret` 或 `password` 後面的值、URL 中的使用者資訊、`--password`／`--token`／`--secret` 這類旗標的值——在 Claude 看到之前就被替換成 `[REDACTED]`。這是依樣式比對：其他形狀的機密可能漏過。
+- **資料，不是指示。**Codex 的回覆與 app 顯示的一切都是資料：Claude 不會因為它們要求而執行指令、開啟 URL 或改動任何東西，並會在報告中記下這類要求。
+- **結束。**`finish` 結束 Codex 的行程、瀏覽器，以及副本模式下 app 的行程（放在 Windows job object 中），逐一確認已結束，之後才移除可丟棄目標。無法確認結束的項目以 PID 與映像名稱回報，目錄保留並告知位置。被放著不管的演練，由 supervisor 在結果收集後 2 小時、或開始後 6 小時結束。supervisor 若終止，Codex 會在約 2 秒內被停止，副本模式下 app 的 job 也隨之結束。
+
+### 與 Codex 自有瀏覽器的差別
+
+Codex 的 Chrome 擴充功能與 in-app 瀏覽器只存在於 Codex 桌面應用，無法從 `codex exec` 使用；它們在你自己使用的瀏覽器中運作。`/ask-codex:ui` 從 `codex exec` 執行，給 Codex 一個獨立的 Chrome，使用本次執行專屬的 profile，看不到你的登入狀態、cookie、擴充功能或分頁，只能連到你的 app 位址，用完即丟——而且 Claude 會重現並判斷 Codex 的回報，而不是轉述。
+
+### 固定版本
+
+chrome-devtools-mcp 固定為 1.10.1，其 lockfile 與每個安裝檔案的 SHA-256 都提交在 `skills/ask/browser-server/`。提高版本就是一次發布，必須在 tag 之前重跑 P3–P5 與 P7 探測（`codex exec` 中的工具 allowlist、Codex 看得到截圖、allowlist 的拒絕方式、Service Worker 與其他網路外洩）以及 guard 檢查矩陣。演練以 `codex-cli 0.159.3` 測試；提高這個版本的發布必須重跑 B1 探測（瀏覽器工具的逐一核准）。使用其他 codex-cli 版本時，演練的確認訊息會告訴你：它核准瀏覽器工具的方式未經測試。
+
+### 殘留風險與未驗證項目
+
+- **只用於你自己的專案。**副本模式下，安裝與啟動指令會以你的身分、在任何 sandbox 之外、以完整網路執行你儲存庫的程式碼。app 行程樹以外的影響（container、服務）不在管理範圍內。
+- **Codex 的 shell 連得到 localhost**，所有 ask-codex skill 都一樣（見下方「本機服務」）。接上模式下，它可以直接對接上的 server 送出任何請求，不受瀏覽器限制。報告會列出 Codex 提到接上主機、連接埠或 HTTP 用戶端的 shell 指令；這份清單只是警示線，不是防護。`-C` 不會讓 Codex 的唯讀 shell 看不到你的專案。
+- **app 自身的開發工具**：從 app 位址可以使用的 in-browser console、debugger、開啟編輯器或提供檔案的端點（包括已知的 dev server 檔案服務漏洞），在兩種模式下都可能讓 Codex 以你的身分執行程式碼或讀取檔案。這會在確認訊息與報告中揭露，但不會阻止或偵測。
+- **瀏覽器操作不會逐次審核：**app 因此做出的事（寄信、webhook、付款、資料變更）都會實際發生。Claude 會列出它找到的外部相依與整合，並在 app 啟動前詢問。
+- **dev 資料與接上模式：**網路請求與回應的內容（含你的資料）可能送到 OpenAI。接上模式下副本模式的排除不適用，dev server 提供或顯示的任何內容（檔案、錯誤頁、環境變數值、你輸入的帳密）都可能送到 OpenAI；它的 proxy 與伺服器端請求會帶著你的 credentials 連到任何地方；可達性檢查與 Claude 的重現也會作用在你的真實資料上；你的 app 也可能因 Codex 的操作而改動你的 dev 資料與專案檔案。
+- **接上模式的擁有者：**演練仰賴你確認哪些行程擁有接上的連接埠。封閉清單以外的轉發程式（`ssh -L`、`kubectl port-forward`）偵測不到，擁有者變更最多可能在 2 秒的輪詢間隔內未被發現。
+- **supervisor 終止：**在 Codex 被停止前的幾秒內，proxy 連接埠沒有被占用。
+- **本次執行專屬的暫存目錄：**瀏覽器 server 可以把 app 控制的內容寫入其中，而它同時存放隔離的 Chrome profile。
+- **核准設定不可見：**`codex mcp get` 不會顯示 `tools.*.approval_mode`，所以 MCP 事前檢查無法檢查它；由每次新建的 server 名稱與離線指令列測試涵蓋。elicitation 的處理方式取決於 codex-cli 版本，你自行升級的 codex-cli 在發布重跑 B1 探測之前都未經測試。
+- **固定值可被覆寫：**管理者層級的 Codex 設定（見「提升權限核准」）與 Chrome 企業政策可以覆寫這些固定值；guard 指紋包含 Chrome policy 鍵，政策一變就會重跑 guard。
+- **未驗證：**DNS prefetch；headed 模式（`--headed`）；Windows 以外的平台（演練的所有操作都會在那裡拒絕執行）。
+
 ## 與官方 Codex plugin 的比較
 
 OpenAI 官方 Codex plugin 也有審查指令，與 `/ask-codex:review` 是不同的工具：
@@ -194,6 +251,8 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 
 兩個真實 Claude WSL 案例為 `script-consultation`（3/3 grader）與 `script-confirmation`（2/2 grader），各得分 1.00。它們在初版腳本主導實作期間執行，未在後續生命週期修正後重跑。另以真實 `codex mcp list` 獨立檢查過含點號 server 名稱的停用方式；該檢查沒有執行諮詢。
 
+UI 演練（1.4.0）另外在 Windows 上驗證：使用 stub Codex 的離線測試（`python evals/_harness/exercise_*_test.py`，以及 Node 測試集中的 `ui-*` grader 檢查）；在 WSL 以 stub Codex 與 eval 平台替身執行的真實 Claude eval；不經 Codex、針對可丟棄 fixture app 的瀏覽器 guard（含每次只削弱一項限制、必須失敗的負向對照）、重現與接上模式實測；以及以真實 Codex 執行瀏覽器工具、量測逐一核准行為的 B1 探測。以真實 Codex 執行一次完整演練是本次發布的實測驗收；證據放在 `.scratch/exercise-skills/`。
+
 完整指令、報告、回歸歷程與待驗收項目見[驗證紀錄](.scratch/script-owned-consultation/evidence/validation.md)。舊版實作的歷史 eval 不能視為目前行為的證明。macOS 不在目前驗收範圍內。
 
 ## 已知風險與限制
@@ -208,7 +267,7 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 - **子代理（1.3.2 修正；受影響版本 1.0.0–1.3.1）：**Codex 可以叫出子代理（預設開啟，目前多數模型使用 MultiAgentV2）。子代理的角色檔——例如 codex-feather 安裝的 `~/.codex/agents/*.toml`，或受信任專案的 `.codex/agents`——會自行設定 sandbox、模型與 MCP server，而且角色的 sandbox 會覆寫諮詢的 `-s read-only`。因此到 1.3.1 為止，諮詢可能叫出 `workspace-write` 的子代理，在你的專案寫入檔案、使用 ask-codex MCP 政策從未檢查過的 MCP server，並以角色的模型計費；事件紀錄最多只出現 `collab_tool_call` 的「wait」項目，看不到叫出子代理或子代理的寫入。自 1.3.2 起，每次諮詢都帶 `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`。已在 codex-cli 0.159.3（Windows）以真實呼叫驗證：預設設定下的 v2 與 v1 模型，以及 `.codex/config.toml` 開啟 agents、MultiAgentV2、fan-out 與 multi_agent 的受信任專案——都沒有子代理工具、沒有寫入。未驗證：你自己的 Codex 設定開啟這些選項（指令列優先於設定檔）、較舊的 CLI、WSL。單獨使用 `--disable multi_agent` 擋不住 MultiAgentV2。若你在 1.3.1 以前曾對不可信的內容執行 `review` 或 `discuss`，且安裝了可寫入的角色，請在那些專案檢查 `git status`；並更新外掛（手動複製者請重新複製 skills）。
 - **提升權限核准（1.3.3 修正；受影響版本 1.0.0–1.3.2）：**`codex exec` 在 headless 模式原本會拒絕所有核准請求，但當你的設定把 `approvals_reviewer` 解析為 `auto_review` 時會取消這個限制，核准請求改交給 Codex 的自動審查。因此到 1.3.2 為止，諮詢可能請求在唯讀 sandbox 之外執行指令並獲得核准：在 codex-cli 0.159.3（Windows）上，一次實測諮詢就以這種方式寫入了檔案。受信任專案的 `.codex/config.toml` 也能設定同樣的鍵。自 1.3.3 起，每次諮詢都帶 `-c approval_policy="never" -c approvals_reviewer="user"`，優先於你的設定與專案設定（依原始碼推論也優先於 profile，profile 未實測）。已在 codex-cli 0.159.3（Windows）以真實呼叫驗證：你的設定為 `auto_review`；受信任專案設定 `auto_review` 加上 `on-request`，或加上五種提示全部開啟的 granular 政策，並加上 `sandbox_mode = "workspace-write"`；以及不受信任的專案——都沒有請求提升權限、沒有寫入，`-s read-only` 也壓過了專案的 `sandbox_mode`（專案的 `default_permissions` 在有 `sandbox_mode` 或 `-s` 時會被 Codex 忽略，因此沒有單獨測到）。限制：每次實測中，模型在得知政策是 `never` 後都不送出提升權限請求，所以 Codex 在執行階段拒絕這類請求的行為沒有實際觸發過，某次權限請求的結果也只有模型自己的回報；`approvals_reviewer` 這個固定值是第二層防護，沒有單獨實測。未涵蓋：管理者層級的設定（舊版 managed config，或不允許 `never` 的 `requirements.toml`）可以覆寫或替換這些值。若你在 1.3.2 以前，於自己的設定或受信任專案的設定中設了 `auto_review` 並使用過諮詢，被核准的指令可能寫到你的帳號能寫的任何地方，不只是專案內：請檢查那些專案的 `git status` 以及其他你在意的檔案；並更新外掛。
 - **execpolicy 規則（自 1.3.3）：**execpolicy `.rules` 檔中的 `allow` 規則（你的 `~/.codex/rules/`，在你選「don't ask again」時由 Codex 寫入；或受信任專案的 `.codex/rules/`）可能讓符合的指令不論核准政策都在 sandbox 外執行。這是從 Codex 原始碼推論，沒有實測。自 1.3.3 起諮詢帶 `--ignore-rules`，不載入你和專案的 `.rules` 檔——你自己的 `forbidden` 與 `prompt` 規則在諮詢中也不會套用；指令仍在唯讀 sandbox 內執行。未涵蓋：系統層級的規則（Windows 上的 `%ProgramData%\OpenAI\Codex\`）、管理者的 `prefix_rules`，以及 plugin 帶來的規則推測仍會載入（依 codex-cli 0.159.3 的靜態閱讀，未實測）。
-- **本機服務：**在 Windows 上，唯讀 sandbox 擋對外網路但不擋 loopback（在 codex-cli 0.159.3、elevated sandbox 實測）。Codex 的 network proxy 設定會擋經過 proxy 連往 loopback 的請求，但繞過 proxy 的指令仍連得上。因此諮詢的 shell 指令可以對你機器上任何監聽 127.0.0.1 的服務發出請求，例如開發資料庫的管理介面。Codex 的設定無法防止這點；請讓敏感的本機服務需要驗證，或在對不可信內容進行諮詢時先停止它們。
+- **本機服務：**在 Windows 上，唯讀 sandbox 擋對外網路但不擋 loopback（在 codex-cli 0.159.3、elevated sandbox 實測）。Codex 的 network proxy 設定會擋經過 proxy 連往 loopback 的請求，但繞過 proxy 的指令仍連得上。因此在每個 ask-codex skill——`ask`、`review`、`discuss` 與 `ui` 演練——中，Codex 的 shell 指令都可以對你機器上任何監聽 127.0.0.1 的服務發出請求，例如開發資料庫的管理介面。Codex 的設定無法防止這點；請讓敏感的本機服務需要驗證，或在對不可信內容進行諮詢時先停止它們。
 - **sandbox 之外的其他工具：**唯讀的諮詢仍看得到會寫入 Codex 自身儲存的工具（`notes.write_file`／`append_to_file`、`create_goal`／`update_goal`）以及 `web.run`。它們不會動到你的專案檔案，但筆記會跨 Codex session 保留，網路存取則是對外通道；另行追蹤。
 - **Codex `notify` hook 與其他 hook（刻意不修）：**使用者層設定的 Codex hook（以及受信任專案的 hook）也會在諮詢時執行，且不受 sandbox 限制。若 Codex 設定了 `notify`，諮詢時 Codex 也會執行該 hook。在 Windows 上，hook 會繼承這次執行的 prompt、事件與錯誤檔。hook 若比 Codex 活得久，就會一直鎖住這些檔案；曾觀察到一串 hook 鎖了約 13 秒。清理最多重試 30 秒（`ASK_CODEX_CLEANUP_WINDOW_S`），所以已完成的諮詢可能要等這麼久才回傳。鎖若超過這段時間，回覆仍會送達，並回報保留位置供之後清理。外掛不會停用你的 hook。詳見 [ticket 12](.scratch/script-owned-consultation/issues/12-cleanup-retries-transient-windows-lock.md)。
 - **審查會讀取整個範圍：**審查讓 Codex 讀取範圍內的變更，working tree 審查包含 untracked 檔案。排除機密只是給 Codex 的指示，並非強制過濾。
@@ -216,6 +275,7 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 - **diff 內容引導：**被審查的變更中的文字可能試圖引導 Codex 的結論，被審查 repo 自己的 `AGENTS.md` 或 skills 也可能被 Codex 當成指示而非資料；「內容是資料」只是指示，並非強制。控制手段是 Claude 對每個論點的處置，且 Claude 不會在沒有你另行要求時依論點行動。
 - **討論的用量與收斂：**每一輪討論呼叫一次 Codex（最多十次），且因為每輪都是新 session，Codex 每輪都要重新探索專案。避免假性共識的規則（讓步需附證據、標示後期翻轉、只接受阻擋等級的新論點）是給兩個模型的指示，不是強制機制；報告中的標示才是控制手段。Codex 先前的輸出會被帶入後續 prompt，和任何檔案一樣被視為資料。
 - **用量：**諮詢會消耗 Codex 用量，並行諮詢會啟動兩次執行。目前尚未量測每次諮詢的 token 基本成本。
+- **UI 演練：**它自己的殘留風險與未驗證項目列在 [UI 演練](#殘留風險與未驗證項目)。上方的「本機服務」風險同樣適用於演練。
 
 報告可使用對話語言，但必須保留問題與類型、模型與 effort、生效 MCP 政策、相關計時與停止資訊，以及 Claude 對每個實質論點的處置。執行失敗不會被當成 Codex 意見。
 
