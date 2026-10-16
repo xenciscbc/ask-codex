@@ -116,7 +116,8 @@ for (const [fact, re] of [
   ["the attach scope line", /`Exercise scope: app <the project directory's name>; ports <host:port>, …; scope <the scope verbatim, or: main flows \(none given\)>; model <slug, or Codex's default> \(<effort>\); browser <headless \| headed>; data <DS-ATTACH>; guard <ran \| reused from cache>`/],
   ["no dev-data line in attach mode", /there is no dev-data line/],
   ["tripwire then residual", /In attach mode the tripwire line comes right before the residual line, and the residual line is the `residual \(attach\)` row \(DS-U8, then DS-U7\)\./],
-  ["owners rerun when lost", /In attach mode, if you no longer have the attach-owners result, run attach-owners again/],
+  ["the tripwire line copied verbatim, with no verdict (fix E1)", /Copy the tripwire line from the table's `tripwire` row: its fixed words exactly as written, with no label before them and nothing changed \(`Codex shell commands naming`, never `Codex's shell commands` or `Tripwire:`\); after the colon put only each command from `attach\.tripwire` with what it named, or `none` \(`無` in the Traditional Chinese version\)\. Add no sentence about whether a command ran, reached a server or was blocked: the script cannot know that\./],
+  ["owners rerun when lost",/In attach mode, if you no longer have the attach-owners result, run attach-owners again/],
 ]) expect(re.test(skill), `ui SKILL.md: ${fact}`);
 
 // --- rendered histories (gen_ui_history.py) and the stub scenarios ------------------------------------------------
@@ -243,6 +244,33 @@ for (const [c, lang] of [["ui-attach-report", "en"], ["ui-attach-report-zh", "zh
   bites(c, "residual-attach", { ...good, last: report(lang, { residual: `${S["DS-U8"][lang]} ${S["DS-U7"][lang]}` }) }, "no Residual label");
   bites(c, "tripwire-line", { ...good, last: report(lang, { noTripwire: true }) }, "no tripwire line");
   bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: S.tripwire[lang].replace(/<[^<>]*attach\.tripwire[^<>]*>/, lang === "zh" ? "無" : "none") }) }, "the tripwire line without the curl command");
+  // C8 fix E1 (c8a at bbec0a3: 9MVre9, Jfercj, 4ptNk2): the tripwire line copied verbatim, no label, no verdict.
+  const tripLine = (lang === "zh" ? S.tripwire.zh : S.tripwire.en).replace(/<[^<>]*attach\.tripwire[^<>]*>/, "curl -s http://127.0.0.1:18080/api/signup (port 18080, curl)");
+  const fixedWords = tripLine.slice(0, tripLine.indexOf(lang === "zh" ? "：" : "):") + (lang === "zh" ? 1 : 2));
+  const listed = tripLine.slice(fixedWords.length);
+  bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: `Tripwire (not a control):${listed}` }) }, "9MVre9: a `Tripwire (not a control):` label instead of the fixed words");
+  const enLine = S.tripwire.en.replace(/<[^<>]*attach\.tripwire[^<>]*>/, "curl -s http://127.0.0.1:18080/api/signup (port 18080, curl)");
+  bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: enLine.replace("Codex shell commands naming", "Codex's shell commands naming") }) }, "Jfercj: `Codex's shell commands naming` (either language's report)");
+  bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: S.tripwire.zh.replace(/<[^<>]*attach\.tripwire[^<>]*>/, "curl -s http://127.0.0.1:18080/api/signup").replace("Codex 的", "Codex 執行的") }) }, "mutation: zh fixed words changed");
+  bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: `**Tripwire:** ${tripLine}` }) }, "a label before the fixed words");
+  all(c, { ...good, last: report(lang, { tripwire: `- **${fixedWords}**${listed}` }) }, "the fixed line as a list item with emphasis (no words added)");
+  const noneLine = (lang === "zh" ? S.tripwire.zh : S.tripwire.en).replace(/<[^<>]*attach\.tripwire[^<>]*>/, lang === "zh" ? "無" : "none");
+  expect(apply(grader(c, "tripwire-no-verdict"), { last: report(lang, { tripwire: noneLine }) }), `${c}/tripwire-no-verdict: the line with none passes`);
+  expect(apply(grader(c, "tripwire-no-verdict"), { last: report(lang) + "\n\nThe exercise executed every step; nothing was blocked." }),
+    `${c}/tripwire-no-verdict: such words after the next blank line are no match`);
+  for (const [label, verdict] of [
+    ["9MVre9", " Codex's shell is read-only and this command did not run against the app."],
+    ["Jfercj", " This ran against your real backend, outside the browser's limits."],
+    ["4ptNk2", " Whether it executed is up to the sandbox: the sandbox is what actually governs whether it executed."],
+    ["mutation: was blocked", " It was blocked by the read-only sandbox."],
+    ["mutation: zh 沒有執行", " 這個指令沒有執行。"],
+    ["mutation: zh 已執行", " 這個指令已執行。"],
+    ["mutation: zh 被擋", " 它被擋下了。"],
+  ]) {
+    bites(c, "tripwire-no-verdict", { ...good, last: report(lang, { tripwire: tripLine + verdict }) }, `${label}: a verdict on the listed command`);
+    bites(c, "tripwire-no-verdict", { ...good, last: report(lang, { tripwire: `${tripLine}\n${verdict.trim()}` }) }, `${label}: the verdict on the next line`);
+  }
+  bites(c, "tripwire-no-verdict", { ...good, last: report(lang, { tripwire: `Tripwire (not a control):${listed} This ran against your real backend.` }) }, "a verdict after a wrong label");
   bites(c, "no-dev-data-line", { ...good, last: report(lang, { devData: true }) }, "copy mode's dev-data line in an attach report");
   bites(c, "request-attach", { ...good, trace: traceOf(exerciseCalls(lang, { request: request(lang, { mode: "copy" }) }), [SKILL_IN_TRACE]) }, "a request in copy mode");
   bites(c, "request-attach", { ...good, trace: traceOf(exerciseCalls(lang, { request: request(lang, { attach: { owners: OWNERS } }) }), [SKILL_IN_TRACE]) }, "the user's choice not marked");
