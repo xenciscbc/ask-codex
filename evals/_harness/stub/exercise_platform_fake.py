@@ -628,6 +628,12 @@ def examine(app, project=None, listeners=None):
     return report
 
 
+def protected_pids(plan):
+    """No real process is attached in the eval sandbox: nothing to keep out of I15's recognition (which the fake's
+    codex_processes_ended does not run)."""
+    return set()
+
+
 REPLACEMENTS = {
     "target": {"create": create, "create_sibling": create_sibling, "remove": remove},
     "exercise": {"_new_run_directory": new_run_directory, "make_evidence": make_evidence,
@@ -640,5 +646,5 @@ REPLACEMENTS = {
                    "Watcher": Watcher, "own_processes": own_processes, "codex_processes_ended": codex_processes_ended,
                    "end_app": end_app, "run_alive": run_alive},
     "repro": {"open_session": open_session, "move_files": move_files},
-    "attach": {"examine": examine},
+    "attach": {"examine": examine, "protected_pids": protected_pids},
 }

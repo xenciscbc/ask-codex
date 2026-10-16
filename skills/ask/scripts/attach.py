@@ -39,8 +39,8 @@ number refuses.
 "Ended" in attach mode (I14, AT-7): the Codex tree, any repro or check job and the MCP's node and Chrome (I15) have
 ended - confirmed before the proxy is released; the attached ports are not checked.
 
-Tripwire (AT-1): at collect, the script lists every Codex `command_execution` that names an attached port or an HTTP
-client (HTTP_CLIENTS, a fixed list), also inside `powershell -Command` strings and `-EncodedCommand` payloads. It is a
+Tripwire (AT-1, plan I14): at collect, the script lists every Codex `command_execution` that names an attached host
+(its literal, 127.0.0.1) or port, or an HTTP client (HTTP_CLIENTS, a fixed list), also inside `powershell -Command` strings and `-EncodedCommand` payloads. It is a
 tripwire, not a control: Codex's read-only shell can reach the attached servers directly (U7).
 
 Nothing here reads an environment variable (I13).
@@ -145,10 +145,18 @@ def validate(request, origins):
     return confirmed
 
 
+class AttachRefused(ValueError):
+    """An attach-mode rule refuses the app list (scheme, host other than 127.0.0.1, ports 80/443): attach-owners reports
+    it as `refused` (review NB-3); prepare's validation still reports `failed`."""
+
+
 def parse_app(app):
     """attach-owners: the app list, checked as an attach request's (exercise's origin parser, then I14's hosts)."""
     import exercise
-    precheck_app(app)
+    try:
+        precheck_app(app)
+    except ValueError as error:
+        raise AttachRefused(str(error)) from None
     if not isinstance(app, list) or not app or len(app) > exercise.MAX_APP_PORTS:
         raise ValueError(f"app must list 1 to {exercise.MAX_APP_PORTS} host:ports")
     origins = []
@@ -158,11 +166,11 @@ def parse_app(app):
             raise ValueError(f"Invalid app host:port {item!r}")
         host, port = match.group("host"), match.group("port")
         if host not in HOSTS:
-            raise ValueError(f"{HOST_REFUSED} Refused: {item}")
+            raise AttachRefused(f"{HOST_REFUSED} Refused: {item}")
         if not re.fullmatch(r"[1-9][0-9]{0,4}", port) or int(port) > 65535:
             raise ValueError(f"Invalid app port {port!r}")
         if int(port) in REFUSED_PORTS:
-            raise ValueError(f"Ports 80 and 443 are refused in attach mode ({item})")
+            raise AttachRefused(f"Ports 80 and 443 are refused in attach mode ({item})")
         origin = f"{host}:{int(port)}"
         if origin in origins:
             raise ValueError(f"The app host:port {origin} is listed twice")
@@ -267,6 +275,23 @@ def confirm(app, confirmed, project=None, listeners=None):
     return problems, owners
 
 
+def protected_pids(plan):
+    """PIDs that I15's recognition (supervisor.recognise) must never open in attach mode (I14: an attached process is
+    opened with nothing beyond OWNER_ACCESS; review B1): each confirmed owner while its PID still carries the confirmed
+    creation time (or cannot be read), and every process listening on an attached port number now (e.g. a process
+    that replaced an owner). Reads the creation time with PROCESS_QUERY_LIMITED_INFORMATION only, a subset of
+    OWNER_ACCESS, and the listener table (no process handle). An attached owner is never one of the exercise's
+    processes (I3), so leaving it out of the recognition loses nothing."""
+    pids = set()
+    for owner in plan["attach"]["owners"]:
+        created = winjob.creation_time(owner["pid"])
+        if created is None or created == owner["created"]:
+            pids.add(owner["pid"])
+    ports = set(ports_of(plan["summary"]["app"]))
+    pids |= {pid for _, port, pid in winjob.tcp_listeners() if port in ports}
+    return pids
+
+
 def owners_command(cli, path):
     """consult.py attach-owners: who owns each attached port, for the user's confirmation. Writes nothing."""
     try:
@@ -279,7 +304,10 @@ def owners_command(cli, path):
     project = data["project"]
     if not isinstance(project, str) or not re.fullmatch(r"[A-Za-z]:[\\/].*|/.*", project, re.S):
         raise ValueError("project must be the absolute project directory")
-    origins = parse_app(data["app"])
+    try:
+        origins = parse_app(data["app"])
+    except AttachRefused as refusal:
+        return {"state": "refused", "app": data["app"], "ports": [], "reason": f"Attach refused: {refusal}"}
     report = examine(origins, project)
     problems = [problem for entry in report for problem in entry["problems"]]
     result = {"state": "refused" if problems else "ready", "app": origins, "ports": report}
@@ -400,8 +428,8 @@ class AttachSupervisor(supervisor.Supervisor):
             self.write(state="stop_unconfirmed", **{key: record})
             return False
         record["browser"] = supervisor.codex_processes_ended(
-            self.directory, self.plan, supervisor.own_processes(self.directory) | {self.state["pid"]},
-            self.timing["browser_patience"])
+            self.directory, self.plan, supervisor.own_processes(self.directory) | {self.state["pid"]} |
+            protected_pids(self.plan), self.timing["browser_patience"])  # never open the attached processes (B1)
         if not record["browser"]["confirmed"]:
             self.write(state="stop_unconfirmed", **{key: record})
             return False
@@ -555,9 +583,10 @@ def _decoded(command):
 
 
 def tripwire(events, app):
-    """Every Codex command_execution (once per item) that names an attached port or an HTTP client of HTTP_CLIENTS;
-    [{"command": <redacted, cut>, "names": [...]}]."""
+    """Every Codex command_execution (once per item) that names an attached host (its literal) or port, or an HTTP
+    client of HTTP_CLIENTS; [{"command": <redacted, cut>, "names": [...]}]."""
     ports = sorted(ports_of(app))
+    hosts = sorted({origin.rsplit(":", 1)[0] for origin in app})
     found, seen = [], set()
     try:
         lines = Path(events).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -579,7 +608,8 @@ def tripwire(events, app):
             continue
         seen.add(key)
         text = _decoded(command)
-        names = [f"port {port}" for port in ports if re.search(rf"(?<![0-9]){port}(?![0-9])", text)]
+        names = [f"host {host}" for host in hosts if re.search(rf"(?<![0-9.]){re.escape(host)}(?![0-9])", text)]
+        names += [f"port {port}" for port in ports if re.search(rf"(?<![0-9]){port}(?![0-9])", text)]
         names += [label for label, pattern in HTTP_CLIENTS if re.search(pattern, text, re.I)]
         if names:
             shown = redact(command)

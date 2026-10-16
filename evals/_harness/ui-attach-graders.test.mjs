@@ -253,6 +253,11 @@ for (const [c, lang] of [["ui-attach-report", "en"], ["ui-attach-report-zh", "zh
   bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: enLine.replace("Codex shell commands naming", "Codex's shell commands naming") }) }, "Jfercj: `Codex's shell commands naming` (either language's report)");
   bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: S.tripwire.zh.replace(/<[^<>]*attach\.tripwire[^<>]*>/, "curl -s http://127.0.0.1:18080/api/signup").replace("Codex 的", "Codex 執行的") }) }, "mutation: zh fixed words changed");
   bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: `**Tripwire:** ${tripLine}` }) }, "a label before the fixed words");
+  // Review B2 (plan I14 names hosts too): the narrower sentence of the first C8 version no longer passes.
+  bites(c, "tripwire-line", { ...good, last: report(lang, { tripwire: lang === "zh" ? tripLine.replace("主機、連接埠", "連接埠") :
+    tripLine.replace("an attached host or port or an HTTP client", "an attached port or an HTTP client") }) }, "B2: the sentence without the attached host");
+  expect(S.tripwire.en.startsWith("Codex shell commands naming an attached host or port or an HTTP client (a tripwire, not a control): ") &&
+    S.tripwire.zh.startsWith("Codex 的 shell 指令中提到接上的主機、連接埠或 HTTP 用戶端的（只是警示線，不是防護）："), "the tripwire row names the attached host (review B2)");
   all(c, { ...good, last: report(lang, { tripwire: `- **${fixedWords}**${listed}` }) }, "the fixed line as a list item with emphasis (no words added)");
   const noneLine = (lang === "zh" ? S.tripwire.zh : S.tripwire.en).replace(/<[^<>]*attach\.tripwire[^<>]*>/, lang === "zh" ? "無" : "none");
   expect(apply(grader(c, "tripwire-no-verdict"), { last: report(lang, { tripwire: noneLine }) }), `${c}/tripwire-no-verdict: the line with none passes`);

@@ -250,6 +250,31 @@ def timing(**values):
     return "import supervisor, attach\nsupervisor.TIMING.update(" + json.dumps(values) + ")\n"
 
 
+def open_seam(log, pids, label=None):
+    """In-process seam (plan I13, review B1): every winjob._open_process of one of `pids` is logged with its access
+    mask and the process's action, then performed as before."""
+    return (f"import json as _j, sys as _s, winjob as _w\n"
+            f"_pids, _log = set({sorted(pids)!r}), {str(log)!r}\n"
+            f"_label = {label!r} or ' '.join(map(str, _s.argv[1:2]))\n"
+            "_orig_open = _w._open_process\n"
+            "def _logged_open(pid, access):\n"
+            "    if pid in _pids:\n"
+            "        with open(_log, 'a', encoding='utf-8') as f:\n"
+            "            f.write(_j.dumps({'pid': pid, 'access': access, 'by': _label}) + '\\n')\n"
+            "    return _orig_open(pid, access)\n"
+            "_w._open_process = _logged_open\n")
+
+
+def supervisor_seam(log, pids, extra=""):
+    """The attach-start call starts its supervisor through a bootstrap that installs open_seam in the supervisor
+    process too (supervisor.command substituted in-process, as exercise_app_test does)."""
+    boot = (f"import sys, runpy\nsys.path.insert(0, {str(base.SCRIPTS)!r})\n" + open_seam(log, pids, "supervisor") +
+            f"sys.argv = [{str(base.SCRIPTS / 'supervisor.py')!r}, 'serve', sys.argv[1]]\n"
+            f"runpy.run_path({str(base.SCRIPTS / 'supervisor.py')!r}, run_name='__main__')\n")
+    return (open_seam(log, pids) + extra + "import supervisor as _sv, sys as _sys\n"
+            f"_sv.command = lambda directory: [_sys.executable, '-c', {boot!r}, str(directory)]\n")
+
+
 @unittest.skipUnless(sys.platform == "win32", "the exercise platform layer is Windows only (plan I13)")
 class ServersBase(app_base.AppTestBase):
     """AppTestBase plus the "user's" servers this test starts itself (never through the exercise)."""
@@ -434,6 +459,8 @@ class AttachRulesTest(ServersBase):
             ("c11", "Get-ChildItem -Recurse frontend", False),
             ("c12", "type notes.txt 180900 118090", False),
             ("c13", f"curl -H 'Authorization: Bearer {TOKEN}' http://127.0.0.1:18090/", True),
+            ("c14", "python -c \"import socket; socket.create_connection(('127.0.0.1', 18000+90))\"", True),
+            ("c15", "ping -n 1 127.0.0.10", False),
         ]
         events = self.root / "events.jsonl"
         lines = []
@@ -457,6 +484,9 @@ class AttachRulesTest(ServersBase):
         for hit in ("python HTTP", "node HTTP", "wget", "Net.WebClient"):
             self.assertTrue(any(hit in entry["names"] for entry in found), hit)
         self.assertFalse(any("rg -n TODO" in c or "Get-ChildItem" in c or "180900" in c for c in listed))
+        [computed] = [e for e in found if "create_connection" in e["command"]]
+        self.assertEqual(computed["names"], ["host 127.0.0.1"], "the attached host alone is named (review B2, plan I14)")
+        self.assertFalse(any("127.0.0.10" in c for c in listed))
         self.assertEqual(attach.tripwire(self.root / "missing.jsonl", ["127.0.0.1:18090"]), [])
 
     def test_the_substitution_differs_only_in_port_numbers_and_the_fingerprint_names_the_mode(self):
@@ -676,8 +706,12 @@ class AttachCliTest(ServersBase):
                 self.assertEqual(self.runs(), [], "nothing is created")
                 self.assertEqual(os.listdir(self.targets), [".stub"])
         v6 = self.owners([f"[::1]:{self.ports[1]}"])
-        self.assertEqual(v6["state"], "failed", v6)
+        self.assertEqual(v6["state"], "refused", v6)  # review NB-3: the skill handles refused, never failed
         self.assertIn(HOST_REFUSED, v6["reason"], "attach-owners refuses [::1] with the fixed sentence")
+        for other, sentence in (("127.0.0.1:443", "80 and 443"), ("https://127.0.0.1:18090", "https, wss"),
+                                ("localhost:18090", HOST_REFUSED)):
+            refused = self.owners([other])
+            self.assertEqual((refused["state"], sentence in refused["reason"]), ("refused", True), refused)
         refused = self.owners([self.app[0], f"127.0.0.1:{app_base.free_port()}"])
         self.assertEqual(refused["state"], "refused", refused)
         self.assertIn("nothing listens", refused["reason"])
@@ -866,6 +900,91 @@ class AttachCliTest(ServersBase):
                 running.kill()
         self.assertEqual(stopped["state"], "stopped", stopped)
         self.assertTrue(stopped["ended"]["app"]["confirmed"] and stopped["target_removed"])
+        self.assert_servers_untouched()
+
+
+    # --- review B1: no path opens an attached process beyond the owner handle's rights ---
+
+    def opens(self, log):
+        return [json.loads(line) for line in log.read_text("utf-8").splitlines()] if log.exists() else []
+
+    def exercise_with_logged_opens(self, log, name, start_code="", **calls):
+        owners = {self.backend[0], self.frontend[0]}
+        seam = open_seam(log, owners)
+        path = base.write(self.requests / f"attach-{name}.json", json.dumps({"project": str(self.project), "app": self.app}))
+        found = self.call("attach-owners", path, code=seam)
+        self.assertEqual(found["state"], "ready", found)
+        request = {**self.request, "target_name": name, "attach": {"chosen_by_user": True, "owners": found["owners"]}}
+        ready = self.call("prepare", base.write(self.requests / f"request-{name}.json", json.dumps(request)),
+                          "--base", self.base, code=seam)
+        self.assertEqual(ready["state"], "prepared", ready)
+        directory = Path(ready["directory"])
+        started = self.call("attach-start", directory, code=supervisor_seam(log, owners, start_code))
+        identity = self.supervisor(directory)
+        self.identities.append((identity["pid"], identity["created"]))
+        self.assertEqual(started["state"], "attached", started)
+        return directory, seam
+
+    def assert_owner_opens_within_the_handle(self, log, expected_by):
+        owners = {self.backend[0], self.frontend[0]}
+        opens = self.opens(log)
+        beyond = [o for o in opens if o["pid"] in owners and o["access"] & ~OWNER_ACCESS]
+        self.assertEqual(beyond, [], "an attached process opened with rights beyond SYNCHRONIZE | "
+                                     "PROCESS_QUERY_LIMITED_INFORMATION (I14)")
+        seen = {o["by"] for o in opens}
+        self.assertTrue(set(expected_by) <= seen, (sorted(seen), expected_by))
+        return sorted({(o["by"], hex(o["access"])) for o in opens})
+
+    def test_finish_stop_failure_and_bounds_never_open_the_attached_processes_beyond_the_owner_handle(self):
+        log = self.root / "opens.jsonl"
+        # finish after a whole run (also attach-owners, prepare, attach-start, guard, run, collect, the supervisor)
+        directory, seam = self.exercise_with_logged_opens(log, "finish")
+        self.assertEqual(self.call("guard", directory, code=seam + guard_seam(self.guard_notes, self.ports))["state"],
+                         "guard_passed")
+        self.assertEqual(self.call("run", directory, code=seam)["state"], "finished")
+        self.assertEqual(self.call("collect", directory, code=seam)["runs"][0]["state"], "completed")
+        self.assertEqual(self.call("finish", directory, code=seam)["state"], "finished")
+        # stop while Codex runs
+        self.attach_scenario({"exec": {"mode": "slow-active", "duration_s": 60, "event_every_s": 0.2}})
+        directory, seam = self.exercise_with_logged_opens(log, "stop")
+        self.assertEqual(self.call("guard", directory, code=seam + guard_seam(self.guard_notes, self.ports))["state"],
+                         "guard_passed")
+        running = self.background("run", directory, code=seam)
+        try:
+            wait_until(lambda: (directory / "0" / "pid").exists() and (self.records / "exec-argv.json").exists(),
+                       60, "Codex never started")
+            stopped = self.call("stop", directory, code=seam)
+            running.communicate(timeout=120)
+        finally:
+            if running.poll() is None:
+                running.kill()
+        self.assertEqual(stopped["state"], "stopped", stopped)
+        self.attach_scenario({"exec": {"reply": REPLY}})
+        # a failure: the real-definition check fails at the guard (fail_ended)
+        directory, seam = self.exercise_with_logged_opens(log, "failure")
+        failed = self.call("guard", directory, code=seam + guard_seam(self.guard_notes, self.ports, real_ok=False))
+        self.assertEqual((failed["state"], failed["target_removed"]), ("failed", True), failed)
+        # a lifetime bound, in the supervisor
+        directory, seam = self.exercise_with_logged_opens(log, "bound", start_code=timing(bound_after_start=6))
+        wait_until(lambda: self.status(directory)["state"] in ("bound_ended", "stop_unconfirmed", "end_unconfirmed"),
+                   60, "the bound was not reached")
+        self.assertEqual(self.status(directory)["state"], "bound_ended")
+        self.assertEqual(self.call("cleanup", directory, code=seam)["state"], "cleaned")
+        seen = self.assert_owner_opens_within_the_handle(
+            log, ["attach-owners", "prepare", "attach-start", "guard", "run", "finish", "stop", "supervisor"])
+        self.assertIn(("supervisor", hex(OWNER_ACCESS)), seen, "the supervisor's own owner handle is logged too")
+        self.assert_servers_untouched()
+
+    def test_control_the_log_sees_the_peb_read_when_the_owners_are_not_left_out(self):
+        # Negative control: with the exclusion switched off in-process, finish opens the attached servers with
+        # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ (the review's probe), and the log shows it.
+        log = self.root / "opens-control.jsonl"
+        directory, seam = self.exercise_with_logged_opens(log, "control")
+        finished = self.call("finish", directory, code=seam + "import attach\nattach.protected_pids = lambda plan: set()\n")
+        self.assertEqual(finished["state"], "finished", finished)
+        owners = {self.backend[0], self.frontend[0]}
+        self.assertTrue(any(o["pid"] in owners and o["by"] == "finish" and o["access"] & 0x410 == 0x410
+                            for o in self.opens(log)), self.opens(log))
         self.assert_servers_untouched()
 
 

@@ -61,11 +61,12 @@ variable (I13).
 Attach mode (plan C8, I14; attach.py). `"mode": "attach"` (absent or `"copy"`: copy mode) with
 `"attach": {"chosen_by_user": true, "owners": [{"port", "pid", "created"}, ...]}` uses the frontend and backend the
 user already runs: no copy (the target is a new empty directory, I1/I3), no install, no app process, no app job, no
-`commands`, `env_files`, `exclude_names` or `limits`; hosts 127.0.0.1 or [::1] only, no ports 80/443. The lifecycle:
+`commands`, `env_files`, `exclude_names` or `limits`; the host 127.0.0.1 only (copy mode takes 127.0.0.1,
+localhost or [::1]; attach mode refuses [::1] and localhost, D-2026-10-16b), no ports 80/443. The lifecycle:
 prepare (the listener table must still show exactly the confirmed owners) -> attach-start (the supervisor re-verifies
 each owner and polls the table every 2 s until finish) -> guard (port-substituted guard or a cached pass, then the
 real-definition check, never cached) -> run -> wait -> collect (with the tripwire list of Codex shell commands naming
-an attached port or an HTTP client, AT-1) -> repro / evidence-keep -> finish. A failure after attach-start ends what
+an attached host or port or an HTTP client, AT-1) -> repro / evidence-keep -> finish. A failure after attach-start ends what
 the exercise holds before the target goes (fail_ended); the attached processes are never signalled.
 """
 import json
@@ -667,6 +668,11 @@ def end_exercise(cli, directory, plan):
     releases the proxy (I8, I12). Never raises: an unexpected error is an unconfirmed end."""
     try:
         exclude = supervisor.own_processes(directory) | {os.getpid()}
+        if is_attach(plan):
+            # I14 (review B1): the attached processes are never opened by I15's recognition (its PEB read needs
+            # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, beyond the owner handle's rights).
+            import attach
+            exclude |= attach.protected_pids(plan)
         browser_state = supervisor.codex_processes_ended(directory, plan, exclude)
     except Exception as error:
         browser_state = {"confirmed": False, "alive": [], "reason": f"{type(error).__name__}: {error}"}

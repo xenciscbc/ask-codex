@@ -44,7 +44,7 @@ REPLACED = {
     "supervisor": ("launch", "wait_started", "require_started", "Watcher", "own_processes", "codex_processes_ended",
                    "end_app", "run_alive"),
     "repro": ("open_session", "move_files"),
-    "attach": ("examine",),  # attach mode (C8): the listener table and its owners
+    "attach": ("examine", "protected_pids"),  # attach mode (C8): the listener table and its owners
 }
 
 _installed = None  # the fake module once installed in this process
