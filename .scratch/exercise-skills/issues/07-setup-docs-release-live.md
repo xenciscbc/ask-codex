@@ -4,7 +4,7 @@
 
 **Blocked by:** 08 — Attach mode: exercise the user's running dev servers without a copy.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at 8124f71 (2026-10-17); not Security-critical. Tag and push wait for the user's word
 
 **Plan:** acceptance amended by `../plan.md` rev 6, claim C7 (invariants listed there).
 
@@ -17,3 +17,5 @@
 - [ ] Tag and push only on the user's word.
 
 ## Comments
+
+- 2026-10-17 — Live acceptance (2026-10-17, three real Codex calls, headless Claude Code sessions by the user's decision): copy and attach mode passed. The copy-mode rerun after the framing prompt fix showed Codex sees its screenshots. Evidence is in `.scratch/exercise-skills/evidence/c7-live/`. Tag and push are not done; they wait for the user's word.

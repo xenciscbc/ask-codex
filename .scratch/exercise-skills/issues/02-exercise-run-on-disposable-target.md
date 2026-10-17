@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Disposable target: create a copy, remove only what was created.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED in an earlier session (eb99654 = 4ac6ee8); Adversarial review BROKEN at bff1479; see Comments
 
 **Plan:** acceptance amended by `../plan.md` rev 5.1, claim C2 (invariants listed there).
 
@@ -24,3 +24,5 @@ Security-critical (it defines what Codex and its browser can reach): needs a sec
 - [ ] All existing offline harness tests pass (named pre-existing failures excepted, as in earlier tickets).
 
 ## Comments
+
+- 2026-10-17 — Adversarial review at bff1479 BROKEN (I11, collect side): the redaction module misses long values after a secret-named label in some layouts (other punctuation than `:`/`=`, a line break, markup) and URL userinfo containing `'`, and a flag value after a line continuation. Impact: the user's own secrets can reach Claude's context; nothing leaves to a third party. I4, I5, I6 (stub), I12 and the reply schema held. Accepted as a known residual; fix tracked as a follow-up.

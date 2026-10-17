@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — An exercise runs through the script on a disposable target.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED in an earlier session (da54076), outcome verification CONFIRMED (da54076); Adversarial review BROKEN at bff1479; see Comments
 
 **Plan:** acceptance amended by `../plan.md` rev 5.1, claim C4 (invariants listed there).
 
@@ -21,3 +21,5 @@ Security-critical (it ends processes and removes the target): needs a security r
 - [ ] All existing offline harness tests pass, including the run and stop script tests.
 
 ## Comments
+
+- 2026-10-17 — Adversarial review at bff1479 BROKEN (I3 precondition): the `target-remove` action does not require the exercise's processes to be confirmed ended before removing its directories. Reached only by calling the action outside the skill's flow. I2, I8, I12, I15 and U10 held. Accepted as a known residual; fix tracked as a follow-up.

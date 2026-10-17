@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Guards stop an exercise whose browser restriction does not hold; 04 — App processes are part of the exercise's start, stop and cleanup.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at 5621b3b (2026-10-16); Adversarial review BROKEN at bff1479; see Comments
 
 **Plan:** acceptance amended by `../plan.md` rev 6, claim C5 (invariants listed there).
 
@@ -21,3 +21,5 @@
 - [ ] Regression: `second-opinion-with-stance`, `targeted-check`, `review-working-tree` at `--runs 3` on `1ca7a0f` and on this ticket's commit; no grader's pass rate drops beyond named pre-existing patterns.
 
 ## Comments
+
+- 2026-10-17 — Adversarial review at bff1479 BROKEN (I11): the same redaction gap as ticket 02, including a Markdown-bold label layout. I16, I9 and I13 held. Accepted as a known residual; fix tracked as a follow-up.

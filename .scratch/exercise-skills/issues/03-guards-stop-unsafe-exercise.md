@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — An exercise runs through the script on a disposable target.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED in an earlier session (5f44a3f), outcome verification CONFIRMED (5f44a3f); Adversarial review BROKEN at bff1479; see Comments
 
 **Plan:** acceptance amended by `../plan.md` rev 5.1, claim C3 (invariants listed there).
 
@@ -21,3 +21,5 @@ Open point for the plan: the check page is served on an exercise port's loopback
 - [ ] Live, no Codex: with the real configuration the guard passes; with the bypass list removed (Service Worker gap) the guard fails. Both runs recorded as evidence.
 
 ## Comments
+
+- 2026-10-17 — Adversarial review at bff1479 BROKEN (I13, and I7's cache location): the user-level state directory is resolved through a Windows API that follows the process's `USERPROFILE`, so a session environment can relocate the guard cache and install. Requires control of the Claude Code session's environment. I5 and I8 held. Accepted as a known residual; fix tracked as a follow-up.

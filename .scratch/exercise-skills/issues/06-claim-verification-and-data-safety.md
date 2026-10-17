@@ -4,7 +4,7 @@
 
 **Blocked by:** 05 — `/ask-codex:ui` runs an exercise end to end.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at bbcbd73 (2026-10-16); Adversarial review INCONCLUSIVE twice (HELD missing); see Comments
 
 **Plan:** acceptance amended by `../plan.md` rev 5.1, claim C6 (invariants listed there).
 
@@ -17,3 +17,5 @@
 - [ ] Regression as in 05 against 05's commit.
 
 ## Comments
+
+- 2026-10-17 — Adversarial review at bff1479: two calls INCONCLUSIVE. I10 held (origin variants, redirects and subresources to an out-of-origin sentinel blocked). Open: kept evidence keeps the reference's extension, and the name is truncated after sanitising, so a kept file may end in an extension other than the one the browser tool forced (static only); repro registration can race finish or a bound; two truncate-before-redact error paths. Accepted without a HELD; hardening tracked as follow-ups.

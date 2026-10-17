@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 — Claims are verified and the exercise's data stays isolated.
 
-**Status:** ready-for-agent
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at c284dbc (2026-10-17); Adversarial review BROKEN (low) at bff1479; see Comments
 
 **Plan:** acceptance by `../plan.md` rev 6, claim C8 (invariants listed there).
 
@@ -19,3 +19,5 @@ Security-critical (the exercise acts on the user's live dev environment): needs 
 - [ ] The confirmation discloses the accepted residuals (plan U7, U8, AT-3, AT-6, AT-10): Codex's read-only shell can reach the attached servers directly; the app's own development tools can run code as the user; what the dev server serves may reach OpenAI; its proxies use the user's credentials. The report lists Codex shell commands that name an attached port or an HTTP client.
 
 ## Comments
+
+- 2026-10-17 — D-2026-10-16b: attach mode takes 127.0.0.1 only; `[::1]` and `localhost` are refused with a fixed sentence (chrome-devtools-mcp 1.10.1 cannot parse an unescaped `[::1]` URL pattern). Adversarial review at bff1479 BROKEN (low, I14 "ended"): a stop during the attach-mode guard reports ended and removes the target before the guard's own browser job has ended. No attached process was affected, and the guard's writes stayed confined. The listener-table rules, the owner handle, never signalling the user's servers, U10, the substituted guard and the real check held. Accepted as a known residual; fix tracked as a follow-up.
