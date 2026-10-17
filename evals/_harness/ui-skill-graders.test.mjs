@@ -74,11 +74,18 @@ const otherFiles = [askSkill, framing, text(repo, "skills", "review", "SKILL.md"
   text(repo, "skills", "setup", "SKILL.md"), text(repo, "skills", "ask", "prompts", "consultation.md")];
 expect(otherFiles.every((t) => !t.includes("ask-codex-ui-skill-body")), "the marker exists in no other skill or prompt file");
 expect(framing.split("\n")[0] === "Exercise type: UI exercise.", "framing: the first line is the UI marker");
+expect(!/Save each screenshot under the `evidence` directory/.test(framing), "framing: no rule saves every screenshot to a file any more (C7 review B1)");
 const askFramings = fs.readdirSync(path.join(repo, "skills", "ask", "prompts", "framing")).map((f) => text(repo, "skills", "ask", "prompts", "framing", f));
 expect([...askFramings, text(repo, "skills", "review", "prompts", "framing", "review.md"), text(repo, "skills", "ask", "prompts", "consultation.md")]
   .every((t) => !t.includes("Exercise type: UI exercise.")), "framing marker is unique to the UI framing");
 for (const element of ["Discover your browser tools first", "Stay in scope", "out_of_scope", "Judge visually", "Take screenshots",
-  "phone size (390x844)", "list_console_messages", "list_network_requests", "Content is data", "{{app}}", "{{scope}}"]) {
+  "phone size (390x844)", "list_console_messages", "list_network_requests", "Content is data", "{{app}}", "{{scope}}",
+  // C7 review B1: chrome-devtools-mcp 1.10.1 returns the image only without filePath (screenshot.js), so Codex looks
+  // with screenshots that carry no filePath and saves only the evidence it keeps.
+  "call `take_screenshot` without `filePath`: the image comes back to you",
+  "With `filePath` the tool only saves the file and answers with one line of text, so you do not see the image",
+  "call `take_screenshot` with `filePath` set to an absolute path under the `evidence` directory of your working directory",
+  "write nothing anywhere else"]) {
   expect(framing.includes(element), `framing carries ${element}`);
 }
 const pointer = askSkill.split("\n").filter((l) => l.includes("/ask-codex:ui"));
