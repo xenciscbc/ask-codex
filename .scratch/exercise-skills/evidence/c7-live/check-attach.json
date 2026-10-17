@@ -4,7 +4,10 @@
  ],
  "guard_source": "ran",
  "guard_items_type": "int",
- "mcp_tool_calls": 150,
+ "mcp_tool_call_events": 150,
+ "mcp_tool_calls_started": 75,
+ "mcp_tool_calls_completed": 75,
+ "screenshots_returning_an_image": 0,
  "requires_approval": [],
  "command_executions": [
   "\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content -LiteralPath 'D:/codex/skills/browser-use/SKILL.md'\""

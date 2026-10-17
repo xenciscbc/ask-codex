@@ -1,0 +1,40 @@
+{
+ "nonce_servers": [
+  "cdt_f0d55aa02cf5a12a"
+ ],
+ "guard_source": "cache",
+ "guard_items_type": "NoneType",
+ "mcp_tool_call_events": 120,
+ "mcp_tool_calls_started": 60,
+ "mcp_tool_calls_completed": 60,
+ "screenshots_returning_an_image": 8,
+ "requires_approval": [],
+ "command_executions": [
+  "\"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content -LiteralPath 'D:/codex/skills/browser-use/SKILL.md'\""
+ ],
+ "possibly_writing_commands": [],
+ "screenshot_filepath_calls": [
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1e74f2f7a825/evidence/desktop-invalid-email-accepted.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1e74f2f7a825\\\\evidence\\\\desktop-invalid-email-accepted.png.\"}], \"structured_content\": null}"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1e74f2f7a825/evidence/phone-signup-scaled-down.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1e74f2f7a825\\\\evidence\\\\phone-signup-scaled-down.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isLan"
+  },
+  {
+   "args": {
+    "pageId": 1,
+    "filePath": "D:/tmp/ui-exercise-targets/ask-codex-target-1e74f2f7a825/evidence/phone-empty-email-accepted.png"
+   },
+   "result": "{\"content\": [{\"type\": \"text\", \"text\": \"Took a screenshot of the current page's viewport.\\nSaved screenshot to D:\\\\tmp\\\\ui-exercise-targets\\\\ask-codex-target-1e74f2f7a825\\\\evidence\\\\phone-empty-email-accepted.png.\\nEmulating viewport: {\\\"deviceScaleFactor\\\":1,\\\"isMobile\\\":true,\\\"hasTouch\\\":true,\\\"isL"
+  }
+ ],
+ "supervisor_log_tail": []
+}

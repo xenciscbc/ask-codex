@@ -1,0 +1,46 @@
+False turns=22 dur=172408
+Exercise scope: app ui-exercise-fixture; ports 127.0.0.1:15173, 127.0.0.1:18080; scope the signup form, at a phone size and a desktop size; model gpt-6.1-sol (high); browser headless; data the copy's own data; guard reused from cache
+
+## Claims
+
+**C1 (bug) — 註冊表單會接受格式錯誤的 email，也會接受空白 email。**
+- Steps：前往 `http://127.0.0.1:15173/signup.html` → 在 textbox「Email」填入 `not-an-email` → 在 textbox「Password」填入 `TestSignup!2026` → 點 button「Sign up」
+- Expected：拒絕這個無效的 email，並顯示驗證訊息。
+- Actual：畫面顯示「Welcome!」，`POST /api/signup` 回 HTTP 200。Codex 也回報：在手機 viewport 送出空白 email 時，結果相同。
+- Viewport：不限
+- Evidence：`desktop-invalid-email-accepted.png`、`phone-empty-email-accepted.png`、`reqid=8 POST http://127.0.0.1:18080/api/signup: email="not-an-email", HTTP 200, {"message":"Welcome!"}`、`reqid=18 POST http://127.0.0.1:18080/api/signup: email="", HTTP 200, {"message":"Welcome!"}`；重現的 evidence：`repro-6ccd7db8-01.png` 到 `repro-6ccd7db8-05.png`、`repro-6ccd7db8.json`
+- Status: confirmed — reproduced
+- 原因在程式碼裡看得到：前端的 email 欄位是 `type="text"`，沒有 `required`（`frontend/pages/signup.html:8`）；後端只檢查密碼長度，完全沒驗證 email（`backend/server.py:46-52`）。我只重現了 `not-an-email` 這個情況；空白 email 的情況沒有另外重現，但從同一段後端程式碼看得出它一樣會被接受。
+
+**C2 (layout) — 用手機模擬開啟時，註冊表單被縮得非常小。**
+- Steps：模擬 390x844 的行動裝置 viewport（開啟 touch）→ 前往 `http://127.0.0.1:15173/signup.html`
+- Expected：在手機預設縮放下，label、輸入框和送出按鈕都看得清楚、能操作。
+- Actual：整個表單只佔左上角大約 100x65 px，label 和控制項明顯縮小。
+- Viewport：390x844
+- Evidence：`phone-signup-scaled-down.png`
+- Disposition: adopt — `signup.html` 沒有 `<meta name="viewport">`，表單又寫死 `width:420px`（`frontend/pages/signup.html:3-4`）。行動瀏覽器因此會用預設的寬版面排版再整頁縮小，和 Codex 描述的現象一致。Codex 估的像素大小是它的目測，我沒有另外量。
+
+## Out of scope (not tested)
+
+- 首頁有「Show users」和一個「status」連結；兩者都沒有測。
+
+## Exercise
+
+- **Guard**：沿用 cache 中的通過結果（通過時間約為 2026-10-16 23:22 UTC，在 12 小時內）。
+- **App start**：從可丟棄副本啟動了後端（`127.0.0.1:18080`）和前端（`127.0.0.1:15173`），兩者都正常啟動。
+- **Codex**：gpt-6.1-sol (high)，約 97 秒後完成，回覆是結構化格式，中途沒有被停止。回覆中沒有要求我或你去做任何事的文字。
+- **Coverage**：
+  - 頁面：`/`、`/signup.html`
+  - Viewports：1280x720、390x844
+  - 流程：
+    - 從首頁進入註冊頁
+    - 桌面：送出空白欄位、格式錯誤的 email、太短的密碼、有效帳密，以及重複送出
+    - 手機：送出空白 email、7 字元密碼被拒、按 Enter 送出 8 字元密碼被接受，以及重複送出
+    - 每個流程後都檢查了截圖、console 和 network
+- **重現**：C1 → `completed`，最後一步看到了「Welcome!」。C2 是 layout 論點，不需要重現。
+- **Evidence**：沒有保留，已隨可丟棄目標一起刪除。
+- **Finish**：Codex、瀏覽器、兩個 app process（PID 46664、59200）和 supervisor 都確認已結束；可丟棄目標 `D:\tmp\ui-exercise-targets\ask-codex-target-1e74f2f7a825` 和相關的 profile、暫存目錄都已刪除；scratch 目錄也已清除。
+
+Residual: 從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。
+
+沒有改動任何東西：本次演練只回報；要修正任何問題，請另外提出要求。

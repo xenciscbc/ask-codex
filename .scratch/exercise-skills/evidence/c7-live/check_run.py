@@ -39,7 +39,27 @@ for line in (run / "0/events.jsonl").read_text(encoding="utf-8", errors="replace
         commands.append(command)
         if WRITE.search(command):
             writes.append(command)
-out["mcp_tool_calls"] = mcp_calls
+out["mcp_tool_call_events"] = mcp_calls
+started, completed, images = 0, 0, 0
+for line in (run / "0/events.jsonl").read_text(encoding="utf-8", errors="replace").splitlines():
+    try:
+        event = json.loads(line)
+    except ValueError:
+        continue
+    item = event.get("item") or {}
+    if item.get("type") != "mcp_tool_call":
+        continue
+    if event.get("type") == "item.started":
+        started += 1
+    elif event.get("type") == "item.completed":
+        completed += 1
+        result = item.get("result") or {}
+        if item.get("tool") == "take_screenshot" and any(
+                isinstance(c, dict) and c.get("type") == "image" for c in (result.get("content") or [])):
+            images += 1
+out["mcp_tool_calls_started"] = started
+out["mcp_tool_calls_completed"] = completed
+out["screenshots_returning_an_image"] = images
 out["requires_approval"] = approval
 out["command_executions"] = commands
 out["possibly_writing_commands"] = writes

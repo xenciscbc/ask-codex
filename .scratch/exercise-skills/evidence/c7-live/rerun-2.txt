@@ -1,0 +1,17 @@
+25063955-17e1-47fe-9015-0043e0da1902
+False 14
+準備開始的演練——尚未準備或啟動任何東西。
+Target root: D:/tmp/ui-exercise-targets (from your message)
+Project: D:/tmp/ui-exercise-fixture — copied without version control, .codex, .claude, dependency directories, .env* and secret files
+Install: none
+Start: `python -I backend/server.py 127.0.0.1 18080 http://127.0.0.1:15173`（cwd：專案根目錄，無額外環境變數）；`python -I frontend/serve.py 127.0.0.1 15173 18080`（cwd：專案根目錄，無額外環境變數）
+App: 127.0.0.1:15173, 127.0.0.1:18080
+Data: the copy's own data: 隨專案一起複製的 `backend/data.sqlite`（SQLite 檔；註冊時寫入的是副本裡的這個檔案）
+External: none found in the project's files（前端透過 `/config.js` 直接呼叫 `http://127.0.0.1:18080` 的後端，這個位址已列在 App 裡）
+Evidence: removed with the disposable target
+Model: gpt-6.1-sol (high)
+Browser: headless
+Scope: the signup form, at a phone size and a desktop size
+從 app 位址可以使用的 app 自身開發工具（瀏覽器內的 console、開啟編輯器或提供檔案的端點）可能讓 Codex 以你的身分執行程式碼或讀取檔案；本次演練只揭露這點，不會阻止。
+Codex 的瀏覽器操作不會逐次審核；app 因此做出的事（寄信、webhook、資料變更）都會實際發生。
+要開始這次演練嗎？回答「是」即開始，或告訴我要改什麼。

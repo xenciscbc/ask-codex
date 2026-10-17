@@ -1,0 +1,5 @@
+25063955-17e1-47fe-9015-0043e0da1902
+False 3
+Target root needed: reply with an existing directory outside the project under which I create the disposable copy.
+
+（請回覆一個已存在、位於專案外的目錄，我會在它底下建立這次演練的可丟棄副本。目前還沒有準備或啟動任何東西。）
