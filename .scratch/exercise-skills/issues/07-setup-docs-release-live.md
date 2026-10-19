@@ -4,7 +4,7 @@
 
 **Blocked by:** 08 — Attach mode: exercise the user's running dev servers without a copy.
 
-**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at 8124f71 (2026-10-17); not Security-critical. Tag and push wait for the user's word
+**Status:** resolved — accepted by the user's accept-and-land decision at bff1479 (2026-10-17); code review APPROVED and outcome verification CONFIRMED at 8124f71 (2026-10-17); not Security-critical. Released on the user's word (2026-10-19): `main` pushed and annotated tag `v1.4.0` on 5cf79fa pushed
 
 **Plan:** acceptance amended by `../plan.md` rev 6, claim C7 (invariants listed there).
 
@@ -14,8 +14,9 @@
 - [ ] ADR 0009 status accepted; CONTEXT.md terms 演練 and 可丟棄目標 present.
 - [ ] Version raised to the next minor release in the plugin and marketplace manifests.
 - [ ] Live acceptance (real Codex; the number of calls is stated to the user before starting): one exercise against a throwaway frontend + backend app with `config.toml` hash and PID baselines; screenshots are seen by Codex; guards pass; afterwards the target, the app processes, Codex and the MCP Chrome are gone and `config.toml` is unchanged. Evidence recorded.
-- [ ] Tag and push only on the user's word.
+- [x] Tag and push only on the user's word.
 
 ## Comments
 
 - 2026-10-17 — Live acceptance (2026-10-17, three real Codex calls, headless Claude Code sessions by the user's decision): copy and attach mode passed. The copy-mode rerun after the framing prompt fix showed Codex sees its screenshots. Evidence is in `.scratch/exercise-skills/evidence/c7-live/`. Tag and push are not done; they wait for the user's word.
+- 2026-10-19 — On the user's word, `main` was pushed (`1ca7a0f..5cf79fa`) and annotated tag `v1.4.0` was created on 5cf79fa and pushed; both were read back from the remote.
