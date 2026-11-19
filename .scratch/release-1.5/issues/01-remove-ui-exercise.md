@@ -1,6 +1,6 @@
 # 01 — Remove `/ask-codex:ui` and everything that exists only for it
 
-Status: ready-for-agent
+Status: resolved — released as v1.5.0 (main d6a7bea, tag v1.5.0) on the user's accept-and-land decision (2026-11-19); see Comments
 Spec: `.scratch/release-1.5/spec.md` — cites P3, D3, Plan review 1 dispositions (B2, B3, N1, N4, N5), Plan review 2 dispositions (N1, N7), I1, I2, I3, Out of scope, Overall acceptance
 Blocked by: None
 Security-critical: no (spec, Claim classification)
@@ -69,3 +69,7 @@ Before deleting a module, confirm by search that no kept file imports or referen
    - `CONTEXT.md` contains none of the terms 演練, 可丟棄目標, 副本模式, 接上模式.
 
 ## Comments
+
+- 2026-11-19 — Implemented in f7250a7. Code review APPROVED and outcome verification CONFIRMED there (stub end-to-end consultation; removed actions refused; `BASELINE_ARGV` byte-identical).
+  - **Final check:** at d455bfd, acceptance item 2's rerun caught a literal `ask-codex:ui` in ticket 03's release note, which ticket 03 then fixed (0e25f65).
+  - **Release:** landed as v1.5.0 on the user's accept-and-land decision at d6a7bea. That decision names the two flaky final-check failures at d6a7bea, followed by a clean run of 25/25.

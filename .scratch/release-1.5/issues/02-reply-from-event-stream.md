@@ -1,6 +1,6 @@
 # 02 — Take the reply from the event stream; report Codex's own failure text
 
-Status: ready-for-agent
+Status: resolved — released as v1.5.0 (main d6a7bea, tag v1.5.0) on the user's accept-and-land decision (2026-11-19); see Comments
 Spec: `.scratch/release-1.5/spec.md` — cites P1, P2, Evidence for the fix, D1, D2, D5, Security analysis dispositions (F1–F6), Plan review 1 dispositions (B1, N2, N3, N8, N9), Plan review 2 dispositions (B1, B2, N2–N6, N9, N10), I1, I2, I3, Out of scope
 Blocked by: 01
 Security-critical: yes (spec, Claim classification). It decides which untrusted text becomes Codex's reply, and it brings Codex-supplied text into the run's reason.
@@ -104,3 +104,12 @@ The offline harness only: the Codex stub and hand-written `events.jsonl` files i
    - `docs/adr/0011-reply-from-the-event-stream.md` exists and covers three things: why `-o` was dropped (P1 and its evidence), the D1 selection and D2 reason rules, and the limit that the reply depends on the shape of the `--json` event stream.
 
 ## Comments
+
+- 2026-11-19 — Implemented in 13b0c46. Code review APPROVED and outcome verification CONFIRMED there.
+  - **Adversarial review, call 1 (d245c26):** INCONCLUSIVE, with two findings.
+    - (A) A process holding Codex's stdout can rewrite the stream (seek-overwrite) and plant a reply. The user accepted it as residual risk, documented in ADR 0011 and both READMEs.
+    - (B) A MemoryError from a very large line escaped `collect`. Fixed in 8ca1183, and in 8ea8102 after code review found a post-loop residual.
+  - **Re-reviews:** the narrowed code review was APPROVED and outcome verification CONFIRMED at 8ea8102.
+  - **Adversarial review, call 2 (d6a7bea):** HELD.
+  - **Release:** landed as v1.5.0 on the user's accept-and-land decision at d6a7bea, which names the flaky final-check failures there.
+  - **Other tickets:** this resolves item 2 of `.scratch/approval-boundary/issues/04-model-slug-and-event-stream-checks.md`, which asked to surface `type:"error"` event text. Follow-ups are in `.scratch/release-1.5-followups/issues/01-04`.

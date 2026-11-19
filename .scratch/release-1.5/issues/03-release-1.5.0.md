@@ -1,6 +1,6 @@
 # 03 — Release 1.5.0: version, release notes, live acceptance
 
-Status: ready-for-agent
+Status: resolved — released as v1.5.0 (main d6a7bea, tag v1.5.0) on the user's accept-and-land decision (2026-11-19); see Comments
 Spec: `.scratch/release-1.5/spec.md` — cites Outcome, D4, I1, Security analysis dispositions (F1, F7), Plan review 1 dispositions (B4, N6), Plan review 2 dispositions (B3), Overall acceptance
 Blocked by: 02
 Security-critical: no (spec, Claim classification)
@@ -40,3 +40,6 @@ Security-critical: no (spec, Claim classification)
   - **Stream tail (F1, F7):** 25 s after `finished`, the stream was copied before `collect`. Its events were `thread.started`, `turn.started`, `item.completed:agent_message` and `turn.completed`, with no line after `turn.completed`; the last three were `turn.started`, `agent_message` and `turn.completed`.
   - **Collect:** `state: collected`, `runs[0].state: completed`, `exit_code: 0`, reply `structured` (`summary: "hello from the live probe"`, empty claims and open_questions). `collect` removed the run directory itself, so no `cleanup` was needed.
 - 2026-11-19 — **Related tests** after the version and README edits: `setup-skill.test.mjs` 12 passed, `review-skill-graders.test.mjs` 373 passed, `discuss-skill-graders.test.mjs` 1100 passed. `marketplace.json` has no version field.
+- 2026-11-19 — **Reviews.** Code review APPROVED (0d168ca, f40a739, 0e25f65, 8ea8102) and outcome verification CONFIRMED (f40a739, d245c26, 8ea8102).
+  - **Postcondition checked after the user's word:** origin `main` = d6a7bea (fast-forward from 37278ef). Annotated tag `v1.5.0` (347f5ff) points at d6a7bea and is on origin. The local branch `release-1.5` was deleted.
+  - **Release decision:** accept and land, naming the final-check failures at d6a7bea: at 17:24, consultation_test's wrapper-receipt test; at 17:34, the process-lifecycle stop-request timing test. A run at 18:01 passed 25/25.

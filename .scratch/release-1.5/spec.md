@@ -1,6 +1,6 @@
 # Spec: release 1.5 — consultations under Codex CLI 0.170.0, and `/ask-codex:ui` removed
 
-Status: draft for plan review (2026-11-19)
+Status: implemented and released as v1.5.0 (2026-11-19); plan review 3 READY, user-approved
 
 Tickets: `issues/01-remove-ui-exercise.md`, `issues/02-reply-from-event-stream.md`, `issues/03-release-1.5.0.md`.
 
