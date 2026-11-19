@@ -8,8 +8,9 @@ import tempfile
 import time
 import tracemalloc
 import unittest
+from unittest import mock
 
-REPO = Path(__file__).resolve().parents[2]
+REPO =Path(__file__).resolve().parents[2]
 CLI = REPO / "skills/ask/scripts/consult.py"
 SKILL = REPO / "skills/ask"
 sys.path.insert(0, str(SKILL / "scripts"))
@@ -71,6 +72,20 @@ def message(text, kind="item.completed", item_type="agent_message"):
 
 def turn_failed(text):
     return {"type": "turn.failed", "error": {"message": text}}
+
+
+MEMORY_MARKER = "memory-error-marker"
+REAL_JSON_LOADS = json.loads
+
+
+def memory_error_on_marker():
+    """Patch json.loads (as consult.read_stream sees it) to raise MemoryError for a line holding MEMORY_MARKER only:
+    the outcome of a line too large to parse, without allocating it."""
+    def loads(text, *args, **kwargs):
+        if isinstance(text, str) and MEMORY_MARKER in text:
+            raise MemoryError
+        return REAL_JSON_LOADS(text, *args, **kwargs)
+    return mock.patch.object(consult.json, "loads", side_effect=loads)
 
 
 def stream(*lines):
@@ -1063,6 +1078,65 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         (self.root / "events-directory").mkdir()
         for code in (0, 1):
             self.assertEqual(consult.read_stream(self.root / "events-directory", code), (None, None, True))
+
+    def test_memory_error_in_the_stream_marks_it_unreadable(self):
+        # D1 isolation (Adversarial review finding B): a line too large to read, decode or parse raises MemoryError;
+        # the stream is then unreadable, exactly like an OSError, and nothing raises. Simulated, nothing large is held.
+        marker = {"type": "item.completed", "item": {"id": "cmd_0", "type": "command_execution",
+                                                     "aggregated_output": MEMORY_MARKER}}
+        path = self.root / "events.jsonl"
+        for code, events in ((0, stream(*STARTED, message(REPLY_TEXT), marker, COMPLETED)),
+                             (1, stream(*STARTED, marker, turn_failed("after the large line")))):
+            path.write_bytes(events)
+            with self.subTest("control: the marker line alone is harmless", code=code):
+                expected = (REPLY_TEXT, None, False) if code == 0 else (None, "after the large line", False)
+                self.assertEqual(consult.read_stream(path, code), expected)
+            with self.subTest("parsing", code=code), memory_error_on_marker():
+                self.assertEqual(consult.read_stream(path, code), (None, None, True))
+            with self.subTest("decoding and stripping", code=code), \
+                    mock.patch.object(consult, "LEADING", mock.Mock(**{"sub.side_effect": MemoryError})):
+                self.assertEqual(consult.read_stream(path, code), (None, None, True))
+
+        class Source:  # a file whose next line cannot be read into memory
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def __iter__(self):
+                yield from stream(*STARTED, message(REPLY_TEXT)).splitlines(keepends=True)
+                raise MemoryError
+
+        with self.subTest("reading"), mock.patch.object(consult, "open", create=True, return_value=Source()):
+            self.assertEqual(consult.read_stream(path, 0), (None, None, True))
+
+    def test_memory_error_in_one_stream_leaves_the_other_run_delivered(self):
+        # D1 isolation at collect (Adversarial review finding B): two stub valid runs; run 0's stream holds a line that
+        # raises MemoryError when parsed. Run 0 is unreadable, run 1 is still delivered, and the run is cleaned.
+        self.request["models"].append({"model": "gpt-6-astra", "effort": "medium"})
+        ready = self.prepare()
+        self.assertEqual(self.call("run", ready["directory"])["state"], "finished")
+        directory = Path(ready["directory"])
+        events = directory / "0/events.jsonl"
+        lines = events.read_bytes().splitlines(keepends=True)
+        marker = {"type": "item.completed", "item": {"id": "cmd_0", "type": "command_execution",
+                                                     "aggregated_output": MEMORY_MARKER}}
+        events.write_bytes(b"".join(lines[:-1]) + stream(marker) + lines[-1])
+        self.assertIsNotNone(consult.read_stream(events, 0)[0], "control: without the MemoryError run 0 has a reply")
+        after_delivery = []
+        with memory_error_on_marker():
+            result = consult.collect(directory, after_delivery)
+        self.assertEqual(result["state"], "collected", result)
+        self.assertEqual([run["exit_code"] for run in result["runs"]], [0, 0], result)
+        self.assertNoReply(result["runs"][0], UNREADABLE)
+        self.assertEqual(result["runs"][1]["state"], "completed", result)
+        self.assertEqual(result["runs"][1]["reply"]["format"], "structured", result)
+        self.assertEqual([claim["id"] for claim in result["runs"][1]["reply"]["content"]["claims"]], ["C1", "C2", "C3"])
+        self.assertNotIn("retained_location", result)
+        for action in after_delivery:
+            action()
+        self.assertFalse(directory.exists(), "a collected run is cleaned")
 
     def test_stopped_run_never_has_a_reply(self):
         # (u) stop_status is checked first: a complete stream with exit 0 is still no reply.

@@ -335,8 +335,9 @@ LEADING = re.compile(r"^[\s\ufeff]+")
 
 def read_stream(path, exit_code):
     """Read one run's --json event stream (D1, D2 of ADR 0011): (reply text or None, cleaned failure text or None,
-    unreadable). Codex's stdout is untrusted, so nothing in its content may raise out of here; only an OSError
-    other than a missing file marks the stream unreadable. Binary, split on b"\\n" only, one line held at a time."""
+    unreadable). Codex's stdout is untrusted, so nothing in its content may raise out of here. An OSError other than
+    a missing file, or a MemoryError while reading, decoding or parsing (a line too large to hold), marks the stream
+    unreadable. There is no size cap. Binary, split on b"\\n" only, one line held at a time."""
     reply_ok, candidate, completed, last_type = True, None, 0, None
     turn_failed, error = None, None
     try:
@@ -373,7 +374,7 @@ def read_stream(path, exit_code):
                     error = event["message"]
     except FileNotFoundError:
         pass  # a missing stream is an empty stream
-    except OSError:
+    except (OSError, MemoryError):  # MemoryError: one gigantic line stays in this run (D1 isolation)
         return None, None, True
     reply = None
     if (exit_code == 0 and reply_ok and completed == 1 and last_type == "turn.completed"
