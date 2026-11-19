@@ -225,7 +225,11 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
   - **修正：**自 1.5.0 起，回覆改從事件串取得（見「回覆的來源」）；執行以非 0 結束且事件串中有錯誤訊息時，會帶出 Codex 自己的錯誤文字，例如 `model_not_found`。
   - **已驗證：**在 Windows 上以 codex-cli 0.170.0，透過 `ask` 的腳本實際跑過一次諮詢，執行目錄位於 R: RAM disk。`review` 與 `discuss` 使用相同的命令列與收集流程，只有離線測試覆蓋；失敗文字的路徑也由離線測試覆蓋。
   - **限制：**回覆現在依賴 Codex `--json` 事件的格式；之後的 CLI 若改變格式，諮詢會失敗且沒有回覆，不會回傳錯誤的文字。
-  - **殘餘風險：**若有行程繼承了 Codex 的 stdout，並在 Codex 自己最後的 `turn.completed` 之前寫入一則 `agent_message`，目前無法偵測。
+  - **殘餘風險：**繼承了 Codex stdout 的行程可以改寫事件串、植入一則回覆，目前無法偵測。它可以在 Codex 自己最後的 `turn.completed` 之前插入 `agent_message`，也可以在 Codex 結束後倒回去覆寫。只有在 `turn.completed` 之後單純附加的內容會被偵測到。
+    - 目前唯一確認的持有者是 Codex 的 notify hook，屬於你自己的設定。
+    - Codex 在 sandbox 中執行的指令是否會繼承這個 handle，尚未驗證。
+    - 被植入的回覆仍只是不受信任的回覆，Claude 會把它當成資料來判斷。
+  - **事件串中的超大行：**大到無法放進記憶體的一行，會讓該次執行被視為無法讀取（`Codex events could not be read`）；另一個 model 的回覆仍會照常交付。
 - **UI 演練指令已移除（1.5.0）：**讓 Codex 在隔離瀏覽器中操作網頁應用的 `ui` 指令已移除，其 browser server 也一併移除。曾以 1.4.0 準備 UI 演練的安裝會留下 `%LOCALAPPDATA%\ask-codex\`（browser server 與其 guard cache），可以自行刪除。
 - **execpolicy 規則（自 1.3.3）：**execpolicy `.rules` 檔中的 `allow` 規則（你的 `~/.codex/rules/`，在你選「don't ask again」時由 Codex 寫入；或受信任專案的 `.codex/rules/`）可能讓符合的指令不論核准政策都在 sandbox 外執行。這是從 Codex 原始碼推論，沒有實測。自 1.3.3 起諮詢帶 `--ignore-rules`，不載入你和專案的 `.rules` 檔——你自己的 `forbidden` 與 `prompt` 規則在諮詢中也不會套用；指令仍在唯讀 sandbox 內執行。未涵蓋：系統層級的規則（Windows 上的 `%ProgramData%\OpenAI\Codex\`）、管理者的 `prefix_rules`，以及 plugin 帶來的規則推測仍會載入（依 codex-cli 0.159.3 的靜態閱讀，未實測）。
 - **本機服務：**在 Windows 上，唯讀 sandbox 擋對外網路但不擋 loopback（在 codex-cli 0.159.3、elevated sandbox 實測）。Codex 的 network proxy 設定會擋經過 proxy 連往 loopback 的請求，但繞過 proxy 的指令仍連得上。因此在每個 ask-codex skill——`ask`、`review` 與 `discuss`——中，Codex 的 shell 指令都可以對你機器上任何監聽 127.0.0.1 的服務發出請求，例如開發資料庫的管理介面。Codex 的設定無法防止這點；請讓敏感的本機服務需要驗證，或在對不可信內容進行諮詢時先停止它們。
