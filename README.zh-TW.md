@@ -226,7 +226,7 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
   - **已驗證：**在 Windows 上以 codex-cli 0.170.0，透過 `ask` 的腳本實際跑過一次諮詢，執行目錄位於 R: RAM disk。`review` 與 `discuss` 使用相同的命令列與收集流程，只有離線測試覆蓋；失敗文字的路徑也由離線測試覆蓋。
   - **限制：**回覆現在依賴 Codex `--json` 事件的格式；之後的 CLI 若改變格式，諮詢會失敗且沒有回覆，不會回傳錯誤的文字。
   - **殘餘風險：**若有行程繼承了 Codex 的 stdout，並在 Codex 自己最後的 `turn.completed` 之前寫入一則 `agent_message`，目前無法偵測。
-- **`/ask-codex:ui` 已移除（1.5.0）：**UI 演練指令及其 browser server 已移除。曾以 1.4.0 準備 UI 演練的安裝會留下 `%LOCALAPPDATA%\ask-codex\`（browser server 與其 guard cache），可以自行刪除。
+- **UI 演練指令已移除（1.5.0）：**讓 Codex 在隔離瀏覽器中操作網頁應用的 `ui` 指令已移除，其 browser server 也一併移除。曾以 1.4.0 準備 UI 演練的安裝會留下 `%LOCALAPPDATA%\ask-codex\`（browser server 與其 guard cache），可以自行刪除。
 - **execpolicy 規則（自 1.3.3）：**execpolicy `.rules` 檔中的 `allow` 規則（你的 `~/.codex/rules/`，在你選「don't ask again」時由 Codex 寫入；或受信任專案的 `.codex/rules/`）可能讓符合的指令不論核准政策都在 sandbox 外執行。這是從 Codex 原始碼推論，沒有實測。自 1.3.3 起諮詢帶 `--ignore-rules`，不載入你和專案的 `.rules` 檔——你自己的 `forbidden` 與 `prompt` 規則在諮詢中也不會套用；指令仍在唯讀 sandbox 內執行。未涵蓋：系統層級的規則（Windows 上的 `%ProgramData%\OpenAI\Codex\`）、管理者的 `prefix_rules`，以及 plugin 帶來的規則推測仍會載入（依 codex-cli 0.159.3 的靜態閱讀，未實測）。
 - **本機服務：**在 Windows 上，唯讀 sandbox 擋對外網路但不擋 loopback（在 codex-cli 0.159.3、elevated sandbox 實測）。Codex 的 network proxy 設定會擋經過 proxy 連往 loopback 的請求，但繞過 proxy 的指令仍連得上。因此在每個 ask-codex skill——`ask`、`review` 與 `discuss`——中，Codex 的 shell 指令都可以對你機器上任何監聽 127.0.0.1 的服務發出請求，例如開發資料庫的管理介面。Codex 的設定無法防止這點；請讓敏感的本機服務需要驗證，或在對不可信內容進行諮詢時先停止它們。
 - **sandbox 之外的其他工具：**唯讀的諮詢仍看得到會寫入 Codex 自身儲存的工具（`notes.write_file`／`append_to_file`、`create_goal`／`update_goal`）以及 `web.run`。它們不會動到你的專案檔案，但筆記會跨 Codex session 保留，網路存取則是對外通道；另行追蹤。
