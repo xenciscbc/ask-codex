@@ -10,7 +10,7 @@ import tracemalloc
 import unittest
 from unittest import mock
 
-REPO =Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "skills/ask/scripts/consult.py"
 SKILL = REPO / "skills/ask"
 sys.path.insert(0, str(SKILL / "scripts"))
@@ -86,6 +86,31 @@ def memory_error_on_marker():
             raise MemoryError
         return REAL_JSON_LOADS(text, *args, **kwargs)
     return mock.patch.object(consult.json, "loads", side_effect=loads)
+
+
+class TooLargeToCheck(str):
+    """An agent_message text whose emptiness check raises MemoryError: the outcome of stripping a text too large to
+    copy, without allocating it."""
+    def strip(self, *args):
+        raise MemoryError
+
+
+def memory_error_when_checking_marker_text():
+    """Patch json.loads (as consult.read_stream sees it) so an agent_message whose text is MEMORY_MARKER parses with
+    that text as TooLargeToCheck. JSON parsing never yields a str subclass, so the parser's output is the seam."""
+    def loads(text, *args, **kwargs):
+        event = REAL_JSON_LOADS(text, *args, **kwargs)
+        item = event.get("item") if isinstance(event, dict) else None
+        if isinstance(item, dict) and item.get("text") == MEMORY_MARKER:
+            item["text"] = TooLargeToCheck(MEMORY_MARKER)
+        return event
+    return mock.patch.object(consult.json, "loads", side_effect=loads)
+
+
+def memory_error_when_cleaning():
+    """Patch the D2 cleaning's first step to raise MemoryError: the outcome of cleaning a failure text too large to
+    copy, without allocating it."""
+    return mock.patch.object(consult, "REPORTED_CONTROLS", mock.Mock(**{"sub.side_effect": MemoryError}))
 
 
 def stream(*lines):
@@ -1137,6 +1162,58 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         for action in after_delivery:
             action()
         self.assertFalse(directory.exists(), "a collected run is cleaned")
+
+    def test_memory_error_after_the_stream_is_parsed_marks_it_unreadable(self):
+        # D1 isolation (code review of finding B's fix): a line that parses can still be too large for the work after
+        # the loop, the D2 cleaning of a failure text or the reply's emptiness check. That MemoryError marks the stream
+        # unreadable too, and nothing raises. Simulated, nothing large is held.
+        path = self.root / "events.jsonl"
+        for name, events in (("turn.failed", stream(*STARTED, turn_failed("a very large failure"))),
+                             ("error event", stream(*STARTED, {"type": "error", "message": "a very large failure"}))):
+            path.write_bytes(events)
+            with self.subTest("control: the D2 cleaning", source=name):
+                self.assertEqual(consult.read_stream(path, 1), (None, "a very large failure", False))
+            with self.subTest("the D2 cleaning", source=name), memory_error_when_cleaning():
+                self.assertEqual(consult.read_stream(path, 1), (None, None, True))
+        path.write_bytes(stream(*STARTED, message(MEMORY_MARKER), COMPLETED))
+        with self.subTest("control: the emptiness check"), memory_error_when_checking_marker_text() as loads:
+            with mock.patch.object(TooLargeToCheck, "strip", str.strip):
+                self.assertEqual(consult.read_stream(path, 0), (MEMORY_MARKER, None, False))
+            self.assertTrue(loads.called)
+        with self.subTest("the emptiness check"), memory_error_when_checking_marker_text():
+            self.assertEqual(consult.read_stream(path, 0), (None, None, True))
+        with self.subTest("exit 0 never reaches the D2 cleaning"), memory_error_when_cleaning():
+            path.write_bytes(stream(*STARTED, message(REPLY_TEXT), COMPLETED))
+            self.assertEqual(consult.read_stream(path, 0), (REPLY_TEXT, None, False))
+
+    def test_memory_error_after_one_stream_is_parsed_leaves_the_other_run_delivered(self):
+        # D1 isolation at collect: run 0's post-loop work raises MemoryError; run 0 is unreadable, run 1 is still
+        # delivered, and the run is cleaned. Run 0 fails in the D2 cleaning (exit 1) or in the emptiness check (exit 0).
+        models = [{"model": "gpt-6-sol", "effort": "high"}, {"model": "gpt-6-astra", "effort": "medium"}]
+        delivered = (stream(*STARTED, message(REPLY_TEXT), COMPLETED), 0)
+        cases = (("the D2 cleaning", (stream(*STARTED, turn_failed("a very large failure")), 1), memory_error_when_cleaning,
+                  "Codex reported: a very large failure"),
+                 ("the emptiness check", (stream(*STARTED, message(MEMORY_MARKER), COMPLETED), 0),
+                  memory_error_when_checking_marker_text, None))
+        for name, failing, patch, control_reason in cases:
+            with self.subTest(name):
+                runs = self.collected(failing, delivered, models=models)  # control: no patch, a separate run
+                if control_reason:
+                    self.assertNoReply(runs[0], control_reason)
+                else:
+                    self.assertEqual(runs[0]["reply"], {"format": "unstructured", "content": MEMORY_MARKER}, runs)
+                directory = self.handwritten(failing, delivered, models=models)
+                after_delivery = []
+                with patch():
+                    result = consult.collect(directory, after_delivery)
+                self.assertEqual(result["state"], "collected", result)
+                self.assertEqual([run["exit_code"] for run in result["runs"]], [failing[1], 0], result)
+                self.assertNoReply(result["runs"][0], UNREADABLE)
+                self.assertReply(result["runs"][1], REPLY)
+                self.assertNotIn("retained_location", result)
+                for action in after_delivery:
+                    action()
+                self.assertFalse(directory.exists(), "a collected run is cleaned")
 
     def test_stopped_run_never_has_a_reply(self):
         # (u) stop_status is checked first: a complete stream with exit 0 is still no reply.

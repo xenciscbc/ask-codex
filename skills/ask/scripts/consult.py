@@ -336,8 +336,8 @@ LEADING = re.compile(r"^[\s\ufeff]+")
 def read_stream(path, exit_code):
     """Read one run's --json event stream (D1, D2 of ADR 0011): (reply text or None, cleaned failure text or None,
     unreadable). Codex's stdout is untrusted, so nothing in its content may raise out of here. An OSError other than
-    a missing file, or a MemoryError while reading, decoding or parsing (a line too large to hold), marks the stream
-    unreadable. There is no size cap. Binary, split on b"\\n" only, one line held at a time."""
+    a missing file, or a MemoryError anywhere in here (a line too large to read, decode, parse, check or clean), marks
+    the stream unreadable. There is no size cap. Binary, split on b"\\n" only, one line held at a time."""
     reply_ok, candidate, completed, last_type = True, None, 0, None
     turn_failed, error = None, None
     try:
@@ -376,16 +376,19 @@ def read_stream(path, exit_code):
         pass  # a missing stream is an empty stream
     except (OSError, MemoryError):  # MemoryError: one gigantic line stays in this run (D1 isolation)
         return None, None, True
-    reply = None
-    if (exit_code == 0 and reply_ok and completed == 1 and last_type == "turn.completed"
-            and candidate is not None and candidate.strip()):
-        reply = candidate
-    reported = None
-    if exit_code != 0:
-        source = turn_failed if turn_failed is not None else error
-        if source is not None:
-            cleaned = re.sub(r"\s+", " ", REPORTED_CONTROLS.sub(" ", source)).strip()
-            reported = cleaned[:REPORTED_LIMIT] or None
+    try:  # the emptiness check and the D2 cleaning copy a text as large as its line
+        reply = None
+        if (exit_code == 0 and reply_ok and completed == 1 and last_type == "turn.completed"
+                and candidate is not None and candidate.strip()):
+            reply = candidate
+        reported = None
+        if exit_code != 0:
+            source = turn_failed if turn_failed is not None else error
+            if source is not None:
+                cleaned = re.sub(r"\s+", " ", REPORTED_CONTROLS.sub(" ", source)).strip()
+                reported = cleaned[:REPORTED_LIMIT] or None
+    except MemoryError:  # the same D1 isolation: the run has no reply and its stream is unreadable
+        return None, None, True
     return reply, reported, False
 
 
