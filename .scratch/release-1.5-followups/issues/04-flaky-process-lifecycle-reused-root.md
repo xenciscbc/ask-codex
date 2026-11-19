@@ -12,3 +12,5 @@ Source: release-1.5's final check at d455bfd, 2026-11-19.
 - [ ] Find the timing dependency in the reused-root case (PID reuse, process-identity snapshot) and make the test deterministic, or document the flake.
 
 ## Comments
+
+- 2026-11-19 — The outcome verification of release-1.5 ticket 02 hit a second flake in the same file, in a different case: "preexisting stop-request is preserved and honored promptly", a time check of under 10 s. It ran alongside memory-limited probes, and an isolated rerun passed 39/39. The verifier also reported that the runner recorded rc=0 for that failing run, cause not found. A suite runner should check the printed summary as well as the exit code.
