@@ -133,6 +133,13 @@ Claude 預設每 30 分鐘檢查一次進行中的諮詢；每段前景等待最
 
 **回覆交付與恢復。** 收集結果時，腳本先以 ASCII-safe JSON 完整輸出並 flush 回覆，再刪除成功執行的檔案，因此即使 Windows 使用舊式輸出編碼，也能保留 Unicode 內容。輸出失敗時檔案會保留，Claude 可以重新收集同一份結果，不必重新諮詢。回覆交付後若清理失敗，會分別回報有效回覆與保留位置。模型啟動後不會自動重試諮詢。
 
+**回覆的來源（自 1.5.0）。** 腳本不再要求 Codex 把回覆寫到檔案（`-o`），而是讀取 Codex 的 `--json` 事件串（`events.jsonl`）並從中取出回覆：
+- 回覆是最後一輪中最後一則完成的 `agent_message`。
+- 只有在 Codex 以 0 結束，且事件串中恰好有一個 `turn.completed` 並且它是最後一個事件時，才會採用。
+- 遇到格式錯誤的行、`turn.completed` 之後還有事件，或最後一則訊息是空的，該次執行就沒有回覆；不會退回採用較早的訊息。
+
+執行失敗時，原因會帶出 Codex 自己在事件串中寫的錯誤文字，以 `Codex reported:` 開頭。這段文字會整理成單行並限制在 500 字元以內，Claude 只把它當資料回報。詳見 ADR 0011。
+
 **MCP 政策。** 腳本預設停用事前檢查時觀察到的所有 MCP server（**白名單模式**、空清單），仍受下方設定競態限制影響。你可以開放特定 server，或改用**最小停用模式**，只停用 `node_repl` 與 `cua_repl`。設定記錄在使用者層與專案層的 **ask-codex 設定檔**，專案層覆蓋使用者層；`/ask-codex:setup` 會協助建立。政策檔不存在時採用文件記載的 fallback；既有政策檔若有無效 JSON、型別、政策值或 server 名稱，會在 Codex 啟動前採 fail-closed 中止。腳本在執行前檢查實際生效的 MCP 狀態，並把含點號的 server 名稱視為完整名稱處理。
 
 政策檔逐欄位合併：
@@ -207,6 +214,13 @@ Linux 若以 `python3` 提供 Python 3.11+，請使用該指令。這些測試�
 - **平台與設定：**歷史 Windows RAM disk 測試曾以 `os error 1` 失敗，但不能因此將所有 OS 錯誤都歸因於磁碟。長期信任專案的定義檢查尚未以真實 Codex CLI 完成端對端驗證。未選定 session 模型時，外部程式修改模型設定可能影響下一次諮詢。
 - **子代理（1.3.2 修正；受影響版本 1.0.0–1.3.1）：**Codex 可以叫出子代理（預設開啟，目前多數模型使用 MultiAgentV2）。子代理的角色檔——例如 codex-feather 安裝的 `~/.codex/agents/*.toml`，或受信任專案的 `.codex/agents`——會自行設定 sandbox、模型與 MCP server，而且角色的 sandbox 會覆寫諮詢的 `-s read-only`。因此到 1.3.1 為止，諮詢可能叫出 `workspace-write` 的子代理，在你的專案寫入檔案、使用 ask-codex MCP 政策從未檢查過的 MCP server，並以角色的模型計費；事件紀錄最多只出現 `collab_tool_call` 的「wait」項目，看不到叫出子代理或子代理的寫入。自 1.3.2 起，每次諮詢都帶 `-c agents.enabled=false -c features.multi_agent_v2.enabled=false`。已在 codex-cli 0.159.3（Windows）以真實呼叫驗證：預設設定下的 v2 與 v1 模型，以及 `.codex/config.toml` 開啟 agents、MultiAgentV2、fan-out 與 multi_agent 的受信任專案——都沒有子代理工具、沒有寫入。未驗證：你自己的 Codex 設定開啟這些選項（指令列優先於設定檔）、較舊的 CLI、WSL。單獨使用 `--disable multi_agent` 擋不住 MultiAgentV2。若你在 1.3.1 以前曾對不可信的內容執行 `review` 或 `discuss`，且安裝了可寫入的角色，請在那些專案檢查 `git status`；並更新外掛（手動複製者請重新複製 skills）。
 - **提升權限核准（1.3.3 修正；受影響版本 1.0.0–1.3.2）：**`codex exec` 在 headless 模式原本會拒絕所有核准請求，但當你的設定把 `approvals_reviewer` 解析為 `auto_review` 時會取消這個限制，核准請求改交給 Codex 的自動審查。因此到 1.3.2 為止，諮詢可能請求在唯讀 sandbox 之外執行指令並獲得核准：在 codex-cli 0.159.3（Windows）上，一次實測諮詢就以這種方式寫入了檔案。受信任專案的 `.codex/config.toml` 也能設定同樣的鍵。自 1.3.3 起，每次諮詢都帶 `-c approval_policy="never" -c approvals_reviewer="user"`，優先於你的設定與專案設定（依原始碼推論也優先於 profile，profile 未實測）。已在 codex-cli 0.159.3（Windows）以真實呼叫驗證：你的設定為 `auto_review`；受信任專案設定 `auto_review` 加上 `on-request`，或加上五種提示全部開啟的 granular 政策，並加上 `sandbox_mode = "workspace-write"`；以及不受信任的專案——都沒有請求提升權限、沒有寫入，`-s read-only` 也壓過了專案的 `sandbox_mode`（專案的 `default_permissions` 在有 `sandbox_mode` 或 `-s` 時會被 Codex 忽略，因此沒有單獨測到）。限制：每次實測中，模型在得知政策是 `never` 後都不送出提升權限請求，所以 Codex 在執行階段拒絕這類請求的行為沒有實際觸發過，某次權限請求的結果也只有模型自己的回報；`approvals_reviewer` 這個固定值是第二層防護，沒有單獨實測。未涵蓋：管理者層級的設定（舊版 managed config，或不允許 `never` 的 `requirements.toml`）可以覆寫或替換這些值。若你在 1.3.2 以前，於自己的設定或受信任專案的設定中設了 `auto_review` 並使用過諮詢，被核准的指令可能寫到你的帳號能寫的任何地方，不只是專案內：請檢查那些專案的 `git status` 以及其他你在意的檔案；並更新外掛。
+- **Codex CLI 0.170.0 與 RAM disk 上的執行目錄（1.5.0 修正；影響 1.0.0–1.4.0）：**
+  - **症狀：**codex-cli 0.170.0 在某些磁碟區（例如 Windows 的 RAM disk）上拒絕寫入 `-o <file>`，錯誤為 `path contains a reparse point`。執行目錄位於 session 的暫存位置，在這類機器上正好在該磁碟區，因此每次諮詢都在 Codex 產生任何事件前失敗，只顯示 `Codex execution failed`。
+  - **修正：**自 1.5.0 起，回覆改從事件串取得（見「回覆的來源」）；執行失敗時會帶出 Codex 自己的錯誤文字，例如 `model_not_found`。
+  - **已驗證：**在 Windows 上以 codex-cli 0.170.0 實測，執行目錄位於 R: RAM disk。
+  - **限制：**回覆現在依賴 Codex `--json` 事件的格式；之後的 CLI 若改變格式，諮詢會失敗且沒有回覆，不會回傳錯誤的文字。
+  - **殘餘風險：**若有行程繼承了 Codex 的 stdout，並在 Codex 自己最後的 `turn.completed` 之前寫入一則 `agent_message`，目前無法偵測。
+- **`/ask-codex:ui` 已移除（1.5.0）：**UI 演練指令及其 browser server 已移除。曾以 1.4.0 準備 UI 演練的安裝會留下 `%LOCALAPPDATA%\ask-codex\`（browser server 與其 guard cache），可以自行刪除。
 - **execpolicy 規則（自 1.3.3）：**execpolicy `.rules` 檔中的 `allow` 規則（你的 `~/.codex/rules/`，在你選「don't ask again」時由 Codex 寫入；或受信任專案的 `.codex/rules/`）可能讓符合的指令不論核准政策都在 sandbox 外執行。這是從 Codex 原始碼推論，沒有實測。自 1.3.3 起諮詢帶 `--ignore-rules`，不載入你和專案的 `.rules` 檔——你自己的 `forbidden` 與 `prompt` 規則在諮詢中也不會套用；指令仍在唯讀 sandbox 內執行。未涵蓋：系統層級的規則（Windows 上的 `%ProgramData%\OpenAI\Codex\`）、管理者的 `prefix_rules`，以及 plugin 帶來的規則推測仍會載入（依 codex-cli 0.159.3 的靜態閱讀，未實測）。
 - **本機服務：**在 Windows 上，唯讀 sandbox 擋對外網路但不擋 loopback（在 codex-cli 0.159.3、elevated sandbox 實測）。Codex 的 network proxy 設定會擋經過 proxy 連往 loopback 的請求，但繞過 proxy 的指令仍連得上。因此在每個 ask-codex skill——`ask`、`review` 與 `discuss`——中，Codex 的 shell 指令都可以對你機器上任何監聽 127.0.0.1 的服務發出請求，例如開發資料庫的管理介面。Codex 的設定無法防止這點；請讓敏感的本機服務需要驗證，或在對不可信內容進行諮詢時先停止它們。
 - **sandbox 之外的其他工具：**唯讀的諮詢仍看得到會寫入 Codex 自身儲存的工具（`notes.write_file`／`append_to_file`、`create_goal`／`update_goal`）以及 `web.run`。它們不會動到你的專案檔案，但筆記會跨 Codex session 保留，網路存取則是對外通道；另行追蹤。

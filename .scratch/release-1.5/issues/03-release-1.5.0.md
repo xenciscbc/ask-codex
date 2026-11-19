@@ -31,3 +31,12 @@ Security-critical: no (spec, Claim classification)
 4. Postcondition, not part of outcome verification: merge to `main`, tag `v1.5.0` and push happen only on the user's word. Main checks the tag and remote state after that operation.
 
 ## Comments
+
+- 2026-11-19 — **Live acceptance** at ticket 02's commit 13b0c46, with ticket 03's working-tree changes (version and READMEs; scripts unchanged).
+  - **Setup:** `codex --version` printed `codex-cli 0.170.0`. `consult.py resolve` turned `gpt-6.2-astra:high` into `gpt-6.2-astra` / `high`.
+  - **Run:** `prepare --base` used the session scratchpad on **R:**, giving the run directory `R:\Temp\claude\…\scratchpad\live03\ask-codex\run.kkeqaqml`. The policy was allowlist with no servers allowed.
+  - **Prompt:** trivial, no project content, so one `codex exec`.
+  - **Wait:** `wait` returned `finished` in 12.4 s with `last_event: turn.completed`.
+  - **Stream tail (F1, F7):** 25 s after `finished`, the stream was copied before `collect`. Its events were `thread.started`, `turn.started`, `item.completed:agent_message` and `turn.completed`, with no line after `turn.completed`; the last three were `turn.started`, `agent_message` and `turn.completed`.
+  - **Collect:** `state: collected`, `runs[0].state: completed`, `exit_code: 0`, reply `structured` (`summary: "hello from the live probe"`, empty claims and open_questions). `collect` removed the run directory itself, so no `cleanup` was needed.
+- 2026-11-19 — **Related tests** after the version and README edits: `setup-skill.test.mjs` 12 passed, `review-skill-graders.test.mjs` 373 passed, `discuss-skill-graders.test.mjs` 1100 passed. `marketplace.json` has no version field.
