@@ -1,6 +1,0 @@
-schema_version: "1.1"
-name: ui-target-root-needed
-tags: [ui-skill]
-context:
-  scaffold_script: scaffold.sh
-  add_dirs: [stubbin]

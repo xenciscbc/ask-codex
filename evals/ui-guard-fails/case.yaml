@@ -1,7 +1,0 @@
-schema_version: "1.1"
-name: ui-guard-fails
-tags: [ui-skill]
-context:
-  scaffold_script: scaffold.sh
-  history_file: stubbin/history.jsonl
-  add_dirs: [stubbin]

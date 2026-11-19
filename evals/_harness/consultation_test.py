@@ -609,9 +609,9 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.call("cleanup", ready["directory"])
 
     def test_ask_review_and_discuss_command_lines_equal_the_1ca7a0f_baseline(self):
-        # Exercise work (plan C2) leaves the three consultation interactions unchanged: ask and review send the
-        # consultation schema and differ only in the prompt; discuss sends the discussion schema. No browser server
-        # definition or per-tool approval key reaches Codex or its MCP listing in any of them.
+        # The three consultation interactions: ask and review send the consultation schema and differ only in the
+        # prompt; discuss sends the discussion schema. No browser server definition or per-tool approval key (from the
+        # removed UI exercise) reaches Codex or its MCP listing in any of them.
         cases = (("ask", None, "Question: why does fetchUser return an empty object?"),
                  ("review", "consultation", "Review the working-tree diff for correctness bugs."),
                  ("discuss", "discussion", "Round 1: is the cache invalidated?"))
@@ -636,6 +636,9 @@ runpy.run_path(sys.argv[0], run_name='__main__')
                          (self.project / ".stub/mcp-list.log").read_text(encoding="utf-8").splitlines()]
                 for call in calls:
                     self.assertFalse(any("cdt_" in arg or "approval_mode" in arg for arg in call["argv"]), call)
+                # The stub no longer models `mcp get` (it went with the UI exercise), so this file never appears and the
+                # check is vacuous; a consultation's `mcp get` call would now be an unsupported-command violation, which
+                # the empty violations.log check below catches.
                 self.assertFalse((self.project / ".stub/mcp-get.log").exists(), "consultations never call mcp get")
                 self.assertEqual((self.project / ".stub/violations.log").read_text(), "")
                 self.call("cleanup", ready["directory"])

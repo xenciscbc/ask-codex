@@ -1,7 +1,7 @@
 {
   "name": "ask-codex",
   "version": "1.4.0",
-  "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself — Codex runs read-only for shell commands, with MCP servers disabled by default. /ask-codex:ui (Windows) lets Codex exercise your web app in an isolated, network-restricted browser.",
+  "description": "Let Claude consult OpenAI Codex for an independent second opinion and judge every claim itself — Codex runs read-only for shell commands, with MCP servers disabled by default.",
   "author": {
     "name": "xenciscbc"
   },
@@ -12,14 +12,12 @@
     "second-opinion",
     "consultation",
     "review",
-    "discussion",
-    "ui-exercise"
+    "discussion"
   ],
   "skills": [
     "./skills/ask",
     "./skills/setup",
     "./skills/review",
-    "./skills/discuss",
-    "./skills/ui"
+    "./skills/discuss"
   ]
 }

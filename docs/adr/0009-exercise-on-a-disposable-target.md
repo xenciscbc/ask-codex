@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by the removal of `/ask-codex:ui` in 1.5.0
 ---
 
 # Exercises: Codex may act, but only on a disposable target

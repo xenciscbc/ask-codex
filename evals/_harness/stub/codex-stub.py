@@ -40,26 +40,7 @@ settings of entry n, merged over `exec`; calls past the end reuse the last entry
 Every exec call also writes .stub/exec-argv.<n>.json and .stub/exec-stdin.<n>.txt, <n> being that
 call's number, after the prompt is read.
 
-Exercises (plan C2): `records` in the scenario (an absolute directory) moves every record above there, so a call
-whose `-C` or working directory is a disposable target (a copy of the project, scenario included) writes nothing
-into it. A browser server defined on the command line (`-c mcp_servers.cdt_<16 hex>.<field>=<TOML value>`, fields
-command, args, cwd, env, startup_timeout_sec, enabled_tools; plus the approval keys
-`tools.<tool>.approval_mode` and `default_tools_approval_mode`) is accepted by `mcp list`, `mcp get` and `exec`;
-`mcp list --json` lists it (as Codex does) and `mcp get <name> --json` prints it in codex-cli 0.159.3's shape
-(evidence/b1-mcp-get-fields.txt: no approval key is printed). In exec each key is allowed once, for one server
-name, with `approve` per tool (only for tools in its enabled_tools) and `prompt` as the default; anything else is
-a violation. Scenario keys for guard tests: `exercise_extra_enabled` (a server name listed as enabled whenever a
-browser server is defined, beside it), `mcp_get_patch` (deep-merged into `mcp get` output for the browser server),
-`mcp_get_prints_default_approval` (also print `default_tools_approval_mode` as passed, or this value if a string).
-
-Attach mode (plan C8): a call whose directory holds no scenario reads `<parent>/.stub/scenario.json` when that
-scenario carries `"for_attach_targets": true` (the attach-mode target is a new empty directory). `exec.events` is a
-list of events emitted after `turn.started` (e.g. `item.completed` command_execution items for the tripwire).
-
-Supervised exercises (plan C4, I15): `exec.leave_process` = {"seconds": N, "outside_tree": bool} makes exec start an
-MCP stand-in (`python -c "import time; time.sleep(N)" <browser server name>`, the run's nonce on its command line)
-that outlives the stub. With `outside_tree` it is created through WMI (Win32_Process.Create), so it is never a
-descendant of Codex; otherwise it is the stub's own detached child. Its PID is appended to `left-processes.jsonl`.
+`exec.events` is a list of scripted events emitted after `turn.started`, before the reply.
 
 Environment: EVAL_CODEX_STUB_MODE=missing makes every invocation behave like a missing
 CLI (`codex: command not found` on stderr, exit 127) — set per case through case.yaml
@@ -168,75 +149,16 @@ def disabled_names(value):
     return None if entries is None else list(entries)
 
 
-# -c mcp_servers.cdt_<16 hex>.<field>=<TOML value>: the exercise's browser server (plan I5).
-BROWSER_RE = re.compile(r'^mcp_servers\.(cdt_[0-9a-f]{16})\.(command|args|cwd|env|startup_timeout_sec|enabled_tools'
-                        r'|default_tools_approval_mode|tools\.([a-z_]+)\.approval_mode)=(.*)$', re.S)
-
-
-def browser_key(value):
-    """(name, field, tool, parsed value) for a browser-server override, else None."""
-    match = BROWSER_RE.fullmatch(value)
-    if not match:
-        return None
-    try:
-        parsed = tomllib.loads("v = " + match.group(4))["v"]
-    except ValueError:
-        return None
-    field = "tools.approval_mode" if match.group(3) else match.group(2)
-    return match.group(1), field, match.group(3), parsed
-
-
-def browser_definitions(overrides):
-    """{name: {field: value, "tools": {tool: mode}}} from browser-server overrides (later values win)."""
-    found = {}
-    for kv in overrides:
-        key = browser_key(kv)
-        if key is None:
-            continue
-        name, field, tool, value = key
-        entry = found.setdefault(name, {"tools": {}})
-        if tool:
-            entry["tools"][tool] = value
-        else:
-            entry[field] = value
-    return found
-
-
-def browser_server(name, definition):
-    timeout = definition.get("startup_timeout_sec")
-    return {
-        "name": name,
-        "enabled": True,
-        "disabled_reason": None,
-        "transport": {"type": "stdio", "command": definition.get("command"), "args": definition.get("args", []),
-                      "env": definition.get("env"), "env_vars": [], "cwd": definition.get("cwd")},
-        "startup_timeout_sec": float(timeout) if timeout is not None else None,
-        "tool_timeout_sec": None,
-        "auth_status": "unsupported",
-    }
-
-
 def load_scenario(directory):
     path = os.path.join(directory, ".stub", "scenario.json")
     if not os.path.exists(path):
-        # Attach mode (plan C8): the disposable target is a new empty directory, so a call from it finds the
-        # scenario beside it, in <parent>/.stub/scenario.json, and only when that scenario says
-        # "for_attach_targets": true (written there by a test or by the eval fake).
-        parent = os.path.dirname(os.path.abspath(directory))
-        beside = os.path.join(parent, ".stub", "scenario.json")
-        if os.path.exists(beside):
-            with open(beside, encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and data.get("for_attach_targets") is True:
-                return {"dir": parent, "data": data}
         return None
     with open(path, encoding="utf-8") as f:
         return {"dir": directory, "data": json.load(f)}
 
 
 def stub_dir(scenario):
-    records = scenario.get("data", {}).get("records")
-    d = records if isinstance(records, str) and os.path.isabs(records) else os.path.join(scenario["dir"], ".stub")
+    d = os.path.join(scenario["dir"], ".stub")
     os.makedirs(d, exist_ok=True)
     # Always present once the stub has run, so graders can assert it is empty.
     open(os.path.join(d, "violations.log"), "a", encoding="utf-8").close()
@@ -275,36 +197,6 @@ def mcp_list(args):
     sys.stdout.write(json.dumps(servers, indent=2) + "\n")
 
 
-def mcp_get(args):
-    scenario = load_scenario(os.getcwd())
-    data = scenario["data"] if scenario else {}
-    names = [a for a in args if not a.startswith("-") and a not in config_overrides(args)]
-    if len(names) != 1:
-        violation(scenario, f"mcp get: expected one server name, got {names}")
-        sys.stderr.write("codex stub: mcp get needs one server name\n")
-        sys.exit(2)
-    servers = {s["name"]: s for s in effective_servers(args, scenario, "mcp get")}
-    if scenario:
-        append(os.path.join(stub_dir(scenario), "mcp-get.log"),
-               json.dumps({"argv": args, "cwd": os.getcwd(), "name": names[0]}) + "\n")
-    if names[0] not in servers:
-        sys.stderr.write(f"Error: No MCP server named '{names[0]}' found.\n")
-        sys.exit(1)
-    listed = servers[names[0]]
-    definitions = browser_definitions(config_overrides(args))
-    shown = {key: listed[key] for key in ("name", "enabled", "disabled_reason", "transport")}
-    definition = definitions.get(names[0], {})
-    shown.update(enabled_tools=definition.get("enabled_tools"), disabled_tools=None,
-                 startup_timeout_sec=listed["startup_timeout_sec"], tool_timeout_sec=listed["tool_timeout_sec"])
-    if names[0] in definitions:
-        printed = data.get("mcp_get_prints_default_approval")
-        if printed:
-            shown["default_tools_approval_mode"] = printed if isinstance(printed, str) else \
-                definition.get("default_tools_approval_mode")
-        deep_merge(shown, copy.deepcopy(data.get("mcp_get_patch", {})))
-    sys.stdout.write(json.dumps(shown, indent=2) + "\n")
-
-
 def effective_servers(args, scenario, what):
     data = scenario["data"] if scenario else {}
     servers = copy.deepcopy(GLOBAL_SERVERS)
@@ -321,8 +213,6 @@ def effective_servers(args, scenario, what):
         violation(scenario, f"{what}: unexpected {IGNORE_RULES}")
     overrides = config_overrides(args)
     for kv in overrides:
-        if browser_key(kv) is not None:
-            continue  # the exercise's browser server, added below
         entries = disabled_entries(kv)
         if entries is None:
             violation(scenario, f"{what}: unexpected -c {kv}")
@@ -342,11 +232,6 @@ def effective_servers(args, scenario, what):
                 disabled = server(name, "ask-codex-disabled", [], None)
                 disabled["enabled"] = False
                 servers.append(disabled)
-    definitions = browser_definitions(overrides)
-    for name, definition in definitions.items():
-        servers.append(browser_server(name, definition))
-    if definitions and data.get("exercise_extra_enabled"):
-        servers.append(server(data["exercise_extra_enabled"], "lower-layer.exe", [], {}))
     return servers
 
 
@@ -377,30 +262,6 @@ def parse_exec(args):
             opts["unknown"].append(a)
         i += 1
     return opts
-
-
-def leave_process(records, overrides, how):
-    import base64
-    import subprocess
-    names = sorted(browser_definitions(overrides))
-    nonce = names[0] if names else "cdt_none"
-    argv = [sys.executable, "-c", f"import time; time.sleep({int(how.get('seconds', 120))})", nonce]
-    if how.get("outside_tree"):
-        line = subprocess.list2cmdline(argv).replace("'", "''")
-        script = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='"
-                  + line + "'}; Write-Output (\"$($r.ReturnValue) $($r.ProcessId)\")")
-        out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
-                              base64.b64encode(script.encode("utf-16-le")).decode()],
-                             capture_output=True, text=True, timeout=120)
-        code, pid = (out.stdout.split() + ["", ""])[:2]
-        if code != "0" or not pid.isdigit():
-            raise SystemExit(f"stub: WMI process creation failed: {out.stdout!r}")
-        pid = int(pid)
-    else:
-        pid = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               creationflags=0x8).pid
-    append(os.path.join(records, "left-processes.jsonl"),
-           json.dumps({"pid": pid, "nonce": nonce, "outside_tree": bool(how.get("outside_tree"))}) + "\n")
 
 
 def emit(event):
@@ -462,19 +323,12 @@ def exec_(args):
     effort_seen = False
     pinned = dict.fromkeys(PINNED, 0)
     disabled_seen = set()
-    browser_seen = set()
     for kv in opts["c"]:
         if EFFORT_RE.match(kv):
             effort_seen = True
             continue
         if kv in pinned:
             pinned[kv] += 1
-            continue
-        key = browser_key(kv)
-        if key is not None:
-            if key[:3] in browser_seen:
-                problems.append(f"repeated -c {kv.split('=', 1)[0]}")
-            browser_seen.add(key[:3])
             continue
         names = disabled_names(kv)
         if names is None:
@@ -484,20 +338,6 @@ def exec_(args):
                 if name in disabled_seen:
                     problems.append(f"repeated disable definition for {name}")
                 disabled_seen.add(name)
-    definitions = browser_definitions(opts["c"])
-    if len(definitions) > 1:
-        problems.append(f"more than one browser server: {sorted(definitions)}")
-    for name, definition in definitions.items():
-        for field in ("command", "args", "cwd", "env", "startup_timeout_sec", "enabled_tools"):
-            if field not in definition:
-                problems.append(f"browser server {name} without {field}")
-        enabled = definition.get("enabled_tools") or []
-        for tool, mode in definition["tools"].items():
-            if mode != "approve" or tool not in enabled:
-                problems.append(f"browser server {name}: tools.{tool}.approval_mode={mode!r}")
-        if definition.get("default_tools_approval_mode") != "prompt":
-            problems.append(f"browser server {name}: default_tools_approval_mode="
-                            f"{definition.get('default_tools_approval_mode')!r}")
     if not effort_seen:
         problems.append("missing effort override")
     # Any other value of a pinned key is an unexpected -c above, and leaves its required pair missing here.
@@ -530,13 +370,11 @@ def exec_(args):
         with open(os.path.join(records, name), "w", encoding="utf-8") as f:
             f.write(payload)
 
-    if (data.get("exec") or {}).get("leave_process"):
-        leave_process(records, opts["c"], data["exec"]["leave_process"])
     mode = (data.get("exec") or {}).get("mode", "valid")
     emit({"type": "thread.started", "thread_id": "stub-thread"})
     emit({"type": "turn.started"})
     for event in (data.get("exec") or {}).get("events") or []:
-        emit(event)  # scripted events before the reply (e.g. a command_execution for attach mode's tripwire, C8)
+        emit(event)  # scripted events before the reply
 
     if mode == "slow-active":
         cfg = data.get("exec") or {}
@@ -605,8 +443,6 @@ def main():
         sys.stdout.write("codex-cli 0.0.0-stub\n")
     elif cmd == "mcp" and sub == "list":
         mcp_list([a for a in argv[2:] if a != "--json"])
-    elif cmd == "mcp" and sub == "get":
-        mcp_get([a for a in argv[2:] if a != "--json"])
     elif cmd == "exec":
         exec_(argv[1:])
     else:

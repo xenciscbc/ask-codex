@@ -11,18 +11,13 @@ import subprocess
 import sys
 import tempfile
 import time
-import exercise
-import guard as exercise_guard
-import install as browser_install
 import models as model_selection
 from policy import ConfirmationRequired, resolve
 from replies import classify
-import repro as reproduction
-import target as disposable_target
 
 HERE = Path(__file__).resolve().parent
 NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
-# Constants of every Codex command line (consultations and exercises); never part of overrides or a summary.
+# Constants of every consultation's Codex command line; never part of overrides or a summary.
 # Child agents stay off: a role file can raise a child's sandbox and bring its own MCP servers (ADR 0008,
 # .scratch/subagent-boundary). The feature switch too, because an enabled multi_agent_v2 feature in the user's or
 # a trusted project's config defeats agents.enabled=false alone; command-line -c outranks config files.
@@ -32,11 +27,6 @@ NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 # rule can run a command outside the sandbox whatever the approval policy (inferred from source, not probed).
 EXEC_CONSTANTS = ("--disable", "apps", "-c", "agents.enabled=false", "-c", "features.multi_agent_v2.enabled=false",
                   "-c", 'approval_policy="never"', "-c", 'approvals_reviewer="user"', "--ignore-rules")
-
-
-def cli():
-    # This module as the exercise lifecycle sees it (also when run as __main__ or through runpy).
-    return sys.modules[__name__]
 
 
 class AlreadyAttempted(ValueError):
@@ -104,28 +94,6 @@ def listing(project, overrides=()):
     return servers
 
 
-def mcp_get(project, name, overrides=()):
-    server = json.loads(command(["codex", "mcp", "get", name, "--json", *overrides], project))
-    if not isinstance(server, dict):
-        raise ValueError("Invalid MCP server definition")
-    return server
-
-
-def which(name):
-    # Resolved with the environment the script runs Codex with (plan I13, N-1), from PATH's absolute entries only:
-    # never the current directory (shutil.which searches it first on Windows) and never a relative PATH entry.
-    suffixes = (".exe",) if os.name == "nt" else ("",)
-    for entry in shell_environment().get("PATH", "").split(os.pathsep):
-        entry = entry.strip().strip('"')
-        if not entry or not Path(entry).is_absolute():
-            continue
-        for suffix in suffixes:
-            candidate = Path(entry) / (name + suffix)
-            if candidate.is_file():
-                return str(candidate)
-    return None
-
-
 def timer():
     override = os.environ.get("EVAL_ASK_CODEX_TIMEOUT_MINUTES")
     valid = override is not None and re.fullmatch(r"[1-9][0-9]*", override)
@@ -174,8 +142,6 @@ def preflight(request, neutral):
 
 def prepare(request_path, base):
     request = read_json(request_path)
-    if exercise.is_request(request):
-        return exercise.prepare(cli(), request, base)
     validate(request)
     with tempfile.TemporaryDirectory(prefix="ask-codex-preflight-") as neutral:
         summary, overrides = preflight(request, neutral)
@@ -231,30 +197,11 @@ def remove_run(directory, plan):
 
 def run(directory):
     directory, plan = plan_at(directory)
-    if exercise.is_plan(plan):
-        exercise.require_platform()
-        exercise.claim_run(cli(), directory)  # `started` with this call's identity (C2 follow-up 7)
-    else:
-        try:
-            with (directory / "started").open("x"):
-                pass  # Never replay an execution attempt.
-        except FileExistsError:
-            raise AlreadyAttempted() from None
-    if exercise.is_plan(plan):
-        try:
-            return run_exercise(directory, plan)
-        except BaseException as error:
-            # Interrupted (any exception, KeyboardInterrupt, ...) before Codex started: leave the failure receipt, so
-            # finish and cleanup do not take the run for one still launching. main() replaces it with its own
-            # result for the errors it reports.
-            if not (directory / "clock.json").exists() and not (directory / "execution-error.json").exists():
-                try:
-                    write_json(directory / "execution-error.json",
-                               {"state": "failed", "reason": f"The exercise run was interrupted before Codex started "
-                                                             f"({type(error).__name__}); no automatic retry"})
-                except OSError:
-                    pass
-            raise
+    try:
+        with (directory / "started").open("x"):
+            pass  # Never replay an execution attempt.
+    except FileExistsError:
+        raise AlreadyAttempted() from None
     with tempfile.TemporaryDirectory(prefix="ask-codex-preflight-") as neutral:
         summary, overrides = preflight(plan["request"], neutral)
     if summary != plan["summary"] or overrides != plan["overrides"]:
@@ -270,34 +217,6 @@ def run(directory):
                 "-o", (child / "last-message.json").as_posix(), "-"]
 
     return launch(directory, plan, argv, plan["summary"]["project"])
-
-
-def run_exercise(directory, plan):
-    # Guard (I6), identities, placement and the guard pass again, then the running supervisor, which holds the app
-    # and the owned proxy port (C4, I8); its watcher stops Codex if the supervisor dies (U10). A failure ends the
-    # app and removes the target at once.
-    watcher = exercise.before_launch(cli(), directory, plan)
-    try:
-        schema = HERE.parent / f"{exercise.REPLY_SCHEMA}.schema.json"
-        result = launch(directory, plan,
-                        lambda model, child: exercise.codex_argv(plan, model, child, EXEC_CONSTANTS, schema),
-                        plan["summary"]["target"])
-    except Exception as error:
-        # launch() returns launch_failed once a process may have started; an exception here is earlier.
-        watcher.disarm()
-        reason = str(error) if isinstance(error, ValueError) else f"{type(error).__name__}: exercise launch failed"
-        raise ValueError(reason + exercise.removal_note(exercise.end_and_remove(cli(), directory, plan))) from None
-    finally:
-        watcher.disarm()
-    if watcher.fired is not None:
-        result["supervisor_died"] = {"at": watcher.fired, "codex_stop": "requested through the ADR 0004 stop path"}
-    outcome = exercise.after_run(cli(), directory, plan)
-    if outcome is not None:
-        result["target_removed"] = outcome["target_removed"]
-        result["ended"] = outcome["ended"]
-        if not outcome["target_removed"]:
-            result["retained_location"] = outcome.get("retained_location", str(directory))
-    return result
 
 
 def launch(directory, plan, argv, cwd):
@@ -411,8 +330,6 @@ def snapshot(directory, plan):
 
 def wait_for(directory, seconds):
     directory, plan = plan_at(directory)
-    if exercise.is_plan(plan):
-        exercise.require_platform()
     if not 0 <= seconds <= 60:
         raise ValueError("Wait duration must be between 0 and 60 seconds")
     end = time.monotonic() + seconds
@@ -452,8 +369,6 @@ def record_check(directory, clock, status):
 
 def continue_wait(directory):
     directory, plan = plan_at(directory)
-    if exercise.is_plan(plan):
-        exercise.require_platform()
     clock = read_json(directory / "clock.json")
     clock["next_check"] = time.time() + plan["timer"]["interval_minutes"] * 60
     write_json(directory / "clock.json", clock)
@@ -462,8 +377,6 @@ def continue_wait(directory):
 
 def collect(directory, after_delivery):
     directory, plan = plan_at(directory)
-    if exercise.is_plan(plan):
-        return exercise.collect(cli(), directory, plan, after_delivery)
     if (directory / "execution-error.json").exists() and not (directory / "clock.json").exists():
         output = read_json(directory / "execution-error.json")
         after_delivery.append(lambda: remove_run(directory, plan))
@@ -523,11 +436,7 @@ def collect(directory, after_delivery):
 
 def stop(directory, recommended, offered, only_children=None):
     directory, plan = plan_at(directory)
-    if not exercise.is_plan(plan):
-        return stop_codex(directory, plan, recommended, offered, only_children)
-    # An exercise's app and target go once its Codex tree is confirmed ended, then I15's processes and the app
-    # (I3, I8, I12, I15); anything unconfirmed keeps everything.
-    return exercise.stop(cli(), directory, plan, recommended, offered, only_children)
+    return stop_codex(directory, plan, recommended, offered, only_children)
 
 
 def stop_codex(directory, plan, recommended, offered, only_children=None):
@@ -574,9 +483,6 @@ def stop_codex(directory, plan, recommended, offered, only_children=None):
 
 def cleanup(directory):
     directory, plan = plan_at(directory)
-    if exercise.is_plan(plan):
-        exercise.require_platform()
-        exercise.refuse_while_launching(directory)
     if (directory / "clock.json").exists():
         for index in range(len(plan["request"]["models"])):
             child = directory / str(index)
@@ -584,132 +490,25 @@ def cleanup(directory):
                 raise ValueError("Cannot clean up: run has not settled")
             if stop_status(child) is not None and not stop_status(child)["confirmed"]:
                 raise ValueError("Cannot clean up: process-tree stop is unconfirmed")
-    if exercise.is_plan(plan):
-        outcome = exercise.cleanup(cli(), directory, plan)
-        if outcome["state"] != "removed":
-            return outcome
-        remove_run(directory, plan)
-        return {"state": "cleaned", "ended": outcome["ended"]}
     remove_run(directory, plan)
     return {"state": "cleaned"}
 
 
-# Exercise-only actions: the platform layer is selected (I13) before any of its functions is looked up.
-EXERCISE_ACTIONS = ("target-create", "target-remove", "guard", "browser-install", "exercise-deps", "app-start",
-                    "finish", "repro", "evidence-keep", "attach-owners", "attach-start", "browser-start-check")
-# Actions that take a second file argument: repro <run directory> <steps file>, evidence-keep <run directory> <keep file>.
-SECOND_ARGUMENT = ("repro", "evidence-keep")
-# --result <file>: an operation that can outlast one Bash tool call (the guard's browser checks, app-start's install
-# and start commands, ending and removing a target) runs in the background and leaves its result in a file that
-# `wait-result` waits on in the foreground (C4 review item 30). Seconds after which a pending result is reported lost.
-RESULT_BOUNDS = {"guard": 3600, "finish": 1800, "stop": 1800, "cleanup": 1800, "repro": 900, "attach-start": 900}
-MAX_RESULT_WAIT = 60
-
-
-def result_bound(action, path):
-    if action != "app-start":
-        return RESULT_BOUNDS[action]
-    import supervisor
-    try:
-        _, plan = plan_at(path)
-        installs = len((plan["request"].get("commands") or {}).get("install") or [])
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        installs = 0
-    timing = supervisor.TIMING
-    # app-start's own wait (supervisor.wait_started) plus its ending and removal on a failure.
-    return int(timing["install_timeout"] * installs + timing["start_timeout"] + 60 + 300)
-
-
-def start_result(path, action, bound):
-    """Create the result file exclusively with a pending record before the operation does anything."""
-    path = Path(path)
-    if not path.is_absolute() or not path.parent.is_dir():
-        raise ValueError("--result needs an absolute file path in an existing directory")
-    pending = {"state": "pending", "action": action, "started_at": time.time(), "bound_seconds": bound}
-    try:
-        with path.open("x", encoding="utf-8") as written:
-            written.write(json.dumps(pending))
-    except FileExistsError:
-        raise ValueError("The --result file already exists; give a new file name") from None
-
-
-def finish_result(path, result):
-    path = Path(path)
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(result, ensure_ascii=True), encoding="utf-8")
-    temporary.replace(path)
-
-
-def wait_result(path, seconds):
-    """Block in the foreground until the result file holds the operation's result, or `seconds` pass."""
-    if not 0 <= seconds <= MAX_RESULT_WAIT:
-        raise ValueError(f"Wait duration must be between 0 and {MAX_RESULT_WAIT} seconds")
-    path = Path(path)
-    if not path.is_absolute():
-        raise ValueError("wait-result needs the absolute path given to --result")
-    end = time.monotonic() + seconds
-    while True:
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            value = None
-        except (OSError, ValueError):
-            value = {"state": "pending"}  # being written
-        if isinstance(value, dict) and value.get("state") != "pending":
-            return value
-        if isinstance(value, dict) and type(value.get("started_at")) in (int, float) and \
-                type(value.get("bound_seconds")) in (int, float) and \
-                time.time() - value["started_at"] > value["bound_seconds"]:
-            return {"state": "lost", "action": value.get("action"),
-                    "elapsed_seconds": round(time.time() - value["started_at"]),
-                    "reason": f"The {value.get('action')} operation recorded no result within "
-                              f"{value['bound_seconds']} seconds; its process may have ended without one"}
-        if time.monotonic() >= end:
-            if value is None:
-                return {"state": "missing", "reason": "No result file yet: the operation has not started"}
-            started = value.get("started_at")
-            return {"state": "pending", "action": value.get("action"),
-                    "elapsed_seconds": round(time.time() - started) if type(started) in (int, float) else None}
-        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup",
-                                           "finish", "target-create", "target-remove", "guard", "browser-install",
-                                           "exercise-deps", "app-start", "wait-result", "repro", "evidence-keep",
-                                           "attach-owners", "attach-start", "browser-start-check"))
+    parser.add_argument("action", choices=("resolve", "prepare", "run", "collect", "wait", "continue", "stop", "cleanup"))
     parser.add_argument("path", nargs="?")
-    parser.add_argument("file", nargs="?")
     parser.add_argument("--base", default=tempfile.gettempdir())
     parser.add_argument("--seconds", type=float, default=30)
     parser.add_argument("--recommended", choices=("wait", "stop"), default="stop")
     parser.add_argument("--offered", choices=("wait,stop", "none"), default="none")
-    parser.add_argument("--result")
     args = parser.parse_args()
-    if args.path is None and args.action not in ("browser-install", "exercise-deps", "browser-start-check"):
+    if args.path is None:
         parser.error(f"{args.action} needs a path")
-    if (args.file is None) == (args.action in SECOND_ARGUMENT):
-        parser.error(f"{args.action} takes a run directory and a file" if args.action in SECOND_ARGUMENT else
-                     f"{args.action} takes one path")
-    if args.result is not None and args.action not in (*RESULT_BOUNDS, "app-start"):
-        parser.error(f"--result applies to {', '.join((*RESULT_BOUNDS, 'app-start'))} only")
-    if args.result is not None:
-        try:
-            start_result(args.result, args.action, result_bound(args.action, args.path))
-        except (ValueError, OSError) as error:
-            print(json.dumps({"state": "failed", "reason": str(error) if isinstance(error, ValueError) else
-                              f"{type(error).__name__}: the result file could not be created; nothing was done"},
-                             ensure_ascii=True), flush=True)
-            return 1
     record_failure = True
     after_delivery = []
     try:
-        if args.action in EXERCISE_ACTIONS:
-            exercise.require_platform()  # I13: the platform layer, before any of it is looked up
-        if args.action == "wait-result":
-            result = wait_result(args.path, args.seconds)
-        elif args.action == "resolve":
+        if args.action == "resolve":
             result = model_selection.resolve(read_json(args.path))
         elif args.action == "prepare":
             result = prepare(args.path, args.base)
@@ -721,40 +520,6 @@ def main():
             result = collect(args.path, after_delivery)
         elif args.action == "stop":
             result = stop(args.path, args.recommended, args.offered)
-        elif args.action == "target-create":
-            # Disposable target of an exercise (target.py; Windows only).
-            result = disposable_target.create_command(args.path, args.base)
-        elif args.action == "target-remove":
-            result = disposable_target.remove_command(args.path)
-        elif args.action == "finish":
-            result = exercise.finish(cli(), args.path)
-        elif args.action == "app-start":
-            # The app's processes of a guarded exercise under its supervisor (supervisor.py, C4).
-            result = exercise.app_start(cli(), args.path)
-        elif args.action == "guard":
-            # Dependency check and browser guard of a prepared exercise, before any app process (guard.py, I7).
-            result = exercise_guard.guard_exercise(cli(), args.path)
-        elif args.action == "browser-install":
-            # The pinned browser MCP server into the user-level state directory (install.py, I5).
-            result = browser_install.install(cli())
-        elif args.action == "exercise-deps":
-            result = exercise_guard.dependency_report(cli())
-        elif args.action == "browser-start-check":
-            # Setup only (C7, ticket 07): the pinned browser server starts, answers and ends (guard.start_check).
-            result = exercise_guard.start_check(cli())
-        elif args.action == "repro":
-            # One reproduction of a bug claim in the exercise's restricted browser (repro.py, C6, I10).
-            result = reproduction.repro(cli(), args.path, args.file)
-        elif args.action == "evidence-keep":
-            # Chosen evidence moved out of the target before finish (repro.py, C6, I9).
-            result = reproduction.keep(cli(), args.path, args.file)
-        elif args.action == "attach-owners":
-            # Attach mode: who owns each attached port, for the user's confirmation (attach.py, C8, I14).
-            import attach
-            result = attach.owners_command(cli(), args.path)
-        elif args.action == "attach-start":
-            # Attach mode: the supervisor watches the attached servers' owners (attach.py, C8, I8, I14).
-            result = exercise.attach_start(cli(), args.path)
         else:
             result = globals()[args.action](args.path)
     except ConfirmationRequired as error:
@@ -772,11 +537,6 @@ def main():
                 write_json(directory / "execution-error.json", result)
         except (OSError, ValueError, KeyError):
             pass
-    if args.result is not None:
-        try:
-            finish_result(args.result, result)
-        except OSError:
-            pass  # stdout still carries the result; wait-result reports the operation lost after its bound
     try:
         # ASCII-safe JSON preserves Unicode values even on Windows legacy code pages.
         print(json.dumps(result, ensure_ascii=True), flush=True)
