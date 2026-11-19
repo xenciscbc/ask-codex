@@ -213,8 +213,7 @@ def run(directory):
         if model.get("model"):
             args += ["-m", model["model"]]
         return [*args, "-c", f'model_reasoning_effort="{model["effort"]}"', *overrides, *EXEC_CONSTANTS,
-                "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(),
-                "-o", (child / "last-message.json").as_posix(), "-"]
+                "--output-schema", (HERE.parent / f"{plan['summary']['reply_schema']}.schema.json").as_posix(), "-"]
 
     return launch(directory, plan, argv, plan["summary"]["project"])
 
@@ -328,6 +327,67 @@ def snapshot(directory, plan):
             "elapsed_seconds": max(0, now - clock["started"]) if clock else 0}
 
 
+# ADR 0011. Characters D2 replaces with a space in Codex's failure text: C0, DEL, C1, U+2028/U+2029, bidi controls.
+REPORTED_CONTROLS = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+REPORTED_LIMIT = 500
+LEADING = re.compile(r"^[\s\ufeff]+")
+
+
+def read_stream(path, exit_code):
+    """Read one run's --json event stream (D1, D2 of ADR 0011): (reply text or None, cleaned failure text or None,
+    unreadable). Codex's stdout is untrusted, so nothing in its content may raise out of here; only an OSError
+    other than a missing file marks the stream unreadable. Binary, split on b"\\n" only, one line held at a time."""
+    reply_ok, candidate, completed, last_type = True, None, 0, None
+    turn_failed, error = None, None
+    try:
+        with open(path, "rb") as source:
+            for raw in source:  # binary iteration splits on b"\n" only
+                try:
+                    text = LEADING.sub("", raw.decode("utf-8"))
+                    if not text.startswith("{"):
+                        continue  # plain text: Codex prints some errors on stdout
+                    event = json.loads(text)
+                except (ValueError, RecursionError):  # bad UTF-8, a {-line that does not parse, deep nesting
+                    reply_ok = False
+                    continue
+                if not isinstance(event, dict):
+                    reply_ok = False
+                    continue
+                kind = event.get("type")
+                if not isinstance(kind, str):
+                    continue  # not an event
+                last_type = kind
+                if kind == "turn.started":
+                    candidate = None  # the final turn is what follows the last turn.started
+                elif kind == "turn.completed":
+                    completed += 1
+                elif kind == "item.completed":
+                    item = event.get("item")
+                    if isinstance(item, dict) and item.get("type") == "agent_message" and isinstance(item.get("text"), str):
+                        candidate = item["text"]
+                elif kind == "turn.failed":
+                    failure = event.get("error")
+                    if isinstance(failure, dict) and isinstance(failure.get("message"), str):
+                        turn_failed = failure["message"]
+                elif kind == "error" and isinstance(event.get("message"), str):
+                    error = event["message"]
+    except FileNotFoundError:
+        pass  # a missing stream is an empty stream
+    except OSError:
+        return None, None, True
+    reply = None
+    if (exit_code == 0 and reply_ok and completed == 1 and last_type == "turn.completed"
+            and candidate is not None and candidate.strip()):
+        reply = candidate
+    reported = None
+    if exit_code != 0:
+        source = turn_failed if turn_failed is not None else error
+        if source is not None:
+            cleaned = re.sub(r"\s+", " ", REPORTED_CONTROLS.sub(" ", source)).strip()
+            reported = cleaned[:REPORTED_LIMIT] or None
+    return reply, reported, False
+
+
 def wait_for(directory, seconds):
     directory, plan = plan_at(directory)
     if not 0 <= seconds <= 60:
@@ -393,16 +453,17 @@ def collect(directory, after_delivery):
             return {"state": "running", "directory": str(directory)}
         code = result_for(child)["exit_code"]
         result = {"model": model.get("model"), "effort": model["effort"], "state": "failed", "exit_code": code}
-        reply = child / "last-message.json"
-        if code == 0 and reply.exists() and reply.stat().st_size:
-            try:
-                text = reply.read_text(encoding="utf-8")
-                if text.strip():
-                    result.update(state="completed", reply=classify(text, plan["summary"].get("reply_schema", "consultation")))
-            except UnicodeError:
-                pass
+        text, reported, unreadable = read_stream(child / "events.jsonl", code)
+        if text is not None:
+            result.update(state="completed", reply=classify(text, plan["summary"].get("reply_schema", "consultation")))
         if result["state"] == "failed":
+            # Lowest to highest precedence (ADR 0011, D2): base reason, Codex's own text, unreadable stream,
+            # not logged in; a launcher reason below outranks them all.
             result["reason"] = "Codex execution failed" if code else "Codex returned no usable reply"
+            if reported:
+                result["reason"] = "Codex reported: " + reported
+            if unreadable:
+                result["reason"] = "Codex events could not be read"
             errors = (child / "stderr.log").read_text(encoding="utf-8", errors="replace") if (child / "stderr.log").exists() else ""
             if any(token in errors.lower() for token in ("not logged in", "unauthorized", "codex login")):
                 result["reason"] = "Codex is not logged in; run ! codex login, then request a new consultation"
@@ -425,7 +486,7 @@ def collect(directory, after_delivery):
             plan["request"].pop("prompt", None)
             write_json(directory / "plan.json", plan)
             for i in range(len(runs)):
-                for name in ("prompt.md", "last-message.json", "argv", "events.jsonl"):
+                for name in ("prompt.md", "argv", "events.jsonl"):
                     (directory / str(i) / name).unlink(missing_ok=True)
         after_delivery.append(prune_content)
         output["retained_location"] = str(directory)

@@ -13,7 +13,7 @@ Records written next to the scenario file:
   .stub/violations.log   created on every call; one line per argv that breaks the invocation allowlist
   .stub/missing-calls.log  one line per call while EVAL_CODEX_STUB_MODE=missing (scenario dirs only)
 
-Exec allowlist: `-s read-only`, `--ephemeral --skip-git-repo-check --json`, `-C`, `-o`, `--output-schema`,
+Exec allowlist: `-s read-only`, `--ephemeral --skip-git-repo-check --json`, `-C`, `--output-schema`,
 an optional `-m <slug>`, prompt on stdin (`-`), `--disable apps`, one effort override (medium or above),
 MCP disable overrides, and exactly one each of `-c agents.enabled=false` and
 `-c features.multi_agent_v2.enabled=false` (child agents off, subagent-boundary / ADR 0008; the second
@@ -24,11 +24,14 @@ headless Never and approved an escalation out of read-only): missing, any other 
 granular table, `"auto_review"`) or a repeat is a violation. And exactly one `--ignore-rules` (same ticket:
 execpolicy `allow` rules can bypass the sandbox whatever the approval policy): missing or repeated is a
 violation. `mcp list` accepts only MCP disable overrides, so any of these pairs there is an unexpected -c,
-and `--ignore-rules` there is an unexpected flag.
+and `--ignore-rules` there is an unexpected flag. `-o` is not allowed on exec (release 1.5, ADR 0011: the reply
+comes from the event stream), so an argv that still passes it records `exec: -o is not allowed`; the stub writes no
+out file.
 
 `exec.mode` in the scenario: valid (default), not-logged-in, fail, schema-violation,
 unstructured, os-error (prints the observed "os error 1" line on stdout, exit 1),
-unreadable (exit 0, no agent message, empty -o file), slow-active (a progress event every
+unreadable (exit 0, `turn.completed` with no agent message), turn-failed (`error` and `turn.failed` events
+carrying `exec.message`, exit 1, empty stderr), slow-active (a progress event every
 `event_every_s` seconds for `duration_s` seconds, then the valid reply; writes .stub/exec-finished),
 slow-silent (no events for `duration_s` seconds, then exit 1; writes .stub/exec-finished only when
 it ends by itself — a killed run leaves none). `exec.reply` replaces the default reply.
@@ -309,9 +312,11 @@ def exec_(args):
     for flag in ("--ephemeral", "--skip-git-repo-check", "--json"):
         if flag not in opts["flags"]:
             problems.append(f"missing {flag}")
-    for key, flag in (("out", "-o"), ("schema", "--output-schema"), ("cwd", "-C")):
+    for key, flag in (("schema", "--output-schema"), ("cwd", "-C")):
         if not opts.get(key):
             problems.append(f"missing {flag}")
+    if "out" in opts:
+        problems.append("-o is not allowed")
     if not opts["stdin"]:
         problems.append("prompt not read from stdin (-)")
     if opts.get("model") is not None and not SLUG_RE.match(opts["model"]):
@@ -408,9 +413,13 @@ def exec_(args):
         sys.exit(1)
     if mode == "unreadable":
         emit({"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 0}})
-        if opts.get("out"):
-            open(opts["out"], "w", encoding="utf-8").close()
         return
+    if mode == "turn-failed":
+        # Codex 0.170.0 reports a turn failure in the event stream and leaves stderr empty (release 1.5 probe B).
+        message = (data.get("exec") or {}).get("message", "stub turn failure requested by scenario")
+        emit({"type": "error", "message": message})
+        emit({"type": "turn.failed", "error": {"message": message}})
+        sys.exit(1)
 
     if mode == "schema-violation":
         reply = json.dumps({"verdict": "looks fine", "notes": "no claims array"})
@@ -421,9 +430,6 @@ def exec_(args):
 
     emit({"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": reply}})
     emit({"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}})
-    if opts.get("out"):
-        with open(opts["out"], "w", encoding="utf-8") as f:
-            f.write(reply)
     if (data.get("exec") or {}).get("mode") == "slow-active":
         with open(os.path.join(records, "exec-finished"), "w", encoding="utf-8") as f:
             f.write("ended by itself\n")
